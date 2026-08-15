@@ -2,6 +2,7 @@ package com.discord.restapi
 
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
 import com.discord.api.applicationdirectory.ApplicationDirectoryCategory
+import com.discord.api.applicationdirectory.ApplicationDirectoryCollection
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResponse
 import com.discord.api.commands.ApplicationCommandIndex
 import retrofit2.http.Body
@@ -26,6 +27,16 @@ interface ApplicationDirectoryAPI {
         @Query("integration_type") integrationType: Int? = null,
         @Query("source") source: Int = SOURCE_APPLICATION_DIRECTORY,
     ): Observable<ApplicationDirectorySearchResponse>
+
+    /** The curated shelves the app launcher shows under its own sections. */
+    @GET("application-directory-static/collections")
+    fun collections(
+        @Query("surface") surface: Int,
+        @Query("active_state") activeState: Int,
+        @Query("platform") platform: Int,
+        @Query("locale") locale: String,
+        @Query("cache") cache: Boolean = true,
+    ): Observable<List<ApplicationDirectoryCollection>>
 
     @GET("application-directory-static/applications/{applicationId}")
     fun application(

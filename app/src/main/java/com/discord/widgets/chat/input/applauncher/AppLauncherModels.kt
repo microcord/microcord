@@ -3,11 +3,15 @@ package com.discord.widgets.chat.input.applauncher
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
+import com.discord.api.applicationdirectory.ApplicationDirectoryCollection
+import com.discord.api.applicationdirectory.ApplicationDirectoryCollectionItem
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
+import com.discord.api.embeddedactivities.EmbeddedActivityConfig
 import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.sortedForSection
+import com.discord.utilities.time.TimeUtils
 
 enum class AppLauncherRoute(val routeName: String) {
     HOME("home"),
@@ -19,6 +23,8 @@ enum class AppLauncherRoute(val routeName: String) {
 enum class AppLauncherEntrypoint { NONE, TEXT, VOICE }
 
 enum class AppLauncherCloseReason { DISMISSED, COMMAND, ACTIVITY }
+
+enum class ActivityBadge { NEW, UPDATED }
 
 enum class AppLauncherEmptyStateType {
     HOME_EMPTY,
@@ -60,7 +66,7 @@ data class AppLauncherApplication(
      * the row tappable anyway when the cause is the developer's own platform list, so the app
      * gets the chance to explain itself rather than the row silently vanishing.
      */
-    @StringRes val unavailableReasonRes: Int? = null,
+    val badge: ActivityBadge? = null,
 )
 
 sealed interface AppLauncherRow {
@@ -69,8 +75,10 @@ sealed interface AppLauncherRow {
     data class Header(
         @StringRes val titleRes: Int,
         val section: AppLauncherSectionName,
+        /** Set for a collection shelf, whose title is server-supplied rather than a resource. */
+        val title: String? = null,
     ) : AppLauncherRow {
-        override val key = "header:${section.value}"
+        override val key = "header:${section.value}:${title.orEmpty()}"
     }
 
     data class ApplicationRow(
@@ -107,8 +115,35 @@ sealed interface AppLauncherRow {
         val section: AppLauncherSectionName,
         val applications: List<AppLauncherApplication> = emptyList(),
         val commands: List<ApplicationCommand> = emptyList(),
+        val title: String? = null,
     ) : AppLauncherRow {
-        override val key = "view-all:${section.value}"
+        override val key = "view-all:${section.value}:${title.orEmpty()}"
+    }
+
+    /**
+     * A horizontally scrolling shelf. The reference lays "Recents" and "In This Server" out this way
+     * rather than as stacked rows, and "Recents" carries both lists so the header can switch between
+     * them without changing the list's position.
+     */
+    data class Scroller(
+        @StringRes val titleRes: Int,
+        val section: AppLauncherSectionName,
+        val commands: List<CommandCell> = emptyList(),
+        val applications: List<AppLauncherApplication> = emptyList(),
+        val showsAppsAsTiles: Boolean = false,
+        val canToggle: Boolean = false,
+        val showsViewAll: Boolean = false,
+    ) : AppLauncherRow {
+        override val key = "scroller:${'$'}{section.value}"
+    }
+
+    data class CommandCell(
+        val command: ApplicationCommand,
+        val application: Application?,
+    )
+
+    data object LearnMore : AppLauncherRow {
+        override val key = "learn-more"
     }
 
     data class Empty(val type: AppLauncherEmptyStateType) : AppLauncherRow {
@@ -133,6 +168,7 @@ data class AppLauncherViewState(
 
 internal object AppLauncherRows {
     const val COLLAPSED_LIST_ITEM_MAX = 3
+    private const val SHELF_ITEM_MAX = 8
 
     fun home(
         entrypoint: AppLauncherEntrypoint,
@@ -143,14 +179,18 @@ internal object AppLauncherRows {
         serverApplications: List<Application>,
         shelf: EmbeddedActivityShelf?,
         directoryResults: List<ApplicationDirectorySearchResult>,
+        collections: List<ApplicationDirectoryCollection>,
         loading: Boolean,
         hasPermission: Boolean,
+        nsfwAllowed: Boolean,
     ): List<AppLauncherRow> {
         val rows = mutableListOf<AppLauncherRow>()
         val shownApplicationIds = HashSet<Long>()
-        val activities = shelfApplications(shelf)
+        val isText = entrypoint == AppLauncherEntrypoint.TEXT
+        val activities = shelfApplications(shelf, entrypoint, nsfwAllowed)
         val activitiesById = activities.associateBy(AppLauncherApplication::id)
-        if (frecentCommands.isNotEmpty()) {
+        val activitiesOnly = entrypoint == AppLauncherEntrypoint.VOICE
+        if (frecentCommands.isNotEmpty() && !activitiesOnly && !isText) {
             rows += commandSection(
                 R.string.app_launcher_section_recent_commands,
                 AppLauncherSectionName.RECENT_COMMANDS,
@@ -159,51 +199,119 @@ internal object AppLauncherRows {
             )
         }
 
-        fun unique(applications: List<Application>): List<AppLauncherApplication> = applications
+        fun launcherApps(applications: List<Application>): List<AppLauncherApplication> = applications
             .filterNot(Application::builtIn)
-            .filter { shownApplicationIds.add(it.id) }
             .map { application ->
                 activitiesById[application.id]?.copy(commandApplication = application)
                     ?: fromCommandApplication(application)
             }
 
-        val recent = unique(frecentApplications)
-        if (recent.isNotEmpty()) {
-            rows += applicationSection(R.string.app_launcher_section_recents, AppLauncherSectionName.RECENT_APPS, recent)
+        /** Only the stacked voice sections dedupe; the text shelves deliberately overlap. */
+        fun unique(applications: List<Application>): List<AppLauncherApplication> =
+            launcherApps(applications.filter { shownApplicationIds.add(it.id) })
+
+        val recent = (if (isText) launcherApps(frecentApplications) else unique(frecentApplications))
+            .filter { !activitiesOnly || it.id in activitiesById }
+        // The reference renders this shelf for both entrypoints; voice simply has no commands to
+        // switch to, so it shows the app tiles alone.
+        val commandCells = if (activitiesOnly) {
+            emptyList()
+        } else {
+            frecentCommands.take(SHELF_ITEM_MAX).map { command ->
+                AppLauncherRow.CommandCell(
+                    command,
+                    commandApplications.firstOrNull { it.id == command.applicationId },
+                )
+            }
         }
-        val installed = unique(installedApplications)
-        if (installed.isNotEmpty()) {
+        if (commandCells.isNotEmpty() || recent.isNotEmpty()) {
+            rows += AppLauncherRow.Scroller(
+                titleRes = R.string.app_launcher_section_recents,
+                section = AppLauncherSectionName.RECENT_APPS,
+                commands = commandCells,
+                applications = recent.take(SHELF_ITEM_MAX),
+                showsAppsAsTiles = true,
+                canToggle = commandCells.isNotEmpty() && recent.isNotEmpty(),
+                showsViewAll = true,
+            )
+        }
+        val installed = when {
+            activitiesOnly -> emptyList()
+            isText -> launcherApps(installedApplications)
+            else -> unique(installedApplications)
+        }
+        if (installed.isNotEmpty() && !isText) {
             rows += applicationSection(R.string.app_launcher_section_installed, AppLauncherSectionName.INSTALLED, installed)
         }
-        val inServer = if (entrypoint == AppLauncherEntrypoint.TEXT) unique(serverApplications) else emptyList()
+        // The reference has no separate "Installed" shelf; everything usable here is "In This Server".
+        val inServer = if (isText) {
+            (launcherApps(serverApplications) + installed).distinctBy(AppLauncherApplication::id)
+        } else {
+            emptyList()
+        }
         if (inServer.isNotEmpty()) {
-            rows += applicationSection(
-                R.string.app_launcher_section_apps_in_server,
-                AppLauncherSectionName.APPS_IN_THIS_SERVER,
-                inServer,
+            rows += AppLauncherRow.Scroller(
+                titleRes = R.string.app_launcher_section_apps_in_server,
+                section = AppLauncherSectionName.APPS_IN_THIS_SERVER,
+                applications = inServer.take(SHELF_ITEM_MAX),
+                showsViewAll = inServer.size > SHELF_ITEM_MAX,
             )
         }
 
-        val remainingActivities = activities.filter { shownApplicationIds.add(it.id) }
+        // The reference only lists activities on their own for the voice entrypoint; in text they
+        // reach the user through a collection flagged to append whatever it did not already name.
+        val remainingActivities = if (isText) emptyList() else activities.filter { shownApplicationIds.add(it.id) }
         if (remainingActivities.isNotEmpty()) {
             rows += AppLauncherRow.Header(R.string.app_launcher_section_activities, AppLauncherSectionName.ACTIVITIES)
             rows += remainingActivities.chunked(2).map { AppLauncherRow.ActivityPair(it[0], it.getOrNull(1)) }
         }
-        if (entrypoint == AppLauncherEntrypoint.TEXT) {
-            val recommendations = directoryResults
-                .map(::fromDirectoryResult)
-                .filterNot { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
-                .filter { shownApplicationIds.add(it.id) }
-            if (recommendations.isNotEmpty()) {
-                rows += AppLauncherRow.Header(R.string.app_launcher_section_recommended, AppLauncherSectionName.NEW_TO_APPS)
-                rows += AppLauncherRow.Banner(recommendations.first())
-                rows += applicationSectionRows(
+        if (isText) {
+            val curatedIds = collections
+                .flatMap(ApplicationDirectoryCollection::applicationDirectoryCollectionItems)
+                .mapNotNull { it.application?.id }
+                .toSet()
+            val leftoverActivities = activities.filterNot { it.id in curatedIds }
+            collections.forEach { collection ->
+                // Collections are curated server-side and deliberately overlap the shelves above,
+                // so they are not filtered against what those already showed.
+                val curated = collection.applicationDirectoryCollectionItems
+                    .filter { it.type == ApplicationDirectoryCollectionItem.TYPE_APPLICATION }
+                    .sortedBy(ApplicationDirectoryCollectionItem::position)
+                    .mapNotNull { item ->
+                        item.application?.let { fromDirectoryApplication(it, promoted = item.promoted) }
+                    }
+                val appendsActivities = collection.flags and
+                    ApplicationDirectoryCollection.FLAG_APPENDS_REMAINING_ACTIVITIES != 0
+                val items = if (appendsActivities) curated + leftoverActivities else curated
+                if (items.isEmpty()) return@forEach
+
+                rows += AppLauncherRow.Header(
                     R.string.app_launcher_section_recommended,
                     AppLauncherSectionName.NEW_TO_APPS,
-                    recommendations.drop(1),
+                    title = collection.title,
                 )
+                if (collection.type == ApplicationDirectoryCollection.TYPE_BANNER_CARDS ||
+                    collection.type == ApplicationDirectoryCollection.TYPE_SMALL_BANNER_CARDS
+                ) {
+                    rows += items.chunked(2).map { AppLauncherRow.ActivityPair(it[0], it.getOrNull(1)) }
+                } else {
+                    val visible = items.take(COLLAPSED_LIST_ITEM_MAX)
+                    rows += visible.mapIndexed { index, app ->
+                        AppLauncherRow.ApplicationRow(app, index == 0, index == visible.lastIndex && items.size <= COLLAPSED_LIST_ITEM_MAX)
+                    }
+                    if (items.size > COLLAPSED_LIST_ITEM_MAX) {
+                        rows += AppLauncherRow.ViewAll(
+                            R.string.app_launcher_section_recommended,
+                            AppLauncherSectionName.NEW_TO_APPS,
+                            applications = items,
+                            title = collection.title,
+                        )
+                    }
+                }
             }
         }
+
+        if (isText && rows.isNotEmpty()) rows += AppLauncherRow.LearnMore
 
         return when {
             rows.isNotEmpty() -> rows
@@ -219,7 +327,12 @@ internal object AppLauncherRows {
         applications: List<Application>,
         directoryResults: List<ApplicationDirectorySearchResult>,
         loading: Boolean,
+        entrypoint: AppLauncherEntrypoint = AppLauncherEntrypoint.TEXT,
+        activities: List<AppLauncherApplication> = emptyList(),
     ): List<AppLauncherRow> {
+        if (entrypoint == AppLauncherEntrypoint.VOICE) {
+            return searchActivities(query, activities, directoryResults, loading)
+        }
         val rows = mutableListOf<AppLauncherRow>()
         if (commands.isNotEmpty()) {
             rows += commandSection(R.string.commands, AppLauncherSectionName.SEARCH, commands, applications, collapsed = false)
@@ -240,6 +353,27 @@ internal object AppLauncherRows {
         }
         return when {
             rows.isNotEmpty() -> rows
+            loading -> listOf(AppLauncherRow.Loading)
+            else -> listOf(AppLauncherRow.Empty(AppLauncherEmptyStateType.SEARCH_EMPTY))
+        }
+    }
+
+    private fun searchActivities(
+        query: String,
+        activities: List<AppLauncherApplication>,
+        directoryResults: List<ApplicationDirectorySearchResult>,
+        loading: Boolean,
+    ): List<AppLauncherRow> {
+        val local = activities.filter { it.name.contains(query, ignoreCase = true) }
+        val localIds = local.mapTo(HashSet()) { it.id }
+        val global = directoryResults
+            .map(::fromDirectoryResult)
+            .filter { it.searchResultType == AppLauncherSearchResultType.ACTIVITY_APPLICATION }
+            .filterNot { it.id in localIds }
+        val results = local + global
+        return when {
+            results.isNotEmpty() ->
+                results.chunked(2).map { AppLauncherRow.ActivityPair(it[0], it.getOrNull(1)) }
             loading -> listOf(AppLauncherRow.Loading)
             else -> listOf(AppLauncherRow.Empty(AppLauncherEmptyStateType.SEARCH_EMPTY))
         }
@@ -317,6 +451,18 @@ internal object AppLauncherRows {
         commandApplication = application,
     )
 
+    fun fromDirectoryApplication(
+        application: ApplicationDirectoryApplication,
+        promoted: Boolean,
+    ): AppLauncherApplication = AppLauncherApplication(
+        application.id,
+        application.name,
+        application.directoryEntry?.shortDescription?.ifBlank { application.description } ?: application.description,
+        application.icon,
+        directoryApplication = application,
+        promoted = promoted || application.flagsValue() and PROMOTED_FLAG != 0L,
+    )
+
     fun fromDirectoryResult(result: ApplicationDirectorySearchResult): AppLauncherApplication {
         val application = result.data
         return AppLauncherApplication(
@@ -331,11 +477,18 @@ internal object AppLauncherRows {
         )
     }
 
-    fun shelfApplications(shelf: EmbeddedActivityShelf?): List<AppLauncherApplication> {
+    fun shelfApplications(
+        shelf: EmbeddedActivityShelf?,
+        entrypoint: AppLauncherEntrypoint = AppLauncherEntrypoint.TEXT,
+        nsfwAllowed: Boolean = true,
+        now: Long = System.currentTimeMillis(),
+    ): List<AppLauncherApplication> {
         if (shelf == null) return emptyList()
         val applications = shelf.applications.associateBy { it.id }
+        val surface = if (entrypoint == AppLauncherEntrypoint.VOICE) VOICE_SURFACE else TEXT_SURFACE
         return shelf.activities
-            .sortedBy { it.shelfRank }
+            .filter { ANDROID_PLATFORM in it.supportedPlatforms }
+            .filterNot { it.requiresAgeGate && !nsfwAllowed }
             .mapNotNull { config ->
                 val id = config.applicationId ?: return@mapNotNull null
                 val application = applications[id] ?: return@mapNotNull null
@@ -356,18 +509,51 @@ internal object AppLauncherRows {
                     icon = application.icon,
                     directoryApplication = directoryApplication,
                     searchResultType = AppLauncherSearchResultType.ACTIVITY_APPLICATION,
-                    unavailableReasonRes = R.string.app_launcher_activity_not_available_on_device
-                        .takeIf { "android" !in config.supportedPlatforms },
                     imageUrl = shelf.assets[application.id]
                         ?.firstOrNull { (it.name ?: it.key) == "embedded_cover" }
                         ?.let { asset -> asset.id ?: asset.assetId?.toString() }
                         ?.let { "https://cdn.discordapp.com/app-assets/${application.id}/$it.webp?size=512" },
-                )
+                    badge = config.badge(surface, now),
+                ) to config.shelfRank
             }
+            .promoteLabelled()
+    }
+
+    /** A labelled activity is pulled up to its `shelfRank`, never pushed down. */
+    private fun List<Pair<AppLauncherApplication, Int>>.promoteLabelled(): List<AppLauncherApplication> {
+        val ordered = mapTo(ArrayList(size)) { it.first }
+        forEach { (application, shelfRank) ->
+            if (application.badge == null) return@forEach
+            val index = ordered.indexOfFirst { it.id == application.id }
+            val rank = (shelfRank - 1).coerceAtLeast(0)
+            if (rank < index) {
+                ordered.removeAt(index)
+                ordered.add(rank, application)
+            }
+        }
+        return ordered
+    }
+
+    private fun EmbeddedActivityConfig.badge(surface: String, now: Long): ActivityBadge? {
+        val platform = clientPlatformConfig[ANDROID_PLATFORM] ?: return null
+        if (surface in platform.omitBadgeFromSurfaces) return null
+        val from = platform.labelFrom?.let(TimeUtils::parseUTCDate) ?: return null
+        val until = platform.labelUntil?.let(TimeUtils::parseUTCDate) ?: return null
+        if (now < from || now > until) return null
+        return when (platform.labelType) {
+            LABEL_TYPE_NEW -> ActivityBadge.NEW
+            LABEL_TYPE_UPDATED -> ActivityBadge.UPDATED
+            else -> null
+        }
     }
 
     private fun ApplicationDirectoryApplication.flagsValue(): Long =
         flagsNew?.toLongOrNull() ?: flags ?: 0L
 
     private const val PROMOTED_FLAG = 1L shl 29
+    private const val ANDROID_PLATFORM = "android"
+    private const val VOICE_SURFACE = "voice_launcher"
+    private const val TEXT_SURFACE = "text_launcher"
+    private const val LABEL_TYPE_NEW = 1
+    private const val LABEL_TYPE_UPDATED = 2
 }

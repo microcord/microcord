@@ -132,9 +132,17 @@ class WidgetAppLauncher : AppBottomSheet() {
         adapter.setData(state.rows)
         binding.appLauncherTitle.text = state.titleRes?.let(::getString)
             ?: state.title.ifBlank { getString(R.string.apps) }
-        binding.appLauncherBack.visibility = if (state.route == AppLauncherRoute.HOME) View.INVISIBLE else View.VISIBLE
+        // The reference's home screen has no header at all: the navigator hides it and only the
+        // sub-screens draw their own. Everything but the drag handle stands down there.
+        val isHome = state.route == AppLauncherRoute.HOME
+        binding.appLauncherBack.visibility = if (isHome) View.GONE else View.VISIBLE
+        binding.appLauncherTitle.isVisible = !isHome
+        binding.appLauncherClose.isVisible = !isHome
         binding.appLauncherSearchWrap.isVisible = state.route == AppLauncherRoute.HOME
-        binding.appLauncherSearchDivider.isVisible = state.route == AppLauncherRoute.HOME && state.searchPinnedDivider
+        // The reference springs this border in as the list leaves the top rather than snapping it.
+        val showSeam = state.route == AppLauncherRoute.HOME && state.searchPinnedDivider
+        binding.appLauncherSearchDivider.animate().cancel()
+        binding.appLauncherSearchDivider.animate().alpha(if (showSeam) 1f else 0f).setDuration(150).start()
         binding.appLauncherAction.visibility = when (state.route) {
             AppLauncherRoute.COMMAND_VIEW -> View.VISIBLE
             AppLauncherRoute.APPLICATION_VIEW -> if (state.selectedApplication?.directoryApplication != null) View.VISIBLE else View.GONE

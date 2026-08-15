@@ -2,6 +2,7 @@ package com.discord.stores
 
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
 import com.discord.api.applicationdirectory.ApplicationDirectoryCategory
+import com.discord.api.applicationdirectory.ApplicationDirectoryCollection
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResponse
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
 import com.discord.restapi.ApplicationDirectoryAPI
@@ -43,6 +44,7 @@ class StoreApplicationDirectory(
     }
 
     data class State(
+        val collections: List<ApplicationDirectoryCollection> = emptyList(),
         val categories: List<ApplicationDirectoryCategory> = emptyList(),
         val categoriesLoading: Boolean = false,
         val categoriesError: Boolean = false,
@@ -50,6 +52,8 @@ class StoreApplicationDirectory(
         val details: Map<Long, DetailState> = emptyMap(),
     )
 
+    private var collections = emptyList<ApplicationDirectoryCollection>()
+    private var collectionsLoading = false
     private var categories = emptyList<ApplicationDirectoryCategory>()
     private var categoriesLoading = false
     private var categoriesError = false
@@ -62,6 +66,28 @@ class StoreApplicationDirectory(
 
     fun getState(): State = snapshot
     fun observeState(): Observable<State> = observationDeck.connectRx(this) { getState() }.distinctUntilChanged()
+
+    /** The app launcher's curated shelves; cached by the server for ten minutes. */
+    fun loadCollections(surface: Int, force: Boolean = false) = dispatcher.schedule {
+        if (collectionsLoading || (!force && collections.isNotEmpty())) return@schedule
+        val service = api() ?: return@schedule
+        collectionsLoading = true
+        service.collections(
+            surface = surface,
+            activeState = ApplicationDirectoryCollection.ACTIVE_STATE_ACTIVE,
+            platform = ApplicationDirectoryCollection.PLATFORM_ANDROID,
+            locale = locale(),
+        ).restSubscribeOn(false).subscribe(
+            { result ->
+                dispatcher.schedule {
+                    collectionsLoading = false
+                    collections = result.sortedBy(ApplicationDirectoryCollection::position)
+                    markChanged()
+                }
+            },
+            { dispatcher.schedule { collectionsLoading = false; markChanged() } },
+        )
+    }
 
     fun loadCategories(force: Boolean = false) = dispatcher.schedule {
         if (categoriesLoading || (!force && categories.isNotEmpty())) return@schedule
@@ -203,7 +229,7 @@ class StoreApplicationDirectory(
     }
 
     override fun snapshotData() {
-        snapshot = State(categories, categoriesLoading, categoriesError, search, details.toMap())
+        snapshot = State(collections, categories, categoriesLoading, categoriesError, search, details.toMap())
     }
 
     companion object {

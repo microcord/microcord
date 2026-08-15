@@ -2,7 +2,9 @@ package com.discord.widgets.chat.input.applauncher
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.discord.api.user.NsfwAllowance
 import com.discord.R
+import com.discord.api.applicationdirectory.ApplicationDirectoryCollection
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
@@ -74,6 +76,7 @@ class AppLauncherViewModel(
     private var frecentCommandIds: List<String> = emptyList()
     private var shelf: EmbeddedActivityShelf? = null
     private var directoryResults: List<ApplicationDirectorySearchResult> = emptyList()
+    private var collections: List<ApplicationDirectoryCollection> = emptyList()
     private var commandsLoading = true
     private var directoryLoading = true
     private var installedLoading = true
@@ -136,6 +139,9 @@ class AppLauncherViewModel(
                 {
                     if (query.isBlank()) commands = accessible(it.commands)
                     commandsLoading = it.loadState.isLoading()
+                    // The frecency shortlist is resolved against the index, so it has to be
+                    // recomputed once the index lands; nothing else asks for it.
+                    commandsStore.requestFrecencyCommands(guildId ?: 0L)
                     publish()
                 },
                 {
@@ -157,6 +163,7 @@ class AppLauncherViewModel(
             applicationFrecencyStore.observeTopCommandIds(guildId).subscribe(
                 {
                     frecentCommandIds = it
+                    commandsStore.requestFrecencyCommands(guildId ?: 0L)
                     publish()
                 },
                 { publish() },
@@ -204,6 +211,9 @@ class AppLauncherViewModel(
             )
         }
         directoryStore.search("", source = ApplicationDirectoryAPI.SOURCE_APP_LAUNCHER)
+        if (entrypoint == AppLauncherEntrypoint.TEXT) {
+            directoryStore.loadCollections(ApplicationDirectoryCollection.SURFACE_APP_LAUNCHER_IN_TEXT)
+        }
     }
 
     fun observeState(): Observable<AppLauncherViewState> = stateSubject.distinctUntilChanged()
@@ -289,6 +299,7 @@ class AppLauncherViewModel(
     }
 
     private fun onDirectoryState(state: StoreApplicationDirectory.State) {
+        collections = state.collections
         val search = state.search
         if (search.source == ApplicationDirectoryAPI.SOURCE_APP_LAUNCHER) {
             directoryResults = search.results
@@ -323,13 +334,27 @@ class AppLauncherViewModel(
                         serverApplications,
                         shelf,
                         directoryResults,
+                        collections,
                         commandsLoading || directoryLoading || installedLoading || serverLoading || shelfLoading,
                         hasLauncherPermission(),
+                        nsfwAllowed(),
                     )
                 } else {
-                    AppLauncherRows.search(query, commands, applications, directoryResults, commandsLoading || directoryLoading)
+                    AppLauncherRows.search(
+                        query,
+                        commands,
+                        applications,
+                        directoryResults,
+                        commandsLoading || directoryLoading,
+                        entrypoint,
+                        AppLauncherRows.shelfApplications(shelf, entrypoint, nsfwAllowed()),
+                    )
                 },
-                titleRes = R.string.apps,
+                titleRes = if (entrypoint == AppLauncherEntrypoint.VOICE) {
+                    R.string.embedded_activities_shelf_title
+                } else {
+                    R.string.apps
+                },
                 searchPinnedDivider = searchPinnedDivider,
             )
             AppLauncherRoute.APPLICATION_VIEW -> {
@@ -418,6 +443,12 @@ class AppLauncherViewModel(
     }
 
     /** The command that was just run leads the row, ahead of the ranking. */
+    /**
+     * The frecency ranking with the last-used command pinned in front.
+     *
+     * Deliberately not topped up with the rest of the index: the reference's frecency section is
+     * the ranked commands and nothing else, so an account with no history shows no commands here.
+     */
     private fun pinnedFrecentCommands(): List<ApplicationCommand> {
         val lastUsedId = applicationFrecencyStore.getLastUsedCommandId() ?: return frecentCommands
         val lastUsed = (frecentCommands + commands).firstOrNull { it.id == lastUsedId }
@@ -425,13 +456,23 @@ class AppLauncherViewModel(
         return listOf(lastUsed) + frecentCommands.filterNot { it.id == lastUsedId }
     }
 
+    private fun nsfwAllowed() = StoreStream.getUsers().getMe().nsfwAllowance != NsfwAllowance.DISALLOWED
+
+    /**
+     * Every app usable here, frecency-first.
+     *
+     * The reference sorts the whole section-descriptor list by frecency rather than deriving the
+     * list from command history, so the shelf is populated before the user has run anything.
+     */
     private fun frecentApplications(): List<Application> {
         val commandApplicationIds = (frecentCommands + commands)
             .associate { it.id to it.applicationId }
         val applicationsById = (applications + installedApplications + serverApplications).associateBy(Application::id)
-        return frecentCommandIds.mapNotNull(commandApplicationIds::get)
+        val frecentFirst = frecentCommandIds.mapNotNull(commandApplicationIds::get)
             .distinct()
             .mapNotNull(applicationsById::get)
+        val seen = frecentFirst.mapTo(HashSet(), Application::id)
+        return frecentFirst + applicationsById.values.filterNot { it.builtIn || it.id in seen }
     }
 
     override fun onCleared() {

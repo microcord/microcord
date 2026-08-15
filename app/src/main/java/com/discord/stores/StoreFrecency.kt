@@ -18,6 +18,7 @@ class StoreFrecency(
     private val scheduler: ScheduledExecutorService,
     private val writer: () -> UserSettingsProtoWriter<FrecencyUserSettings, FrecencyUserSettings.Builder>,
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
+    private val applicationCommands: () -> StoreApplicationCommandFrecency? = { null },
 ) : StoreV2() {
 
     private val channels = ChannelFrecencyTracker()
@@ -28,6 +29,7 @@ class StoreFrecency(
             builder.guildAndChannelFrecencyBuilder.clearGuildAndChannels().putAllGuildAndChannels(
                 channels.toEntries(MAX_ENTRIES).mapValues { it.value.toProto() },
             )
+            applicationCommands()?.writeInto(builder)
         }
     }
 
@@ -42,6 +44,7 @@ class StoreFrecency(
     @StoreThread
     fun handleFrecencySettings(settings: FrecencyUserSettings) {
         channels.restore(settings.guildAndChannelFrecency.guildAndChannelsMap.mapValues { it.value.toEntry() })
+        applicationCommands()?.handleFrecencySettings(settings)
         markChanged()
     }
 

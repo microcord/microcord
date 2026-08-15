@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:elevation="3dp"
+    android:background="@drawable/drawable_app_launcher_scroller_tile"
+    android:foreground="?attr/selectableItemBackground">
+
+    <com.facebook.drawee.view.SimpleDraweeView
+        android:id="@+id/app_launcher_scroller_app_icon"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:contentDescription="@null"
+        app:placeholderImage="?attr/ic_game_icon_placeholder"
+        app:roundedCornerRadius="16dp" />
+</FrameLayout>

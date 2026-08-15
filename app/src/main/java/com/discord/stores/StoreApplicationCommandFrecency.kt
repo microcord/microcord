@@ -3,7 +3,9 @@ package com.discord.stores
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.applicationcommands.ApplicationCommandFrecencyTracker
+import com.discord.utilities.frecency.FrecencyTracker
 import com.discord.utilities.persister.Persister
+import discord_protos.discord_users.v1.FrecencyUserSettingsOuterClass.FrecencyUserSettings
 import rx.Observable
 
 /**
@@ -29,16 +31,59 @@ class StoreApplicationCommandFrecency(
 
     private val frecency: ApplicationCommandFrecencyTracker = frecencyCache.get()
 
-    private var topCommandIds: MutableMap<Long, List<String>> = LinkedHashMap()
-    private var topCommandIdsSnapshot: Map<Long, List<String>> = emptyMap()
+    private var sortedKeys: List<String> = emptyList()
+    private var sortedKeysSnapshot: List<String> = emptyList()
     private var lastUsedCommandIdSnapshot: String? = lastUsedCommandCache.get().takeIf(String::isNotEmpty)
 
     init {
         populateStore()
     }
 
-    fun getTopCommandIds(guildId: Long?): List<String> =
-        topCommandIdsSnapshot[guildId ?: NO_GUILD].orEmpty()
+    /**
+     * Adopts the account's synced ranking.
+     *
+     * Command frecency rides in the user-settings proto, so the ordering has to come from there
+     * rather than from local use alone or this client disagrees with every other one.
+     */
+    @StoreThread
+    fun handleFrecencySettings(settings: FrecencyUserSettings) {
+        frecency.restore(
+            settings.applicationCommandFrecency.applicationCommandsMap.mapValues { (_, item) ->
+                FrecencyTracker.Entry(item.totalUses, item.recentUsesList.toList(), item.frecency, item.score)
+            },
+        )
+        frecencyCache.set(frecency, true)
+        populateStore()
+        markChanged()
+    }
+
+    /** Mirrors the local tracker back into the proto so other clients see what was used here. */
+    fun writeInto(builder: FrecencyUserSettings.Builder) {
+        builder.applicationCommandFrecencyBuilder.clearApplicationCommands().putAllApplicationCommands(
+            frecency.toEntries(MAX_ENTRIES).mapValues { (_, entry) ->
+                FrecencyUserSettings.FrecencyItem.newBuilder()
+                    .setTotalUses(entry.totalUses)
+                    .addAllRecentUses(entry.recentUses)
+                    .setFrecency(entry.frecency)
+                    .setScore(entry.score)
+                    .build()
+            },
+        )
+    }
+
+    /**
+     * The ranked command ids usable in [guildId].
+     *
+     * A key only carries a guild when the command itself is guild-scoped, so an unscoped key is a
+     * global command and counts everywhere. Bucketing strictly by guild would hide every global
+     * command's ranking the moment the launcher opened inside a guild.
+     */
+    fun getTopCommandIds(guildId: Long?): List<String> = sortedKeysSnapshot
+        .filter { key ->
+            val separator = key.indexOf(KEY_SEPARATOR)
+            if (separator < 0) true else guildId != null && key.substring(separator + 1) == guildId.toString()
+        }
+        .map { key -> key.substringBefore(KEY_SEPARATOR) }
 
     /**
      * The reference pins the command you just ran to the front of the frecency row, ahead of the
@@ -58,7 +103,7 @@ class StoreApplicationCommandFrecency(
         frecency.track(key(guildId, commandId))
         frecencyCache.set(frecency, true)
         lastUsedCommandCache.set(commandId, true)
-        topCommandIds[guildId ?: NO_GUILD] = allTopCommandIds(guildId)
+        sortedKeys = frecency.getSortedKeys().toList()
         markChanged(this)
     }
 
@@ -68,49 +113,18 @@ class StoreApplicationCommandFrecency(
         lastUsedCommandCache.clear()
     }
 
-    /** Decodes the persisted tracker into the per-guild view. */
+    /** Reads the ranking out of the restored tracker. */
     internal fun populateStore() {
-        val decoded = LinkedHashMap<Long, MutableList<String>>()
-        frecency.getSortedKeys().forEach { key ->
-            val separator = key.indexOf(KEY_SEPARATOR)
-            val guildId: Long
-            val commandId: String
-            if (separator >= 0) {
-                guildId = key.substring(separator + 1).toLongOrNull() ?: NO_GUILD
-                commandId = key.substring(0, separator)
-            } else {
-                guildId = NO_GUILD
-                commandId = key
-            }
-            decoded.getOrPut(guildId) { ArrayList() }.add(commandId)
-        }
-        topCommandIds = decoded.mapValues { (_, ids) -> ids.toList() }.toMutableMap()
-        topCommandIdsSnapshot = decoded
+        sortedKeys = frecency.getSortedKeys().toList()
+        sortedKeysSnapshot = sortedKeys
     }
-
-    /**
-     * The ranked command ids for one guild.
-     *
-     * A `null` [guildId] deliberately selects only the *unscoped* keys — it is not "any guild".
-     */
-    private fun allTopCommandIds(guildId: Long?): List<String> =
-        frecency.getSortedKeys()
-            .filter { key ->
-                val separator = key.indexOf(KEY_SEPARATOR)
-                if (guildId != null) {
-                    separator >= 0 && key.substring(separator + 1) == guildId.toString()
-                } else {
-                    separator < 0
-                }
-            }
-            .map { key -> key.substringBefore(KEY_SEPARATOR) }
 
     private fun key(guildId: Long?, commandId: String): String =
         if (guildId != null) "$commandId$KEY_SEPARATOR$guildId" else commandId
 
     @StoreThread
     override fun snapshotData() {
-        topCommandIdsSnapshot = HashMap(topCommandIds)
+        sortedKeysSnapshot = sortedKeys
         lastUsedCommandIdSnapshot = lastUsedCommandCache.get().takeIf(String::isNotEmpty)
     }
 
@@ -118,8 +132,7 @@ class StoreApplicationCommandFrecency(
         const val CACHE_KEY_APPLICATION_COMMANDS = "CACHE_KEY_APPLICATION_COMMANDS"
         const val CACHE_KEY_LAST_USED_COMMAND = "CACHE_KEY_LAST_USED_APPLICATION_COMMAND"
 
-        /** Slot for commands used outside any guild. */
-        const val NO_GUILD = 0L
+        private const val MAX_ENTRIES = 100
 
         private const val KEY_SEPARATOR = ':'
     }

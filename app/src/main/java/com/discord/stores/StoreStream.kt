@@ -339,7 +339,13 @@ class StoreStream private constructor(
         settingsProtoScheduler,
         FrecencyUserSettings::newBuilder,
     )
-    private val frecency = StoreFrecency(dispatcher, settingsProtoScheduler, { frecencyProtoWriter }, observationDeck)
+    private val frecency = StoreFrecency(
+        dispatcher,
+        settingsProtoScheduler,
+        { frecencyProtoWriter },
+        observationDeck,
+        applicationCommands = { applicationCommandFrecency },
+    )
     private val gifPicker = StoreGifPicker(
         dispatcher,
         userSettingsSystem,

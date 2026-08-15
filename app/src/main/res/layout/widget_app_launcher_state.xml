@@ -2,10 +2,10 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/drawable_app_launcher_state_bg"
     android:gravity="center"
-    android:minHeight="220dp"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:padding="16dp">
 
     <com.discord.views.typing.TypingDots
         android:id="@+id/app_launcher_state_loading"
@@ -16,8 +16,8 @@
 
     <ImageView
         android:id="@+id/app_launcher_state_icon"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
+        android:layout_width="113dp"
+        android:layout_height="124dp"
         android:contentDescription="@null"
         android:src="@drawable/img_clyde_empty" />
 
@@ -27,7 +27,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:gravity="center"
-        style="@style/UiKit.TextView.H2" />
+        style="@style/UiKit.TextView.Semibold" />
 
     <TextView
         android:id="@+id/app_launcher_state_body"

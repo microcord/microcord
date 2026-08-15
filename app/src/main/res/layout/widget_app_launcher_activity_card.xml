@@ -7,10 +7,10 @@
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
-    app:cardBackgroundColor="?attr/colorBackgroundTertiary"
+    app:cardBackgroundColor="?attr/colorBackgroundPrimary"
     app:cardCornerRadius="8dp"
     app:cardElevation="0dp"
-    app:strokeColor="?attr/colorBackgroundModifierAccent"
+    app:strokeColor="?attr/colorPrimaryDivider"
     app:strokeWidth="1dp">
 
     <LinearLayout
@@ -18,13 +18,36 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <com.facebook.drawee.view.SimpleDraweeView
-            android:id="@+id/app_launcher_activity_image"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="120dp"
-            android:contentDescription="@null"
-            android:scaleType="centerCrop"
-            app:placeholderImage="?attr/ic_game_icon_placeholder" />
+            android:layout_height="wrap_content">
+
+            <com.facebook.drawee.view.SimpleDraweeView
+                android:id="@+id/app_launcher_activity_image"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:contentDescription="@null"
+                app:actualImageScaleType="centerCrop"
+                app:placeholderImage="?attr/ic_game_icon_placeholder"
+                app:placeholderImageScaleType="centerCrop"
+                app:viewAspectRatio="1.7777778" />
+
+            <TextView
+                android:id="@+id/app_launcher_activity_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="16dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="4dp"
+                android:background="@drawable/drawable_app_launcher_badge_new"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingHorizontal="4dp"
+                android:textAllCaps="true"
+                android:textColor="@android:color/white"
+                android:textSize="10sp"
+                android:visibility="gone"
+                style="@style/UiKit.TextView.Bold" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/app_launcher_activity_name"
@@ -34,19 +57,8 @@
             android:maxLines="1"
             android:paddingHorizontal="12dp"
             android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             style="@style/UiKit.TextView.Semibold" />
 
-        <TextView
-            android:id="@+id/app_launcher_activity_description"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:minHeight="44dp"
-            android:paddingHorizontal="12dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="10dp"
-            android:textColor="?attr/colorTextMuted"
-            style="@style/UiKit.TextView.Subtext" />
-    </LinearLayout>
+</LinearLayout>
 </com.google.android.material.card.MaterialCardView>

@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.input.applauncher
 
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
+import com.discord.api.applicationdirectory.ApplicationDirectoryCollection
 import com.discord.api.applicationdirectory.ApplicationDirectorySearchResult
 import com.discord.api.commands.ApplicationCommandIndex
 import com.discord.api.commands.ApplicationCommandIndexApplication
@@ -200,8 +201,10 @@ class AppLauncherStateTest {
         server: List<Application> = emptyList(),
         shelf: EmbeddedActivityShelf? = null,
         directory: List<ApplicationDirectorySearchResult> = emptyList(),
+        collections: List<ApplicationDirectoryCollection> = emptyList(),
         loading: Boolean = false,
         hasPermission: Boolean = true,
+        nsfwAllowed: Boolean = true,
     ) = AppLauncherRows.home(
         entrypoint,
         commandApplications,
@@ -211,8 +214,10 @@ class AppLauncherStateTest {
         server,
         shelf,
         directory,
+        collections,
         loading,
         hasPermission,
+        nsfwAllowed,
     )
 
     private fun shelf(vararg rankedApplications: Pair<Long, Int>) = EmbeddedActivityShelf(

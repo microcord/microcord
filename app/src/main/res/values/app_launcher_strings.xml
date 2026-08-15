@@ -18,9 +18,19 @@
     <string name="app_launcher_connection_result">Connection</string>
     <string name="app_launcher_section_recent_commands">Recent commands</string>
     <string name="app_launcher_section_recents">Recents</string>
+    <string name="app_launcher_section_recent_activities">Recent Activities</string>
     <string name="app_launcher_section_installed">Installed</string>
-    <string name="app_launcher_section_apps_in_server">Apps in this server</string>
+    <string name="app_launcher_section_apps_in_server">In This Server</string>
+    <string name="app_launcher_section_built_in">Discord Built-In</string>
     <string name="app_launcher_section_activities">Activities</string>
     <string name="app_launcher_section_recommended">Recommended</string>
+    <string name="app_launcher_activity_badge_new">New</string>
+    <string name="app_launcher_activity_badge_updated">Updated</string>
     <string name="app_launcher_view_all">View all</string>
+    <string name="app_launcher_learn_more_title">Have Questions?</string>
+    <string name="app_launcher_learn_more_body">Visit our help center to learn more about using and discovering apps on Discord.</string>
+    <string name="app_launcher_learn_more_action">Learn More</string>
+    <string name="app_launcher_recents_commands">Commands</string>
+    <string name="app_launcher_recents_apps">Apps</string>
+    <string name="app_launcher_view_more">View More</string>
 </resources>
