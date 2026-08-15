@@ -1016,36 +1016,53 @@ data class WidgetChannelListModel(
         }
 
         /**
-         * Lifts the viewer's pinned channels into their own section at the top.
-         *
-         * Done after the list is assembled rather than during, so a pinned channel keeps the exact
-         * row the normal path would have produced — unread state, threads and all. Categories left
-         * empty by the move are dropped, since their contents are now above.
+         * Runs after the list is assembled so a pinned channel keeps the exact row the normal path
+         * produced — unread state, threads and all.
          */
         private fun hoistPinnedChannels(
             items: MutableList<ChannelListItem>,
             guild: GuildInfo,
             selectedGuildId: Long,
         ): List<ChannelListItem> {
-            val settings = guild.notificationSettings
-            val pinnedIds = settings.channelOverrides
+            val pinnedIds = guild.notificationSettings.channelOverrides
                 .filter { it.isFavorite }
                 .map { it.channelId }
                 .toSet()
-            if (pinnedIds.isEmpty()) return items
-
             val pinned = items.filter { it is ChannelListItemTextChannel && it.channel.id in pinnedIds }
-            if (pinned.isEmpty()) return items
+            if (pinned.isNotEmpty()) {
+                items.removeAll(pinned)
+                dropEmptyCategories(items)
+            }
 
-            items.removeAll(pinned)
-            dropEmptyCategories(items)
-            val header = ChannelListItemHeader(
-                id = PINNED_CHANNELS_HEADER_ID,
-                textResId = R.string.pinned_channels,
-                ableToManageChannel = false,
-                selectedGuildId = selectedGuildId,
-            )
-            return listOf(header) + pinned + items
+            val insertAt = items.indexOfFirst { it.type in CHANNEL_LIST_BODY_TYPES }
+                .takeIf { it >= 0 } ?: items.size
+            val section = buildList {
+                // The fence stands whether or not anything is pinned; it is only dropped when
+                // there is nothing above it to fence off.
+                if (insertAt > 0) {
+                    add(
+                        ChannelListItemEventsSeparator(
+                            isTop = true,
+                            section = "pinned",
+                            tightBelow = pinned.isNotEmpty(),
+                        ),
+                    )
+                }
+                if (pinned.isNotEmpty()) {
+                    add(
+                        ChannelListItemHeader(
+                            id = PINNED_CHANNELS_HEADER_ID,
+                            textResId = R.string.pinned_channels,
+                            ableToManageChannel = false,
+                            selectedGuildId = selectedGuildId,
+                        ),
+                    )
+                    addAll(pinned)
+                    add(ChannelListItemEventsSeparator(isTop = false, section = "pinned"))
+                }
+            }
+            if (section.isEmpty()) return items
+            return items.subList(0, insertAt) + section + items.subList(insertAt, items.size)
         }
 
         /** A category header with no rows between it and the next header is now noise. */
@@ -1204,6 +1221,16 @@ data class WidgetChannelListModel(
 
         /** The reference hub row shows at most five new servers. */
         private const val PINNED_CHANNELS_HEADER_ID = -2L
+
+        /** Where the guild's own entries stop and its channels begin. */
+        private val CHANNEL_LIST_BODY_TYPES = setOf(
+            ChannelListItem.TYPE_CHANNEL,
+            ChannelListItem.TYPE_CHANNEL_VOICE,
+            ChannelListItem.TYPE_CHANNEL_STAGE_VOICE,
+            ChannelListItem.TYPE_THREAD,
+            ChannelListItem.TYPE_CATEGORY,
+            ChannelListItem.TYPE_HEADER,
+        )
         private const val MAX_DIRECTORY_UNREADS = 5
 
         /** Discord's own seeded directory channel, which never gets the events row. */

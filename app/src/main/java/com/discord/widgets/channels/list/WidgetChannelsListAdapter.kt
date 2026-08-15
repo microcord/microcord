@@ -76,6 +76,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemDirectory
 import com.discord.widgets.channels.list.items.ChannelListItemGuildJoinRequest
 import com.discord.widgets.servers.member_verification.MemberVerificationPendingViewModel
 import com.discord.widgets.channels.list.items.ChannelListItemGuildScheduledEvents
+import com.discord.widgets.channels.list.items.ChannelListItemEventsSeparator
 import com.discord.widgets.channels.list.items.ChannelListItemHeader
 import com.discord.widgets.channels.list.items.ChannelListItemInvite
 import com.discord.widgets.channels.list.items.ChannelListItemPrivate
@@ -186,12 +187,8 @@ class WidgetChannelsListAdapter(
             ItemChannelThread(R.layout.widget_channels_list_item_thread, this)
         ChannelListItem.TYPE_CHANNEL_STAGE_VOICE ->
             ItemChannelStageVoice(R.layout.widget_channels_list_item_channel_stage_voice, this)
-        // The separator has no behaviour at all; the reference also uses the bare base holder.
         ChannelListItem.TYPE_STAGE_EVENTS_SEPARATOR ->
-            MGRecyclerViewHolder<WidgetChannelsListAdapter, ChannelListItem>(
-                R.layout.widget_channels_list_item_stage_events_separator,
-                this,
-            )
+            ItemSeparator(R.layout.widget_channels_list_item_stage_events_separator, this)
         ChannelListItem.TYPE_ACTIVE_EVENT ->
             ItemStageActiveEvent(R.layout.widget_channels_list_item_active_event, this)
         ChannelListItem.TYPE_STAGE_AUDIENCE_COUNT ->
@@ -629,11 +626,12 @@ class WidgetChannelsListAdapter(
                     adapter.onCallChannel(item.channel)
                 }
             }
-            root.isSelected = item.voiceSelected
-            root.setChannelBackground(item.voiceSelected, item.channel)
+            val selected = item.voiceSelected || item.textSelected
+            root.isSelected = selected
+            root.setChannelBackground(selected, item.channel)
 
             name.text = item.channel.getDisplayName()
-            var iconColor = voiceChannelColor(item.voiceSelected)
+            var iconColor = voiceChannelColor(selected)
             name.setTextColor(iconColor)
 
             eventTopic.setTextAndVisibilityBy(item.guildScheduledEvent?.name)
@@ -1150,6 +1148,21 @@ class WidgetChannelsListAdapter(
     // ------------------------------------------------------------------------------------------
     // Notices, headers and spacers
     // ------------------------------------------------------------------------------------------
+
+    class ItemSeparator(
+        @LayoutRes layoutResId: Int,
+        adapter: WidgetChannelsListAdapter,
+    ) : MGRecyclerViewHolder<WidgetChannelsListAdapter, ChannelListItem>(layoutResId, adapter) {
+
+        private val gap = itemView.resources.getDimensionPixelSize(R.dimen.channel_list_separator_gap)
+
+        override fun onConfigure(position: Int, data: ChannelListItem) {
+            super.onConfigure(position, data)
+            val params = itemView.layoutParams as ViewGroup.MarginLayoutParams
+            params.bottomMargin = if ((data as ChannelListItemEventsSeparator).tightBelow) 0 else gap
+            itemView.layoutParams = params
+        }
+    }
 
     class ItemHeader(
         @LayoutRes layoutResId: Int,
