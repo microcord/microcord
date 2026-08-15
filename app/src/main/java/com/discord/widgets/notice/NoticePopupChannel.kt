@@ -25,7 +25,6 @@ import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.utilities.fcm.NotificationClient
-import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.drawable.getDrawable
 import com.discord.utilities.drawable.getThemedDrawableRes
@@ -40,6 +39,7 @@ import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageParseState
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.widgets.channels.settings.WidgetChannelNotificationSettings
+import com.discord.utilities.intent.IntentUtils
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import rx.Observable
 import rx.functions.Func9
@@ -54,8 +54,6 @@ import rx.functions.Func9
  * Nothing is shown if the user is already looking at the channel the message arrived in.
  */
 object NoticePopupChannel {
-
-    private const val IN_APP_NOTICE_SUFFIX = "InAppNotif"
 
     /**
      * Builds the banner model and hands it to [NoticePopup].
@@ -135,16 +133,22 @@ object NoticePopupChannel {
      */
     fun install() {
         NotificationClient.inAppNotificationHandler = handler@{ context, data ->
-            val channelId = data.channelId
-            val messageId = data.messageId ?: return@handler false
-            val message = StoreStream.getMessages().getMessages(channelId)
-                .firstOrNull { it.id == messageId }
-                ?: return@handler false
-            enqueue(context, "$channelId$IN_APP_NOTICE_SUFFIX", message) {
-                ChannelSelector.getInstance().selectChannel(data.guildId ?: 0L, channelId)
+            NoticePopup.enqueue(
+                noticeName = "InAppNotif#${data.channelId}",
+                noticeTitle = data.title,
+                noticeBody = data.body,
+                noticeIconUrl = data.iconUrl,
+            ) { view ->
+                openChannel(view.context, data.guildId, data.channelId, data.messageId)
             }
             true
         }
+    }
+
+    internal fun openChannel(context: Context, guildId: Long?, channelId: Long, messageId: Long?) {
+        val intent = IntentUtils.RouteBuilders.selectChannel(channelId, guildId ?: 0L, messageId)
+            .putExtra("com.discord.intent.ORIGIN_SOURCE", "com.discord.intent.ORIGIN_NOTIF_INAPP")
+        IntentUtils.consumeExternalRoutingIntent(intent, context)
     }
 
     /** @return `null` when there is no channel, or the user is already reading it. */

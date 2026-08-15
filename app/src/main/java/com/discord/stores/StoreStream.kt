@@ -107,6 +107,7 @@ import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessag
 import com.discord.widgets.chat.input.ChatInputGuardActions
 import com.discord.widgets.chat.input.ChatInputStoreBindings
 import com.discord.widgets.chat.input.WidgetChatInput
+import com.discord.widgets.notice.NoticePopupChannel
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
 import com.discord.widgets.friends.FriendRelationshipUi
@@ -1840,6 +1841,22 @@ class StoreStream private constructor(
     private fun deliverNotification(message: DomainMessage, delivery: NotificationPolicy.Delivery) {
         if (!::applicationContext.isInitialized) return
         val channel = channels.getChannel(message.channelId) ?: return
+        if (delivery == NotificationPolicy.Delivery.FOREGROUND) {
+            val popupContext = notifications.getContext() ?: return
+            NoticePopupChannel.enqueue(
+                popupContext,
+                "{InAppNotif}#${message.channelId}",
+                message,
+            ) { view ->
+                NoticePopupChannel.openChannel(
+                    view.context,
+                    channel.guildId.takeIf { it != 0L },
+                    channel.id,
+                    message.id,
+                )
+            }
+            return
+        }
         val guild = channel.guildId.takeIf { it != 0L }?.let { guilds.getGuildsInternal()[it] }
         val author = message.author
         val authorAvatar = (author?.avatar as? com.discord.nullserializable.NullSerializable.Value<String>)?.value
@@ -1901,12 +1918,7 @@ class StoreStream private constructor(
             allowReply = true,
             source = NotificationSource.GATEWAY,
         )
-        when (delivery) {
-            NotificationPolicy.Delivery.FOREGROUND ->
-                NotificationClient.renderLocal(applicationContext, data)
-            NotificationPolicy.Delivery.SYSTEM ->
-                NotificationClient.renderGateway(applicationContext, data)
-        }
+        NotificationClient.displaySystem(applicationContext, data)
     }
 
     private fun accessibilityMonitorBind(context: Context) =

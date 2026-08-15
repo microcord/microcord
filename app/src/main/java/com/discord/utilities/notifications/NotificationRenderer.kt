@@ -29,12 +29,6 @@ import com.discord.utilities.images.MGImagesBitmap
 import rx.Observable
 
 class NotificationRenderer(private val cache: NotificationCache = NotificationCache()) {
-    fun renderLocal(context: Context, data: NotificationData, settings: NotificationClient.SettingsV2 = NotificationClient.getSettings()) =
-        render(context, data.copy(source = NotificationSource.LOCAL), settings)
-
-    fun renderGateway(context: Context, data: NotificationData, settings: NotificationClient.SettingsV2 = NotificationClient.getSettings()) =
-        render(context, data.copy(source = NotificationSource.GATEWAY), settings)
-
     @SuppressLint("MissingPermission", "NotificationPermission")
     fun render(
         context: Context,

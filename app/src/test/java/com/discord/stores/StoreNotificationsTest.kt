@@ -41,7 +41,7 @@ class StoreNotificationsTest {
         assertTrue(evaluate(message = message(authorId = ME)).isEmpty())
         assertTrue(evaluate(blockedOrIgnored = true).isEmpty())
         assertTrue(evaluate(selected = CHANNEL).isEmpty())
-        assertTrue(evaluate(permissions = 0).isEmpty())
+        assertEquals(foreground, evaluate(permissions = 0))
         assertTrue(evaluate(dnd = true).isEmpty())
         assertTrue(evaluate(settings = setting(muted = true)).isEmpty())
         assertEquals(foreground, evaluate(settings = setting(mobilePush = false)))

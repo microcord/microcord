@@ -121,7 +121,7 @@ object WidgetHomeHeaderManager {
                 channelStatusVisible = channel?.isDMStatusVisible(model.dmPresence) == true,
             ),
         )
-        binding.root.findViewById<TextView>(R.id.home_toolbar_unread_count)?.let { unread ->
+        binding.root.findViewById<TextView>(R.id.unread)?.let { unread ->
             unread.setTextAndVisibilityBy(unreadCountText(model.unreadCount))
             toolbar?.positionUnreadCountView(unread)
         }

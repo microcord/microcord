@@ -70,10 +70,8 @@ object NotificationPolicy {
 
     private fun isAccessible(channel: Channel, permissions: Long?): Boolean {
         if (channel.guildId == 0L) return true
-        val value = permissions ?: return false
-        if (value and Permission.VIEW_CHANNEL == 0L) return false
-        return channel.type !in setOf(Channel.GUILD_VOICE, Channel.GUILD_STAGE_VOICE) ||
-            value and Permission.CONNECT != 0L
+        if (channel.type !in setOf(Channel.GUILD_VOICE, Channel.GUILD_STAGE_VOICE)) return true
+        return permissions?.and(Permission.CONNECT) != 0L
     }
 
     private fun isMention(input: Input): Boolean {

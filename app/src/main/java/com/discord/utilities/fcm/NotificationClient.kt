@@ -199,8 +199,7 @@ object NotificationClient {
             if (!rendered) AppLog.w("FCM system notification rejected by renderer")
             Delivery.SYSTEM.takeIf { rendered }
         }
-        !isBackgrounded && settings.isEnabledInApp ->
-            Delivery.IN_APP.takeIf { inAppNotificationHandler?.invoke(context, data) == true }
+        !isBackgrounded && displayInApp(context, data, settings) -> Delivery.IN_APP
         else -> {
             AppLog.w("FCM notification disabled by foreground/background settings")
             null
@@ -211,8 +210,8 @@ object NotificationClient {
     fun displaySystem(context: Context, data: NotificationData, settings: SettingsV2 = getSettings()): Boolean =
         settings.isEnabled && renderer.render(context, data, settings)
 
-    fun renderLocal(context: Context, data: NotificationData) = renderer.renderLocal(context, data)
-    fun renderGateway(context: Context, data: NotificationData) = renderer.renderGateway(context, data)
+    fun displayInApp(context: Context, data: NotificationData, settings: SettingsV2 = getSettings()): Boolean =
+        canDisplayInApp(settings) && inAppNotificationHandler?.invoke(context, data) == true
 
     fun displaySent(context: Context, channelId: Long, channelName: String, success: Boolean) =
         renderer.displaySent(context, channelId, channelName, success)
@@ -241,6 +240,9 @@ object NotificationClient {
 
     enum class Delivery { SYSTEM, IN_APP }
 }
+
+internal fun canDisplayInApp(settings: NotificationClient.SettingsV2): Boolean =
+    settings.isAuthed && settings.isEnabledInApp
 
 internal fun shouldPersistNotificationSettings(
     isBackgrounded: Boolean,

@@ -6,8 +6,16 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.discord.utilities.fcm.NotificationClient
+import com.discord.utilities.fcm.canDisplayInApp
 
 class NotificationUtilitiesTest {
+    @Test fun foregroundDeliveryRequiresAuthAndInAppSetting() {
+        assertTrue(canDisplayInApp(NotificationClient.SettingsV2(token = "token", isEnabledInApp = true)))
+        assertFalse(canDisplayInApp(NotificationClient.SettingsV2(token = null, isEnabledInApp = true)))
+        assertFalse(canDisplayInApp(NotificationClient.SettingsV2(token = "token", isEnabledInApp = false)))
+    }
+
     @Test fun cacheGroupsDeduplicatesCapsAndCancelsByChannel() {
         val cache = NotificationCache(20)
         (1L..21L).forEach { cache.add(message(it)) }

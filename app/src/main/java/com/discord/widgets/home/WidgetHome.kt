@@ -2,15 +2,12 @@ package com.discord.widgets.home
 
 import android.os.Bundle
 import android.view.View
-import android.view.ViewStub
-import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
-import androidx.appcompat.widget.Toolbar
 import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelsChildGestureRegionObserver
@@ -20,6 +17,8 @@ import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.dialogs.WidgetUrgentMessageDialog
+import com.discord.databinding.WidgetHomeBinding
+import com.discord.databinding.WidgetHomePanelCenterChatBinding
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.list.WidgetChannelsListItemChannelActions
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
@@ -86,7 +85,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private val viewModel: WidgetHomeViewModel by appViewModels { WidgetHomeViewModel() }
     private val flexInputViewModel: AppFlexInputViewModel by appActivityViewModels { AppFlexInputViewModel() }
 
-    private lateinit var panels: HomePanelsLayout
+    private var _binding: WidgetHomeBinding? = null
+    private val binding get() = requireNotNull(_binding)
+    private var chatBinding: WidgetHomePanelCenterChatBinding? = null
+    private val panels get() = binding.overlappingPanels
     private var navigationSubscription: Subscription? = null
     private var selectedChannelSubscription: Subscription? = null
     private var spoilerGateSubscription: Subscription? = null
@@ -108,18 +110,16 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var startPanelState: PanelState = PanelState.Closed
     private var endPanelState: PanelState = PanelState.Closed
     private var pluginHeaderRegistration: PluginRegistration? = null
-    private var centerBorder: View? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        _binding = WidgetHomeBinding.bind(view)
         // A restored WidgetChatList needs its container before child restoration advances.
         if (savedInstanceState != null || childFragmentManager.findFragmentById(R.id.widget_chat_list) != null) {
-            view.findViewById<ViewStub>(R.id.widget_home_panel_center_chat_stub)?.inflate()
+            ensureChatInflated()
         }
         super.onViewCreated(view, savedInstanceState)
         pluginHeaderRegistration = PluginUiRegistry.addHeaderListener { view.post(::refreshChatToolbar) }
-        panels = view.findViewById(R.id.overlapping_panels)
-        centerBorder = view.findViewById(R.id.widget_home_panel_center_border)
-        applyPanelInsets(view)
+        applyPanelInsets()
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
@@ -135,7 +135,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 if (it == PanelState.Opening || it == PanelState.Open) ensureStartPanelFragments()
                 startPanelState = dismissChatInputWhenPanelOpens(startPanelState, it)
                 // Only framed while a panel is behind it to be framed against.
-                centerBorder?.visibility = if (it == PanelState.Closed) View.GONE else View.VISIBLE
+                binding.panelCenter.widgetHomePanelCenterBorder.visibility =
+                    if (it == PanelState.Closed) View.GONE else View.VISIBLE
                 StoreStream.getNavigation().setLeftPanelState(it)
             },
         )
@@ -168,10 +169,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     /** The panels take the bottom inset so the gesture bar's strip slides with them. */
-    private fun applyPanelInsets(root: View) {
-        val panelViews = listOf(R.id.panel_left, R.id.panel_center, R.id.panel_right)
-            .map { root.findViewById<View>(it) }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { frame, insets ->
+    private fun applyPanelInsets() {
+        val panelViews = listOf(binding.panelLeft.root, binding.panelCenter.root, binding.panelRight.root)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { frame, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             frame.updatePadding(top = bars.top)
             panelViews.forEach { it.updatePadding(left = bars.left, right = bars.right, bottom = bars.bottom) }
@@ -194,6 +194,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
 
     override fun onStart() {
         super.onStart()
+        val mentions = StoreStream.getMentions()
+        unreadCount = mentions.getMentionCounts()
+            .filterKeys { it !in mentions.getLowImportanceMentionChannels() }.values.sum()
+        updateUnreadCount()
         val navigation = StoreStream.getNavigation()
         navigationSubscription = navigation.getNavigationPanelAction().subscribe { action ->
             activity?.runOnUiThread { navigation.setNavigationPanelAction(action, panels) }
@@ -216,11 +220,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                     else OverlappingPanelsLayout.LockState.UNLOCKED,
                 )
                 if (surface == CenterSurface.CHAT) ensureChatInflated()
-                view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.visibility =
-                    if (surface == CenterSurface.CHAT) View.VISIBLE else View.GONE
-                view?.findViewById<View>(R.id.widget_forum_channel_list)?.visibility =
+                chatBinding?.root?.visibility = if (surface == CenterSurface.CHAT) View.VISIBLE else View.GONE
+                binding.panelCenter.widgetForumChannelList.visibility =
                     if (surface == CenterSurface.FORUM) View.VISIBLE else View.GONE
-                view?.findViewById<View>(R.id.widget_home_panel_directory)?.visibility =
+                binding.panelCenter.widgetHomePanelDirectory.visibility =
                     if (surface == CenterSurface.DIRECTORY) View.VISIBLE else View.GONE
                 if (channel != null) {
                     if (surface == CenterSurface.FORUM) {
@@ -270,7 +273,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     private fun configureSpoilerGate(selected: StoreChannelsSelected.ResolvedSelectedChannel) {
-        val root = view ?: return
+        val chat = chatBinding ?: return
         val channel = selected.channelOrParent?.takeIf { centerSurface(selected) == CenterSurface.CHAT }
         val spoilerAgree = StoreStream.getChannelSpoilerAgree()
         val gatingChannel = spoilerAgree.getSpoilerGatingChannelId(channel)
@@ -278,10 +281,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         spoilerPanel.configureUI(
             channel = channel,
             gatingChannel = gatingChannel,
-            viewStub = root.findViewById(R.id.home_panel_center_spoiler),
+            viewStub = chat.homePanelCenterSpoiler,
             onToggleGate = { gated ->
-                root.findViewById<View>(R.id.widget_chat_list)?.visibility = if (gated) View.GONE else View.VISIBLE
-                root.findViewById<View>(R.id.widget_chat_input)?.visibility = if (gated) View.GONE else View.VISIBLE
+                chat.widgetChatList.visibility = if (gated) View.GONE else View.VISIBLE
+                chat.widgetChatInput.visibility = if (gated) View.GONE else View.VISIBLE
             },
             onAgree = spoilerAgree::agree,
             onDeny = { ChannelSelector.getInstance().selectChannel(0L, 0L) },
@@ -309,10 +312,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     override fun onDestroyView() {
-        view?.findViewById<View>(R.id.widget_home_panel_center_chat)
-            ?.findDescendant(Toolbar::class.java)
-            ?.menu
-            ?.let(WidgetHomeHeaderManager::clearPluginActions)
+        chatBinding?.homeToolbar?.menu?.let(WidgetHomeHeaderManager::clearPluginActions)
         pluginHeaderRegistration?.unregister()
         pluginHeaderRegistration = null
         gestureRegionsListener?.let(gestureRegionObserver::removeGestureRegionsUpdateListener)
@@ -320,6 +320,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         WidgetChannelSidebarActions.onNotifications = null
         WidgetChannelSidebarActions.onSearch = null
         WidgetUserSheet.onCall = null
+        chatBinding = null
+        _binding = null
         super.onDestroyView()
     }
 
@@ -396,8 +398,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     private fun ensureChatInflated() {
-        if (view?.findViewById<View>(R.id.widget_home_panel_center_chat) != null) return
-        view?.findViewById<ViewStub>(R.id.widget_home_panel_center_chat_stub)?.inflate()
+        if (chatBinding != null) return
+        chatBinding = WidgetHomePanelCenterChatBinding.bind(
+            binding.panelCenter.widgetHomePanelCenterChatStub.inflate(),
+        )
     }
 
     private fun ensureStartPanelFragments() {
@@ -434,6 +438,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 replace(R.id.widget_forum_channel_list, WidgetForumBrowser(), FORUM_TAG)
             }
         }
+        (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)
+            ?.updateHomeUnreadCount(unreadCount)
     }
 
     private fun refreshChatToolbar() {
@@ -442,8 +448,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     private fun configureToolbar(channel: Channel) {
-        val toolbar = view?.findViewById<View>(R.id.widget_home_panel_center_chat)?.findDescendant(Toolbar::class.java)
-            ?: return
+        val toolbar = chatBinding?.homeToolbar ?: return
         appActivity?.setToolbar(toolbar)
         val resolvedSelection = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
         val threadDraft = resolvedSelection as? StoreChannelsSelected.ResolvedSelectedChannel.ThreadDraft
@@ -600,17 +605,16 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     private fun updateUnreadCount() {
-        val root = view ?: return
-        listOfNotNull(
-            root.findViewById<View>(R.id.widget_home_panel_center_chat),
-            root.findViewById<View>(R.id.widget_forum_channel_list),
-        ).forEach { center ->
-            val count = center.findViewById<TextView>(R.id.home_toolbar_unread_count) ?: return@forEach
-            count.text = unreadCount.takeIf { it > 0 }?.toString()
-            count.visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
-            count.setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
-            center.findDescendant(Toolbar::class.java)?.positionUnreadCountView(count)
+        chatBinding?.let { chat ->
+            chat.unread.homeToolbarUnreadCount.apply {
+                text = unreadCount.takeIf { it > 0 }?.toString()
+                visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+                setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
+                chat.homeToolbar.positionUnreadCountView(this)
+            }
         }
+        (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)
+            ?.updateHomeUnreadCount(unreadCount)
     }
 
     private fun privateCallLauncher() = PrivateCallLauncher(
@@ -655,13 +659,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         if (GuildMemberFlags.has(member.flags, GuildMemberFlags.COMPLETED_ONBOARDING)) return
         onboardingGuildId = guildId
         WidgetGuildOnboarding.launch(requireContext(), guildId)
-    }
-
-    private fun <T : View> View.findDescendant(type: Class<T>): T? {
-        if (type.isInstance(this)) return type.cast(this)
-        if (this !is android.view.ViewGroup) return null
-        for (index in 0 until childCount) getChildAt(index).findDescendant(type)?.let { return it }
-        return null
     }
 
     companion object {

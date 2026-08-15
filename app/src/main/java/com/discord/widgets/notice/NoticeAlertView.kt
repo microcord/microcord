@@ -7,7 +7,6 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewStub
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
@@ -15,7 +14,10 @@ import android.widget.LinearLayout
 import androidx.annotation.ColorInt
 import androidx.annotation.LayoutRes
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePaddingRelative
 import com.discord.R
+import com.discord.databinding.AlerterAlertViewBinding
 import kotlin.math.abs
 
 /**
@@ -47,7 +49,8 @@ internal class NoticeAlertView(
     val layoutContainer: View
 
     /** The padded, coloured card. Clicks and swipes are handled here, not on the whole overlay. */
-    private val alertBackground: LinearLayout
+    private val binding = AlerterAlertViewBinding.inflate(LayoutInflater.from(context), this, true)
+    private val alertBackground: LinearLayout = binding.llAlertBackground
 
     /** Runs when the banner goes away by itself: swipe, or [hide]. Not run by a forced removal. */
     var onHideListener: (() -> Unit)? = null
@@ -58,9 +61,7 @@ internal class NoticeAlertView(
     private var isHiding = false
 
     init {
-        LayoutInflater.from(context).inflate(R.layout.alerter_alert_view, this)
-        alertBackground = findViewById(R.id.llAlertBackground)
-        layoutContainer = findViewById<ViewStub>(R.id.vAlertContentContainer).run {
+        layoutContainer = binding.vAlertContentContainer.run {
             layoutResource = contentLayoutId
             inflate()
         }
@@ -70,6 +71,13 @@ internal class NoticeAlertView(
             Gravity.TOP,
         )
         alertBackground.setOnTouchListener(SwipeToDismissTouchListener())
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            val topInset = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            alertBackground.updatePaddingRelative(
+                top = (topInset - resources.getDimensionPixelSize(R.dimen.alerter_padding_small)).coerceAtLeast(0),
+            )
+            insets
+        }
     }
 
     fun setAlertBackgroundColor(@ColorInt color: Int) = alertBackground.setBackgroundColor(color)
@@ -122,6 +130,7 @@ internal class NoticeAlertView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        ViewCompat.requestApplyInsets(this)
         startAnimation(enterAnimation)
     }
 

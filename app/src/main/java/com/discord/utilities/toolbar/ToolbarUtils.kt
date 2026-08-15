@@ -2,7 +2,6 @@ package com.discord.utilities.toolbar
 
 import android.view.View
 import androidx.appcompat.widget.Toolbar
-import androidx.core.view.ViewCompat
 
 fun Toolbar.getNavigationIconView(): View? {
     val existingDescription = navigationContentDescription?.takeIf(CharSequence::isNotEmpty)
@@ -21,7 +20,7 @@ fun Toolbar.positionUnreadCountView(view: View) {
         view.x = navigation.right / 2f + offset
         view.y = navigation.bottom / 2f + offset
     }
-    if (ViewCompat.isLaidOut(navigation) && !navigation.isLayoutRequested) {
+    if (navigation.isLaidOut && !navigation.isLayoutRequested) {
         position()
     } else {
         navigation.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {

@@ -24,8 +24,10 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.utilities.toolbar.positionUnreadCountView
 import com.discord.widgets.home.WidgetHomePanelNsfw
 import com.discord.widgets.home.WidgetHome
+import com.discord.widgets.quickmentions.WidgetQuickMentionsDialog
 
 class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private val viewModel: WidgetForumBrowserViewModel by appViewModels { WidgetForumBrowserViewModel() }
@@ -39,6 +41,16 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     private var panelNsfwHidden = true
     private val searchHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var searchWatcher: android.text.TextWatcher? = null
+
+    internal fun updateHomeUnreadCount(count: Int) {
+        val binding = _binding ?: return
+        binding.forumUnread.homeToolbarUnreadCount.apply {
+            text = count.takeIf { it > 0 }?.toString()
+            visibility = if (count > 0) View.VISIBLE else View.GONE
+            setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
+            binding.forumToolbar.positionUnreadCountView(this)
+        }
+    }
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
