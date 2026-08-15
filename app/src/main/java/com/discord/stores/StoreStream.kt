@@ -3142,6 +3142,7 @@ class StoreStream private constructor(
         channelMembers.reset()
         expandedGuildFolders.reset()
         collapsedChannelCategories.reset()
+        collapsedVoiceChannels.reset()
         guildSettings.reset()
         stageInstances.reset()
         presences.reset()
