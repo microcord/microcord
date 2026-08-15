@@ -15,8 +15,12 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.databinding.UserActionsDialogBinding
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
+import com.discord.plugins.PluginContextMenuHost
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
+import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
 
 /** The overflow menu for a user, anchored under the profile's ⋯ button. */
 class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
@@ -33,70 +37,73 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     var onViewMainProfile: (() -> Unit)? = null
     var onViewServerProfile: (() -> Unit)? = null
 
-    private lateinit var blockItem: TextView
-    private lateinit var unblockItem: TextView
-    private lateinit var ignoreItem: TextView
-    private lateinit var unignoreItem: TextView
-    private lateinit var friendNicknameItem: TextView
-    private lateinit var copyUsernameItem: TextView
-    private lateinit var copyLinkItem: TextView
-    private lateinit var copyIdItem: TextView
-    private lateinit var viewMainProfileItem: TextView
-    private lateinit var viewServerProfileItem: TextView
-    private lateinit var primaryGroup: ViewGroup
-    private lateinit var relationshipGroup: ViewGroup
-    private lateinit var groupSeparator: View
+    private var _binding: UserActionsDialogBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         anchorWindow()
-        primaryGroup = view.findViewById(R.id.user_actions_dialog_primary_group)
-        relationshipGroup = view.findViewById(R.id.user_actions_dialog_relationship_group)
-        groupSeparator = view.findViewById(R.id.user_actions_dialog_group_separator)
-        blockItem = view.findViewById(R.id.user_actions_dialog_block_item)
-        unblockItem = view.findViewById(R.id.user_actions_dialog_unblock_item)
-        ignoreItem = view.findViewById(R.id.user_actions_dialog_ignore_item)
-        unignoreItem = view.findViewById(R.id.user_actions_dialog_unignore_item)
-        friendNicknameItem = view.findViewById(R.id.user_actions_dialog_friend_nickname_item)
-        copyUsernameItem = view.findViewById(R.id.user_actions_dialog_copy_username_item)
-        copyLinkItem = view.findViewById(R.id.user_actions_dialog_copy_link_item)
-        copyIdItem = view.findViewById(R.id.user_actions_dialog_copy_id_item)
-        viewMainProfileItem = view.findViewById(R.id.user_actions_dialog_view_main_profile_item)
-        viewServerProfileItem = view.findViewById(R.id.user_actions_dialog_view_server_profile_item)
+        _binding = UserActionsDialogBinding.bind(view)
+        PluginContextMenuHost.bind(
+            binding.pluginContextMenuItems,
+            buildList {
+                val guildId = argumentsOrDefault.getLong(ARG_GUILD_ID, 0L).takeIf { it > 0L }
+                val channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID, 0L).takeIf { it > 0L }
+                val userId = argumentsOrDefault.getLong(ARG_USER_ID, 0L)
+                add(pluginContextMenuContext(PluginContextMenuSurface.USER, guildId, channelId, userId = userId, targetId = userId))
+                if (guildId != null) {
+                    add(pluginContextMenuContext(PluginContextMenuSurface.MEMBER, guildId, channelId, userId = userId, targetId = userId))
+                }
+            },
+            ::dismiss,
+        )
 
         listOf(
-            blockItem, unblockItem, ignoreItem, unignoreItem, friendNicknameItem,
-            copyUsernameItem, copyLinkItem, copyIdItem, viewMainProfileItem, viewServerProfileItem,
+            binding.userActionsDialogBlockItem,
+            binding.userActionsDialogUnblockItem,
+            binding.userActionsDialogIgnoreItem,
+            binding.userActionsDialogUnignoreItem,
+            binding.userActionsDialogFriendNicknameItem,
+            binding.userActionsDialogCopyUsernameItem,
+            binding.userActionsDialogCopyLinkItem,
+            binding.userActionsDialogCopyIdItem,
+            binding.userActionsDialogViewMainProfileItem,
+            binding.userActionsDialogViewServerProfileItem,
         ).forEach(::restoreIconOpacity)
 
-        blockItem.setOnClickListener { viewModel.blockUser() }
-        unblockItem.setOnClickListener {
+        binding.userActionsDialogBlockItem.setOnClickListener { viewModel.blockUser() }
+        binding.userActionsDialogUnblockItem.setOnClickListener {
             viewModel.removeRelationship(R.string.user_has_been_unblocked)
         }
-        ignoreItem.setOnClickListener { confirmIgnore() }
-        unignoreItem.setOnClickListener { viewModel.unignoreUser() }
-        friendNicknameItem.setOnClickListener {
+        binding.userActionsDialogIgnoreItem.setOnClickListener { confirmIgnore() }
+        binding.userActionsDialogUnignoreItem.setOnClickListener { viewModel.unignoreUser() }
+        binding.userActionsDialogFriendNicknameItem.setOnClickListener {
             val state = loadedState() ?: return@setOnClickListener
             FriendNicknameDialog.show(parentFragmentManager, state.user.id, state.friendNickname)
             dismiss()
         }
-        copyUsernameItem.setOnClickListener {
+        binding.userActionsDialogCopyUsernameItem.setOnClickListener {
             loadedState()?.let { copy("Username", it.user.username) }
         }
-        copyLinkItem.setOnClickListener {
+        binding.userActionsDialogCopyLinkItem.setOnClickListener {
             loadedState()?.let { copy("Profile link", it.profileLink) }
         }
-        copyIdItem.setOnClickListener {
+        binding.userActionsDialogCopyIdItem.setOnClickListener {
             loadedState()?.let { copy("User ID", it.user.id.toString()) }
         }
-        viewMainProfileItem.setOnClickListener {
+        binding.userActionsDialogViewMainProfileItem.setOnClickListener {
             onViewMainProfile?.invoke()
             dismiss()
         }
-        viewServerProfileItem.setOnClickListener {
+        binding.userActionsDialogViewServerProfileItem.setOnClickListener {
             onViewServerProfile?.invoke()
             dismiss()
         }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     private fun loadedState(): UserActionsDialogViewModel.ViewState.Loaded? =
@@ -137,25 +144,30 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
     }
 
     private fun updateView(state: UserActionsDialogViewModel.ViewState.Loaded) {
-        blockItem.visibility = if (state.showBlockItem) View.VISIBLE else View.GONE
-        unblockItem.visibility = if (state.showUnblockItem) View.VISIBLE else View.GONE
-        ignoreItem.visibility = if (state.showIgnoreItem) View.VISIBLE else View.GONE
-        unignoreItem.visibility = if (state.showUnignoreItem) View.VISIBLE else View.GONE
-        friendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
-        copyIdItem.visibility = if (state.showCopyIdItem) View.VISIBLE else View.GONE
-        viewMainProfileItem.visibility =
+        binding.userActionsDialogBlockItem.visibility = if (state.showBlockItem) View.VISIBLE else View.GONE
+        binding.userActionsDialogUnblockItem.visibility = if (state.showUnblockItem) View.VISIBLE else View.GONE
+        binding.userActionsDialogIgnoreItem.visibility = if (state.showIgnoreItem) View.VISIBLE else View.GONE
+        binding.userActionsDialogUnignoreItem.visibility = if (state.showUnignoreItem) View.VISIBLE else View.GONE
+        binding.userActionsDialogFriendNicknameItem.visibility = if (state.showFriendNicknameItem) View.VISIBLE else View.GONE
+        binding.userActionsDialogCopyIdItem.visibility = if (state.showCopyIdItem) View.VISIBLE else View.GONE
+        binding.userActionsDialogViewMainProfileItem.visibility =
             if (state.showViewMainProfileItem && onViewMainProfile != null) View.VISIBLE else View.GONE
-        viewServerProfileItem.visibility =
+        binding.userActionsDialogViewServerProfileItem.visibility =
             if (state.showViewServerProfileItem && onViewServerProfile != null) View.VISIBLE else View.GONE
-        friendNicknameItem.setText(
+        binding.userActionsDialogFriendNicknameItem.setText(
             if (state.friendNickname == null) R.string.add_friend_nickname else R.string.change_friend_nickname,
         )
 
-        primaryGroup.visibility = if (primaryGroup.hasVisibleChild()) View.VISIBLE else View.GONE
-        relationshipGroup.visibility =
-            if (relationshipGroup.hasVisibleChild()) View.VISIBLE else View.GONE
-        groupSeparator.visibility =
-            if (primaryGroup.isVisible && relationshipGroup.isVisible) View.VISIBLE else View.GONE
+        binding.userActionsDialogPrimaryGroup.visibility =
+            if (binding.userActionsDialogPrimaryGroup.hasVisibleChild()) View.VISIBLE else View.GONE
+        binding.userActionsDialogRelationshipGroup.visibility =
+            if (binding.userActionsDialogRelationshipGroup.hasVisibleChild()) View.VISIBLE else View.GONE
+        binding.userActionsDialogGroupSeparator.visibility =
+            if (binding.userActionsDialogPrimaryGroup.isVisible && binding.userActionsDialogRelationshipGroup.isVisible) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
     }
 
     private fun ViewGroup.hasVisibleChild(): Boolean =

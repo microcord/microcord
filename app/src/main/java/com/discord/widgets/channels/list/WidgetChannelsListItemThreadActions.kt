@@ -39,6 +39,9 @@ import com.facebook.drawee.view.SimpleDraweeView
 import java.util.Locale
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
+import com.discord.plugins.PluginContextMenuHost
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
+import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
 
 /**
  * The long-press sheet for a thread row in the channels sidebar.
@@ -116,6 +119,16 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             return
         }
         val channel = model.channel
+        PluginContextMenuHost.bind(
+            requireView().findViewById(R.id.plugin_context_menu_items),
+            pluginContextMenuContext(
+                PluginContextMenuSurface.THREAD,
+                channel.guildId.takeIf { it > 0L },
+                channel.id,
+                targetId = channel.id,
+            ),
+            ::dismiss,
+        )
         val metadata = channel.threadMetadata
 
         if (model.guild != null) IconUtils.setIcon(icon, model.guild) else IconUtils.setIcon(icon, channel)

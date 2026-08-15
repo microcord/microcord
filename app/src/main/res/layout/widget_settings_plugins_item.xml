@@ -70,11 +70,32 @@
                 android:layout_marginStart="8dp" />
         </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/plugin_item_settings"
+        <LinearLayout
             android:layout_gravity="end"
             android:layout_marginTop="10dp"
-            android:text="@string/settings"
-            style="@style/UiKit.Material.Button.Secondary.Fit" />
+            android:orientation="horizontal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content">
+
+            <ImageButton
+                android:id="@+id/plugin_item_info"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/plugin_info"
+                android:padding="12dp"
+                android:src="@drawable/ic_info_24dp"
+                app:tint="?attr/colorInteractiveNormal" />
+
+            <ImageButton
+                android:id="@+id/plugin_item_settings"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/settings"
+                android:padding="12dp"
+                android:src="@drawable/ic_guild_settings_24dp"
+                app:tint="?attr/colorInteractiveNormal" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

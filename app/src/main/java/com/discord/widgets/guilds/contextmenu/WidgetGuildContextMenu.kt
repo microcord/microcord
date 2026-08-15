@@ -17,6 +17,9 @@ import com.discord.widgets.guilds.WidgetGuildFolderSettings
 import com.discord.widgets.guilds.leave.WidgetLeaveGuildDialog
 import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.servers.WidgetServerNotifications
+import com.discord.plugins.PluginContextMenuHost
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
+import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
 
 /** The guild long-press menu: mark as read, notifications, leave, and the guild profile sheet. */
 class WidgetGuildContextMenu : AnchoredContextMenu(R.layout.widget_guild_context_menu) {
@@ -68,6 +71,11 @@ class WidgetGuildContextMenu : AnchoredContextMenu(R.layout.widget_guild_context
 
     private fun configureValidUI(viewState: GuildContextMenuViewModel.ViewState.Valid) {
         header.text = viewState.guild.name
+        PluginContextMenuHost.bind(
+            requireView().findViewById(R.id.plugin_context_menu_items),
+            pluginContextMenuContext(PluginContextMenuSurface.GUILD, guildId = viewState.guild.id, targetId = viewState.guild.id),
+            ::dismiss,
+        )
 
         markAsRead.setOnClickListener {
             dismiss()

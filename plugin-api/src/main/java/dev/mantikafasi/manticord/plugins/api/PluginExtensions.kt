@@ -1,6 +1,7 @@
 package dev.mantikafasi.manticord.plugins.api
 
 import android.content.Context
+import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -121,6 +122,11 @@ interface PluginStorage {
 
 interface PluginDialogs {
     fun alert(title: String, message: String)
+    fun page(title: String, subtitle: String = "", createView: (Context) -> View)
+}
+
+interface PluginText {
+    fun renderCodeBlock(content: String, language: String? = null): CharSequence
 }
 
 fun interface PluginRegistration {
@@ -324,17 +330,28 @@ fun pluginProfileTabContribution(
 
 interface PluginSlashCommandContext {
     val channel: PluginChannelContext
-    val arguments: String
+    val arguments: Map<String, Any?>
 }
 
 fun pluginSlashCommandContext(
     channel: PluginChannelContext,
-    arguments: String,
+    arguments: Map<String, Any?>,
 ): PluginSlashCommandContext = PluginSlashCommandContextValue(channel, arguments)
+
+enum class PluginSlashCommandOptionType { STRING, INTEGER, BOOLEAN }
+
+interface PluginSlashCommandOption {
+    val name: String
+    val description: String
+    val type: PluginSlashCommandOptionType
+    val required: Boolean
+    val choices: List<String>
+}
 
 interface PluginSlashCommand : PluginContribution {
     val name: String
     val description: String
+    val options: List<PluginSlashCommandOption>
     val execute: (PluginSlashCommandContext) -> String
     val isVisible: (PluginChannelContext) -> Boolean
 }
@@ -342,6 +359,30 @@ interface PluginSlashCommand : PluginContribution {
 class PluginSlashCommandBuilder internal constructor() {
     var priority: Int = 0
     var isVisible: (PluginChannelContext) -> Boolean = { true }
+    private val options = mutableListOf<PluginSlashCommandOption>()
+
+    fun string(name: String, description: String, required: Boolean = false, choices: List<String> = emptyList()) =
+        option(name, description, PluginSlashCommandOptionType.STRING, required, choices)
+
+    fun integer(name: String, description: String, required: Boolean = false) =
+        option(name, description, PluginSlashCommandOptionType.INTEGER, required)
+
+    fun boolean(name: String, description: String, required: Boolean = false) =
+        option(name, description, PluginSlashCommandOptionType.BOOLEAN, required)
+
+    private fun option(
+        name: String,
+        description: String,
+        type: PluginSlashCommandOptionType,
+        required: Boolean,
+        choices: List<String> = emptyList(),
+    ) {
+        require(name.matches(Regex("^[a-z0-9_-]{1,32}$"))) { "invalid slash command option name" }
+        require(options.none { it.name == name }) { "duplicate slash command option $name" }
+        options += PluginSlashCommandOptionValue(name, description, type, required, choices.toList())
+    }
+
+    internal fun options() = options.toList()
 }
 
 fun pluginSlashCommand(
@@ -354,7 +395,65 @@ fun pluginSlashCommand(
     require(id.isNotBlank()) { "slash command ID must not be blank" }
     require(name.matches(Regex("^[a-z0-9_-]{1,32}$"))) { "invalid slash command name" }
     val builder = PluginSlashCommandBuilder().apply(configure)
-    return PluginSlashCommandValue(id, name, description, builder.priority, execute, builder.isVisible)
+    return PluginSlashCommandValue(
+        id, name, description, builder.options(), builder.priority, execute, builder.isVisible,
+    )
+}
+
+enum class PluginContextMenuSurface {
+    MESSAGE, CHANNEL, THREAD, USER, GUILD, FOLDER, EMOJI, STICKER, INVITE, MEMBER, EVENT, VOICE,
+}
+
+interface PluginContextMenuContext {
+    val surface: PluginContextMenuSurface
+    val guildId: Long?
+    val channelId: Long?
+    val messageId: Long?
+    val userId: Long?
+    val targetId: Long?
+}
+
+fun pluginContextMenuContext(
+    surface: PluginContextMenuSurface,
+    guildId: Long? = null,
+    channelId: Long? = null,
+    messageId: Long? = null,
+    userId: Long? = null,
+    targetId: Long? = null,
+): PluginContextMenuContext = PluginContextMenuContextValue(
+    surface, guildId, channelId, messageId, userId, targetId,
+)
+
+interface PluginContextMenuItem : PluginContribution {
+    val title: String
+    val surfaces: Set<PluginContextMenuSurface>
+    val destructive: Boolean
+    val createIcon: ((Context) -> Drawable?)?
+    val onClick: (PluginContextMenuContext) -> Unit
+    val isVisible: (PluginContextMenuContext) -> Boolean
+}
+
+class PluginContextMenuItemBuilder internal constructor() {
+    var priority: Int = 0
+    var destructive: Boolean = false
+    var createIcon: ((Context) -> Drawable?)? = null
+    var isVisible: (PluginContextMenuContext) -> Boolean = { true }
+}
+
+fun pluginContextMenuItem(
+    id: String,
+    title: String,
+    vararg surfaces: PluginContextMenuSurface,
+    onClick: (PluginContextMenuContext) -> Unit,
+    configure: PluginContextMenuItemBuilder.() -> Unit = {},
+): PluginContextMenuItem {
+    require(id.isNotBlank()) { "context menu item ID must not be blank" }
+    require(surfaces.isNotEmpty()) { "context menu item must target at least one surface" }
+    val builder = PluginContextMenuItemBuilder().apply(configure)
+    return PluginContextMenuItemValue(
+        id, title, surfaces.toSet(), builder.priority, builder.destructive, builder.createIcon,
+        onClick, builder.isVisible,
+    )
 }
 
 class PluginComposerBuilder internal constructor() {
@@ -390,6 +489,7 @@ interface PluginUi {
     fun registerProfile(contribution: PluginProfileContribution): PluginRegistration
     fun registerProfileTab(contribution: PluginProfileTabContribution): PluginRegistration
     fun registerSlashCommand(command: PluginSlashCommand): PluginRegistration
+    fun registerContextMenuItem(item: PluginContextMenuItem): PluginRegistration
 }
 
 fun interface PluginSettingsPage {
@@ -520,14 +620,43 @@ private data class PluginProfileTabContributionValue(
 
 private data class PluginSlashCommandContextValue(
     override val channel: PluginChannelContext,
-    override val arguments: String,
+    override val arguments: Map<String, Any?>,
 ) : PluginSlashCommandContext
+
+private data class PluginSlashCommandOptionValue(
+    override val name: String,
+    override val description: String,
+    override val type: PluginSlashCommandOptionType,
+    override val required: Boolean,
+    override val choices: List<String>,
+) : PluginSlashCommandOption
 
 private data class PluginSlashCommandValue(
     override val id: String,
     override val name: String,
     override val description: String,
+    override val options: List<PluginSlashCommandOption>,
     override val priority: Int,
     override val execute: (PluginSlashCommandContext) -> String,
     override val isVisible: (PluginChannelContext) -> Boolean,
 ) : PluginSlashCommand
+
+private data class PluginContextMenuContextValue(
+    override val surface: PluginContextMenuSurface,
+    override val guildId: Long?,
+    override val channelId: Long?,
+    override val messageId: Long?,
+    override val userId: Long?,
+    override val targetId: Long?,
+) : PluginContextMenuContext
+
+private data class PluginContextMenuItemValue(
+    override val id: String,
+    override val title: String,
+    override val surfaces: Set<PluginContextMenuSurface>,
+    override val priority: Int,
+    override val destructive: Boolean,
+    override val createIcon: ((Context) -> Drawable?)?,
+    override val onClick: (PluginContextMenuContext) -> Unit,
+    override val isVisible: (PluginContextMenuContext) -> Boolean,
+) : PluginContextMenuItem

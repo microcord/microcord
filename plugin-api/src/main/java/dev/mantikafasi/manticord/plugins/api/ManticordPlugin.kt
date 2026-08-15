@@ -104,6 +104,9 @@ interface PluginScope {
     val ui: PluginUi
     val storage: PluginStorage
     val dialogs: PluginDialogs
+    val text: PluginText
+
+    fun runOnMainThread(action: (Context) -> Unit)
 }
 
 interface ManticordPlugin {

@@ -50,6 +50,9 @@ import com.discord.widgets.share.WidgetIncomingShare
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.plugins.PluginContextMenuHost
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
+import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
 
 class WidgetChatListActions : AppBottomSheet() {
     interface Host {
@@ -115,6 +118,18 @@ class WidgetChatListActions : AppBottomSheet() {
         val manage = model.manageMessageContext
         val isLocal = message.isLocal()
         val hasReactions = message.getReactionsMap().isNotEmpty()
+        PluginContextMenuHost.bind(
+            root.findViewById(R.id.plugin_context_menu_items),
+            pluginContextMenuContext(
+                PluginContextMenuSurface.MESSAGE,
+                message.guildId,
+                message.channelId,
+                message.id,
+                message.author?.id,
+                message.id,
+            ),
+            ::dismiss,
+        )
 
         configureQuickReactions(root, model.recentEmojis, isLocal, manage.canAddReactions)
         bind(root, R.id.dialog_chat_actions_edit, model.type == TYPE_CHAT && manage.canEdit && message.poll == null) {

@@ -51,6 +51,9 @@ import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
+import com.discord.plugins.PluginContextMenuHost
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
+import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
 
 /**
  * The long-press sheet for a channel, category or DM in the channels sidebar.
@@ -184,6 +187,17 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
             return
         }
         val channel = model.channel
+        PluginContextMenuHost.bind(
+            requireView().findViewById(R.id.plugin_context_menu_items),
+            pluginContextMenuContext(
+                PluginContextMenuSurface.CHANNEL,
+                channel.guildId.takeIf { it > 0L },
+                channel.id,
+                userId = channel.getDMRecipient()?.id,
+                targetId = channel.id,
+            ),
+            ::dismiss,
+        )
 
         if (model.guild != null) {
             IconUtils.setIcon(icon, model.guild)

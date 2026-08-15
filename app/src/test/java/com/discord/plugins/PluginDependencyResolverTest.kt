@@ -79,7 +79,10 @@ class PluginDependencyResolverTest {
         )
         PluginUiRegistry.registerSlashCommand(
             "first",
-            pluginSlashCommand("echo", "echo", "Echo text", { it.arguments }) { priority = 5 },
+            pluginSlashCommand("echo", "echo", "Echo text", { it.arguments["message"]?.toString().orEmpty() }) {
+                priority = 5
+                string("message", "Message")
+            },
         )
 
         assertEquals(listOf("high", "low"), PluginUiRegistry.headers().map { it.contribution.id })

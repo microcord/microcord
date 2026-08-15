@@ -8,6 +8,7 @@ import dev.mantikafasi.manticord.plugins.api.PluginHeaderContribution
 import dev.mantikafasi.manticord.plugins.api.PluginProfileContribution
 import dev.mantikafasi.manticord.plugins.api.PluginProfileTabContribution
 import dev.mantikafasi.manticord.plugins.api.PluginSlashCommand
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuItem
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import dev.mantikafasi.manticord.plugins.api.PluginResources
 import dev.mantikafasi.manticord.plugins.api.PluginScope
@@ -15,6 +16,7 @@ import dev.mantikafasi.manticord.plugins.api.PluginSettings
 import dev.mantikafasi.manticord.plugins.api.PluginUi
 import dev.mantikafasi.manticord.plugins.api.PluginStorage
 import dev.mantikafasi.manticord.plugins.api.PluginDialogs
+import dev.mantikafasi.manticord.plugins.api.PluginText
 import dev.mantikafasi.manticord.plugins.api.PluginManifest
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -29,6 +31,10 @@ import com.discord.R
 import com.discord.app.AppActivity
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.settings.PluginPageHost
+import com.discord.utilities.textprocessing.AstRenderer
+import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MessageRenderContext
 
 internal data class OwnedContribution<T : PluginContribution>(
     val owner: String,
@@ -43,6 +49,13 @@ internal typealias OwnedBottomTabContribution = OwnedContribution<PluginBottomTa
 internal typealias OwnedProfileContribution = OwnedContribution<PluginProfileContribution>
 internal typealias OwnedProfileTabContribution = OwnedContribution<PluginProfileTabContribution>
 internal typealias OwnedSlashCommand = OwnedContribution<PluginSlashCommand>
+internal typealias OwnedContextMenuItem = OwnedContribution<PluginContextMenuItem>
+
+internal data class PluginContentInfo(
+    val type: String,
+    val title: String,
+    val detail: String = "",
+)
 
 private class ContributionRegistry<T : PluginContribution>(private val label: String) {
     private val lock = Any()
@@ -100,6 +113,7 @@ internal object PluginUiRegistry {
     private val profiles = ContributionRegistry<PluginProfileContribution>("profile")
     private val profileTabs = ContributionRegistry<PluginProfileTabContribution>("profile tab")
     private val slashCommands = ContributionRegistry<PluginSlashCommand>("slash command")
+    private val contextMenuItems = ContributionRegistry<PluginContextMenuItem>("context menu item")
 
     fun headers() = headers.snapshot()
     fun composers() = composers.snapshot()
@@ -107,6 +121,33 @@ internal object PluginUiRegistry {
     fun profiles() = profiles.snapshot()
     fun profileTabs() = profileTabs.snapshot()
     fun slashCommands() = slashCommands.snapshot()
+    fun contextMenuItems() = contextMenuItems.snapshot()
+
+    fun content(owner: String): List<PluginContentInfo> = buildList {
+        headers().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Header action", it.contribution.title))
+        }
+        composers().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Composer action", it.contribution.title, it.contribution.zone.name.lowercase()))
+        }
+        bottomTabs().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Bottom tab", it.contribution.title))
+        }
+        profiles().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Profile section", it.contribution.title))
+        }
+        profileTabs().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Profile tab", it.contribution.title))
+        }
+        slashCommands().filter { it.owner == owner }.forEach {
+            val options = it.contribution.options.joinToString { option -> option.name }
+            add(PluginContentInfo("Slash command", "/${it.contribution.name}", options))
+        }
+        contextMenuItems().filter { it.owner == owner }.forEach {
+            val surfaces = it.contribution.surfaces.joinToString { surface -> surface.name.lowercase() }
+            add(PluginContentInfo("Context menu", it.contribution.title, surfaces))
+        }
+    }
 
     fun addHeaderListener(listener: () -> Unit) = headers.addListener(listener)
     fun addComposerListener(listener: () -> Unit) = composers.addListener(listener)
@@ -127,6 +168,7 @@ internal object PluginUiRegistry {
     fun registerProfile(owner: String, contribution: PluginProfileContribution) = profiles.register(owner, contribution)
     fun registerProfileTab(owner: String, contribution: PluginProfileTabContribution) = profileTabs.register(owner, contribution)
     fun registerSlashCommand(owner: String, command: PluginSlashCommand) = slashCommands.register(owner, command)
+    fun registerContextMenuItem(owner: String, item: PluginContextMenuItem) = contextMenuItems.register(owner, item)
 
     fun removeOwner(owner: String) {
         headers.removeOwner(owner)
@@ -135,6 +177,7 @@ internal object PluginUiRegistry {
         profiles.removeOwner(owner)
         profileTabs.removeOwner(owner)
         slashCommands.removeOwner(owner)
+        contextMenuItems.removeOwner(owner)
     }
 }
 
@@ -185,6 +228,13 @@ internal class PluginScopeImpl(
     private val registrations = CopyOnWriteArrayList<PluginRegistration>()
     private val closed = AtomicBoolean()
 
+    override fun runOnMainThread(action: (Context) -> Unit) {
+        check(!closed.get()) { "plugin scope is closed" }
+        Handler(Looper.getMainLooper()).post {
+            if (!closed.get()) action(ActivityProvider.getActivity() ?: applicationContext)
+        }
+    }
+
     override val ui: PluginUi = object : PluginUi {
         override fun registerHeader(contribution: PluginHeaderContribution): PluginRegistration {
             check(!closed.get()) { "plugin scope is closed" }
@@ -215,6 +265,11 @@ internal class PluginScopeImpl(
             check(!closed.get()) { "plugin scope is closed" }
             return track(PluginUiRegistry.registerSlashCommand(pluginId, command))
         }
+
+        override fun registerContextMenuItem(item: PluginContextMenuItem): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerContextMenuItem(pluginId, item))
+        }
     }
     override val storage: PluginStorage = object : PluginStorage {
         private val directory = MessageDigest.getInstance("SHA-256")
@@ -233,6 +288,24 @@ internal class PluginScopeImpl(
                     .setPositiveButton(R.string.okay)
                     .show(activity.supportFragmentManager)
             }
+        }
+
+        override fun page(title: String, subtitle: String, createView: (Context) -> android.view.View) {
+            Handler(Looper.getMainLooper()).post {
+                val activity = ActivityProvider.getActivity() as? AppActivity ?: return@post
+                PluginPageHost.open(activity, title, subtitle, createView)
+            }
+        }
+
+    }
+    override val text: PluginText = object : PluginText {
+        override fun renderCodeBlock(content: String, language: String?): CharSequence {
+            val context = ActivityProvider.getActivity() ?: applicationContext
+            val label = language?.takeIf { it.matches(Regex("[A-Za-z0-9_-]+")) }.orEmpty()
+            return AstRenderer.render(
+                DiscordParser.parse("```$label\n$content\n```"),
+                MessageRenderContext(context, myId = 0L, isAnimationEnabled = false),
+            )
         }
     }
 

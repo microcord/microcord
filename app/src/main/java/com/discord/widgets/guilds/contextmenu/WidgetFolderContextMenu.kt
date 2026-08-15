@@ -2,15 +2,18 @@ package com.discord.widgets.guilds.contextmenu
 
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.discord.R
+import com.discord.databinding.WidgetFolderContextMenuBinding
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.plugins.PluginContextMenuHost
+import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
+import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
 
 /** The folder long-press menu: mark every guild in the folder read, or open folder settings. */
 class WidgetFolderContextMenu : AnchoredContextMenu(R.layout.widget_folder_context_menu) {
@@ -26,19 +29,19 @@ class WidgetFolderContextMenu : AnchoredContextMenu(R.layout.widget_folder_conte
         }
     }
 
-    private lateinit var cardView: CardView
-    private lateinit var header: TextView
-    private lateinit var markAsRead: TextView
-    private lateinit var settings: TextView
+    private var _binding: WidgetFolderContextMenuBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
-    override val card: CardView get() = cardView
+    override val card: CardView get() = binding.folderContextMenuCard
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        cardView = view.findViewById(R.id.folder_context_menu_card)
-        header = view.findViewById(R.id.folder_context_menu_header)
-        markAsRead = view.findViewById(R.id.folder_context_menu_mark_as_read)
-        settings = view.findViewById(R.id.folder_context_menu_settings)
+        _binding = WidgetFolderContextMenuBinding.bind(view)
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -57,20 +60,25 @@ class WidgetFolderContextMenu : AnchoredContextMenu(R.layout.widget_folder_conte
     }
 
     private fun configureValidUI(viewState: FolderContextMenuViewModel.ViewState.Valid) {
-        header.text = viewState.folder.name ?: getString(R.string.guild_folder_unnamed)
+        binding.folderContextMenuHeader.text = viewState.folder.name ?: getString(R.string.guild_folder_unnamed)
+        PluginContextMenuHost.bind(
+            binding.pluginContextMenuItems,
+            pluginContextMenuContext(PluginContextMenuSurface.FOLDER, targetId = folderId),
+            ::dismiss,
+        )
 
-        markAsRead.setOnClickListener {
+        binding.folderContextMenuMarkAsRead.setOnClickListener {
             dismiss()
             viewModel.onMarkAsReadClicked()
         }
-        settings.setOnClickListener {
+        binding.folderContextMenuSettings.setOnClickListener {
             dismiss()
-            viewState.folder.id?.let { ContextMenuNavigation.showFolderSettings(settings.context, it) }
+            viewState.folder.id?.let { ContextMenuNavigation.showFolderSettings(binding.folderContextMenuSettings.context, it) }
             viewModel.onSettingsClicked()
         }
 
-        markAsRead.visibility = if (viewState.showMarkAsRead) View.VISIBLE else View.GONE
-        cardView.setContentPadding(0, 0, 0, 0)
+        binding.folderContextMenuMarkAsRead.visibility = if (viewState.showMarkAsRead) View.VISIBLE else View.GONE
+        binding.folderContextMenuCard.setContentPadding(0, 0, 0, 0)
         revealCard()
     }
 

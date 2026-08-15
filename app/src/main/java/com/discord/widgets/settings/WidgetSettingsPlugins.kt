@@ -29,7 +29,11 @@ import com.discord.BuildConfig
 class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
     private var _binding: WidgetSettingsPluginsBinding? = null
     private val binding get() = requireNotNull(_binding)
-    private val adapter = PluginAdapter(::togglePlugin, ::openPlugin)
+    private val adapter = PluginAdapter(
+        ::togglePlugin,
+        { openPlugin(it, WidgetSettingsPlugin.Mode.INFO) },
+        { openPlugin(it, WidgetSettingsPlugin.Mode.SETTINGS) },
+    )
     private var externalPlugins: List<ExternalPluginDescriptor> = emptyList()
     private var loadMetrics = PluginMetrics()
 
@@ -158,10 +162,10 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
             .show(parentFragmentManager)
     }
 
-    private fun openPlugin(row: Row) {
+    private fun openPlugin(row: Row, mode: WidgetSettingsPlugin.Mode) {
         val pluginId = row.pluginId ?: return
         if (!row.enabled || !row.canOpen) return
-        val fragment = WidgetSettingsPlugin.create(pluginId)
+        val fragment = WidgetSettingsPlugin.create(pluginId, mode)
         parentFragmentManager.commit {
             replace(id, fragment)
             addToBackStack(WidgetSettingsPlugin::class.java.name)
@@ -196,7 +200,8 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
 
     private class PluginAdapter(
         private val onToggle: (Row) -> Unit,
-        private val onOpen: (Row) -> Unit,
+        private val onInfo: (Row) -> Unit,
+        private val onSettings: (Row) -> Unit,
     ) : RecyclerView.Adapter<PluginAdapter.Holder>() {
         var rows: List<Row> = emptyList()
             set(value) {
@@ -236,8 +241,10 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
                 binding.pluginItemSwitch.setOnCheckedChangeListener { _, checked ->
                     if (checked != row.enabled) onToggle(row)
                 }
+                binding.pluginItemInfo.visibility = if (row.canOpen) View.VISIBLE else View.GONE
                 binding.pluginItemSettings.visibility = if (row.canOpen) View.VISIBLE else View.GONE
-                binding.pluginItemSettings.setOnClickListener { onOpen(row) }
+                binding.pluginItemInfo.setOnClickListener { onInfo(row) }
+                binding.pluginItemSettings.setOnClickListener { onSettings(row) }
             }
         }
     }

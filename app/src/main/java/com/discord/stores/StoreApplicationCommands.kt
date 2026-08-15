@@ -10,6 +10,7 @@ import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.api.commands.ApplicationIntegrationType
 import com.discord.api.channel.Channel
 import com.discord.api.commands.ApplicationCommandType
+import com.discord.api.commands.CommandChoice
 import com.discord.api.permission.Permission
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
@@ -38,6 +39,7 @@ import com.discord.utilities.user.UserUtils.synthesizeApiUser
 import com.discord.widgets.chat.input.models.ApplicationCommandValue
 import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
 import dev.mantikafasi.manticord.plugins.api.pluginSlashCommandContext
+import dev.mantikafasi.manticord.plugins.api.PluginSlashCommandOptionType
 import java.util.concurrent.TimeUnit
 import retrofit2.Response
 import rx.Observable
@@ -960,19 +962,24 @@ class BuiltInCommands : BuiltInCommandsProvider {
                 applicationId = BUILT_IN_APP_ID,
                 name = command.name,
                 description = command.description,
-                options = listOf(
+                options = command.options.map { option ->
                     ApplicationCommandOption(
-                        type = ApplicationCommandType.STRING,
-                        name = MESSAGE_OPTION,
-                        description = command.description,
-                        required = false,
+                        type = when (option.type) {
+                            PluginSlashCommandOptionType.STRING -> ApplicationCommandType.STRING
+                            PluginSlashCommandOptionType.INTEGER -> ApplicationCommandType.INTEGER
+                            PluginSlashCommandOptionType.BOOLEAN -> ApplicationCommandType.BOOLEAN
+                        },
+                        name = option.name,
+                        description = option.description,
+                        required = option.required,
                         default = false,
-                    ),
-                ),
+                        choices = option.choices.map { CommandChoice(it, it) }.takeIf(List<CommandChoice>::isNotEmpty),
+                    )
+                },
             ) { options ->
                 runCatching {
                     command.execute(
-                        pluginSlashCommandContext(context, options[MESSAGE_OPTION]?.toString().orEmpty()),
+                        pluginSlashCommandContext(context, options),
                     )
                 }.getOrDefault("")
             }

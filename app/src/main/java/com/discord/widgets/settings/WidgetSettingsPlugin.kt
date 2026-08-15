@@ -10,6 +10,7 @@ import com.discord.app.AppFragment
 import com.discord.databinding.DialogPluginTextSettingBinding
 import com.discord.databinding.WidgetSettingsPluginBinding
 import com.discord.plugins.PluginRuntime
+import com.discord.plugins.PluginUiRegistry
 import com.discord.views.CheckedSetting
 import com.discord.widgets.hubs.RadioSelectorItem
 import com.discord.widgets.hubs.RadioSelectorItems
@@ -21,6 +22,7 @@ import com.discord.utilities.rx.ui
 
 class WidgetSettingsPlugin : AppFragment(R.layout.widget_settings_plugin) {
     private val pluginId get() = requireArguments().getString(ARG_PLUGIN_ID).orEmpty()
+    private val mode get() = Mode.valueOf(requireArguments().getString(ARG_MODE) ?: Mode.INFO.name)
     private var customSettingsView: View? = null
 
     override fun onViewBound(view: View) {
@@ -30,6 +32,7 @@ class WidgetSettingsPlugin : AppFragment(R.layout.widget_settings_plugin) {
         val settings = PluginRuntime.settings(pluginId) ?: return
         val binding = WidgetSettingsPluginBinding.bind(view)
         setActionBarTitle(manifest.name)
+        setActionBarSubtitle(if (mode == Mode.INFO) "Info" else "Settings")
         setActionBarDisplayHomeAsUpEnabled()
         SettingsNavigation.bindBack(this)
         render(binding, plugin, settings)
@@ -52,6 +55,44 @@ class WidgetSettingsPlugin : AppFragment(R.layout.widget_settings_plugin) {
             addErrorRow(binding, inflater, it)
             emptyList()
         }
+        val hasCustomSettingsPage = runCatching { plugin.settingsPage != null }.getOrDefault(false)
+
+        if (mode == Mode.INFO) {
+            addSection(binding, inflater, "Plugin info")
+            addRow(binding, inflater, "Plugin ID", pluginId)
+            addRow(binding, inflater, "Version", PluginRuntime.manifest(pluginId)?.versionName.orEmpty())
+            PluginRuntime.manifest(pluginId)?.description?.takeIf(String::isNotBlank)?.let {
+                addRow(binding, inflater, "Description", it)
+            }
+            addSection(binding, inflater, "Added content")
+            val content = PluginUiRegistry.content(pluginId)
+            content.forEach { item ->
+                addRow(
+                    binding,
+                    inflater,
+                    item.type,
+                    listOf(item.title, item.detail).filter(String::isNotBlank).joinToString(" · "),
+                )
+            }
+            entries.forEach { entry ->
+                val title = when (entry) {
+                    is PluginSetting.Section -> entry.title
+                    is PluginSetting.Toggle -> entry.title
+                    is PluginSetting.Text -> entry.title
+                    is PluginSetting.Choice -> entry.title
+                    is PluginSetting.Action -> entry.title
+                    else -> entry.key.orEmpty()
+                }
+                addRow(binding, inflater, "Setting", title)
+            }
+            if (hasCustomSettingsPage) addRow(binding, inflater, "Custom settings page", "Provided")
+            if (content.isEmpty() && entries.isEmpty() && !hasCustomSettingsPage) {
+                addRow(binding, inflater, "No added content", "This plugin did not register any UI or commands.")
+            }
+            return
+        }
+
+        if (entries.isNotEmpty() || hasCustomSettingsPage) addSection(binding, inflater, "Settings")
 
         entries.take(MAX_SCHEMA_ENTRIES).forEach { entry ->
             when (entry) {
@@ -133,30 +174,47 @@ class WidgetSettingsPlugin : AppFragment(R.layout.widget_settings_plugin) {
         failure.message ?: failure::class.java.simpleName,
     ) {}
 
+    private fun addSection(
+        binding: WidgetSettingsPluginBinding,
+        inflater: LayoutInflater,
+        title: String,
+    ) {
+        binding.pluginSettingsContainer.addView(
+            inflater.inflate(R.layout.widget_settings_plugin_section, binding.pluginSettingsContainer, false)
+                .apply { (this as TextView).text = title },
+        )
+    }
+
     private fun addRow(
         binding: WidgetSettingsPluginBinding,
         inflater: LayoutInflater,
         title: String,
         description: String,
-        action: () -> Unit,
+        action: (() -> Unit)? = null,
     ) {
         binding.pluginSettingsContainer.addView(
             inflater.inflate(R.layout.widget_settings_plugin_row, binding.pluginSettingsContainer, false).apply {
                 this as TextView
                 text = if (description.isBlank()) title else "$title\n$description"
-                setOnClickListener { action() }
+                action?.let { callback -> setOnClickListener { callback() } }
             },
         )
     }
 
     companion object {
         private const val ARG_PLUGIN_ID = "plugin_id"
+        private const val ARG_MODE = "mode"
         private const val MAX_SCHEMA_ENTRIES = 100
 
-        fun create(pluginId: String) = WidgetSettingsPlugin().apply {
-            arguments = Bundle().apply { putString(ARG_PLUGIN_ID, pluginId) }
+        fun create(pluginId: String, mode: Mode) = WidgetSettingsPlugin().apply {
+            arguments = Bundle().apply {
+                putString(ARG_PLUGIN_ID, pluginId)
+                putString(ARG_MODE, mode.name)
+            }
         }
     }
+
+    enum class Mode { INFO, SETTINGS }
 }
 
 class PluginTextSettingDialog : AppDialog(R.layout.dialog_plugin_text_setting) {

@@ -409,6 +409,18 @@ the page with host component factories. The host owns navigation chrome, Up/Back
 subscription disposal, error containment, and the outer themed surface. Custom pages receive only
 their plugin's namespaced settings and storage handles through the public scope.
 
+## Main Thread
+
+`scope.applicationContext` is the stable Manticord application context. UI work should instead use:
+
+```kotlin
+scope.runOnMainThread { context ->
+    // context is the active themed AppActivity when one exists.
+}
+```
+
+The callback is skipped after the plugin scope closes. Do not retain the supplied activity context.
+
 ## Host Dialogs
 
 Plugins open first-party Discord notice dialogs through the host service rather than constructing a
