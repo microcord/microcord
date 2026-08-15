@@ -182,6 +182,7 @@ class RtcConnection(
         fun onNativeVideo(userId: Long, videoSsrc: Long, streamId: String, streamParametersJson: String) = Unit
         fun onFirstFrameReceived(videoSsrc: Long) = Unit
         fun onSecureFramesStateUpdate(stateUpdateJson: String) = Unit
+        fun onDaveProtocolVersion(version: Int) = Unit
     }
 
     abstract class DefaultListener : Listener {
@@ -600,6 +601,10 @@ class RtcConnection(
     // region Control socket
 
     private inner class SocketListener : RtcControlSocket.Listener {
+
+        override fun onDaveProtocolVersion(version: Int) {
+            listeners.forEach { it.onDaveProtocolVersion(version) }
+        }
 
         override fun onConnecting() {
             reconnectBackoff.cancel()

@@ -123,6 +123,12 @@ class StoreRtcConnection(
         BehaviorSubject.create(null as RtcConnection.Metadata?)
     private var rtcConnectionMetadata: RtcConnection.Metadata? = null
 
+    /** Base64 MLS epoch authenticator, which is what the call's privacy code is derived from. */
+    private val epochAuthenticatorSubject: BehaviorSubject<String?> = BehaviorSubject.create(null as String?)
+
+    /** Zero until the voice server negotiates a DAVE version, and again once the call ends. */
+    private val daveProtocolVersionSubject: BehaviorSubject<Int> = BehaviorSubject.create(0)
+
     /** Voice-call connection health. The stream connection reports its own separately. */
     private val qualitySubject: BehaviorSubject<RtcConnection.Quality> =
         BehaviorSubject.create(RtcConnection.Quality.UNKNOWN)
@@ -286,8 +292,28 @@ class StoreRtcConnection(
 
     fun handleQualityUpdate(quality: RtcConnection.Quality) = qualitySubject.onNext(quality)
 
+    fun observeDaveProtocolVersion(): Observable<Int> = daveProtocolVersionSubject.distinctUntilChanged()
+
+    fun handleDaveProtocolVersion(version: Int) = daveProtocolVersionSubject.onNext(version)
+
+    fun observeEpochAuthenticator(): Observable<String?> = epochAuthenticatorSubject.distinctUntilChanged()
+
+    /** The engine reports its whole secure-frames state as JSON; only the authenticator is rendered. */
+    fun handleSecureFramesState(stateUpdateJson: String) {
+        val authenticator = try {
+            org.json.JSONObject(stateUpdateJson).optString(KEY_EPOCH_AUTHENTICATOR)
+        } catch (e: org.json.JSONException) {
+            ""
+        }
+        epochAuthenticatorSubject.onNext(authenticator.takeIf { it.isNotEmpty() })
+    }
+
     fun onConnectedChanged(connected: Boolean) {
-        if (!connected) qualitySubject.onNext(RtcConnection.Quality.UNKNOWN)
+        if (!connected) {
+            qualitySubject.onNext(RtcConnection.Quality.UNKNOWN)
+            daveProtocolVersionSubject.onNext(0)
+            epochAuthenticatorSubject.onNext(null)
+        }
         onStateChange(
             RtcConnection.StateChange(
                 if (connected) RtcConnection.State.RtcConnected else RtcConnection.State.RtcDisconnected,
@@ -356,6 +382,9 @@ class StoreRtcConnection(
     }
 
     private companion object {
+        /** Spelled as the engine emits it; see `epochAuthenticator` in libdiscord. */
+        const val KEY_EPOCH_AUTHENTICATOR = "epochAuthenticator"
+
         private const val SPEAKING_UPDATES_BUFFER_MS = 300L
     }
 }

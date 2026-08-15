@@ -370,6 +370,14 @@ class VoiceTransport(
             dispatcher.schedule { storeRtcConnection.handleQualityUpdate(quality) }
         }
 
+        override fun onDaveProtocolVersion(version: Int) {
+            dispatcher.schedule { storeRtcConnection.handleDaveProtocolVersion(version) }
+        }
+
+        override fun onSecureFramesStateUpdate(stateUpdateJson: String) {
+            dispatcher.schedule { storeRtcConnection.handleSecureFramesState(stateUpdateJson) }
+        }
+
         override fun onStateChange(stateChange: RtcConnection.StateChange) {
             val connected = stateChange.state == RtcConnection.State.RtcConnected
             storeRtcConnection.onConnectedChanged(connected)
@@ -491,6 +499,10 @@ class VoiceTransport(
 
         override fun onQualityUpdate(quality: RtcConnection.Quality) {
             dispatcher.schedule { storeStreamRtcConnection.handleQualityUpdate(quality) }
+        }
+
+        override fun onSecureFramesStateUpdate(stateUpdateJson: String) {
+            dispatcher.schedule { storeStreamRtcConnection.handleSecureFramesState(stateUpdateJson) }
         }
 
         override fun onVideoStream(userId: Long, streamId: Int?, audioSsrc: Int, videoSsrc: Int, rtxSsrc: Int) {

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/privacy_code_container"
+    android:background="?attr/colorBackgroundPrimary"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    style="@style/UiKit.ViewGroup.NestedScrollView">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:id="@+id/privacy_code_close"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_alignParentStart="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/close"
+                android:src="@drawable/ic_close_grey_24dp" />
+
+            <TextView
+                android:id="@+id/privacy_code_share"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:text="@string/share"
+                android:textColor="?attr/colorTextLink"
+                style="@style/UiKit.TextView.Semibold" />
+        </RelativeLayout>
+
+        <FrameLayout
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/drawable_circle_background_tertiary">
+
+            <ImageView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_lock_24dp"
+                android:tint="?attr/colorInteractiveNormal" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_horizontal"
+            android:id="@+id/privacy_code_title"
+            style="@style/UiKit.TextView.H2" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_horizontal"
+            android:id="@+id/privacy_code_subtitle"
+            android:textColor="?attr/colorTextNormal"
+            style="@style/UiKit.TextView" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/drawable_voice_settings_group"
+            android:clipToOutline="true"
+            android:orientation="vertical">
+
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentStart="true"
+                    android:layout_centerVertical="true"
+                    android:text="@string/e2ee_privacy_code"
+                    android:textColor="?attr/colorHeaderPrimary"
+                    style="@style/UiKit.TextView.Semibold" />
+
+                <ImageView
+                    android:id="@+id/privacy_code_copy"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/copy"
+                    android:src="@drawable/ic_copy_24dp"
+                    android:tint="?attr/colorInteractiveNormal" />
+            </RelativeLayout>
+
+            <LinearLayout
+                android:id="@+id/privacy_code_grid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/colorBackgroundModifierAccent"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingVertical="8dp" />
+        </LinearLayout>
+
+        <com.discord.utilities.view.text.LinkifiedTextView
+            android:id="@+id/privacy_code_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_horizontal"
+            android:textColor="?attr/colorTextMuted"
+            style="@style/UiKit.TextView.Subtext" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

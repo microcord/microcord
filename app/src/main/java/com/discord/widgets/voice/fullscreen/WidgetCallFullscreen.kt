@@ -51,6 +51,7 @@ import com.discord.widgets.voice.fullscreen.stage.StageCallAdapter
 import com.discord.widgets.voice.fullscreen.stage.StageCallBottomSheetManager
 import com.discord.widgets.voice.fullscreen.stage.StageCallItem
 import com.discord.widgets.voice.model.CallModel
+import com.discord.widgets.settings.WidgetSettingsVoice
 import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
 import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.discord.widgets.voice.sheet.WidgetVoiceSettingsBottomSheet
@@ -309,8 +310,9 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         requireActivity().window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         configureControls(state)
         configureMenu(state)
-        setActionBarTitle(state.titleText.orEmpty())
+        setActionBarTitle(state.titleText.orEmpty(), trailingDrawableRes = R.drawable.ic_arrow_right)
         setActionBarTitleColor(android.graphics.Color.WHITE)
+        setActionBarTitleClick { WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId) }
         root.setBackgroundResource(R.color.primary_dark_900)
         when (state.displayMode) {
             WidgetCallFullscreenViewModel.DisplayMode.GRID -> configureGrid(state)
@@ -342,6 +344,17 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             onActivitiesClick = {
                 WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.VOICE)
             },
+            onChatClick = { openTextInVoice() },
+            onOnlyShowVideosToggle = {
+                StoreStream.getMediaSettings()
+                    .updateVoiceParticipantsHidden(!state.callModel.voiceSettings.voiceParticipantsHidden)
+            },
+            onSelfVideoToggle = {
+                StoreStream.getMediaSettings()
+                    .updateSelfVideoHidden(!state.callModel.voiceSettings.selfVideoHidden)
+            },
+            onNoiseProcessingSelect = { StoreStream.getMediaSettings().setNoiseProcessing(it) },
+            onVoiceSettingsClick = { WidgetSettingsVoice.launch(requireContext()) },
             onSoundboardClick = {
                 com.discord.widgets.voice.sheet.WidgetSoundboardBottomSheet.show(
                     parentFragmentManager,
@@ -468,32 +481,14 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             R.menu.menu_call_fullscreen,
             onSelected = { item ->
                 when (item.itemId) {
-                    R.id.menu_call_overlay_launcher -> DiscordOverlayService.launchForConnect(requireContext())
-                    R.id.menu_call_switch_camera -> viewModel.switchCameraInputPressed()
-                    R.id.menu_call_video_list -> com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet.show(
-                        parentFragmentManager,
-                        channelId,
-                        false,
-                        com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet.FeatureContext.FULLSCREEN_CALL,
-                    ).onStreamPreviewClickedListener = { viewModel.targetAndFocusStream(it.stream.encodedStreamKey) }
-                    R.id.menu_call_activities ->
-                        WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.VOICE)
-                    R.id.menu_call_voice_settings ->
-                        WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId)
+                    R.id.menu_call_audio_output -> AudioOutputSelectionDialog.show(parentFragmentManager)
+                    R.id.menu_call_invite ->
+                        com.discord.widgets.voice.sheet.launchChannelInvite(this, state.callModel.channel, "Voice Call")
                     R.id.menu_text_in_voice -> openTextInVoice()
                 }
             },
             onConfigured = { menu ->
-                menu.findItem(R.id.menu_call_overlay_launcher).isVisible =
-                    WidgetCallFullscreenViewModel.MenuItem.LAUNCH_OVERLAY in state.menuItems
-                menu.findItem(R.id.menu_call_switch_camera).isVisible =
-                    WidgetCallFullscreenViewModel.MenuItem.SWITCH_CAMERA in state.menuItems
-                menu.findItem(R.id.menu_call_video_list).isVisible =
-                    WidgetCallFullscreenViewModel.MenuItem.SHOW_PARTICIPANT_LIST in state.menuItems
-                menu.findItem(R.id.menu_call_activities).isVisible =
-                    WidgetCallFullscreenViewModel.MenuItem.ACTIVITIES in state.menuItems
-                menu.findItem(R.id.menu_call_voice_settings).isVisible =
-                    WidgetCallFullscreenViewModel.MenuItem.VOICE_SETTINGS in state.menuItems
+                menu.findItem(R.id.menu_call_invite).isVisible = state.callModel.canInvite()
                 menu.findItem(R.id.menu_text_in_voice).apply {
                     isVisible = WidgetCallFullscreenViewModel.MenuItem.TEXT_IN_VOICE in state.menuItems
                     // An item with an actionLayout swallows the touch itself, so onSelected never

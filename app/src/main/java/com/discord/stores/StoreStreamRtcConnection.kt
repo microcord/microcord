@@ -93,6 +93,7 @@ class StoreStreamRtcConnection(
     private var streamOwner: Long? = null
     private var streamVolume: Float = MAX_STREAM_VOLUME
     private val connectionQuality = BehaviorSubject.create(RtcConnection.Quality.UNKNOWN)
+    private val epochAuthenticator = BehaviorSubject.create(null as String?)
 
     fun getState(): State = stateSnapshot
 
@@ -158,6 +159,7 @@ class StoreStreamRtcConnection(
         if (isConnected) {
             streamOwner?.let { streamConnectionController.setUserOutputVolume(it, streamVolume) }
         }
+        if (!isConnected) epochAuthenticator.onNext(null)
         state = state.copy(isConnected = isConnected)
         markChanged()
     }
@@ -182,6 +184,19 @@ class StoreStreamRtcConnection(
     @StoreThread
     fun handleQualityUpdate(quality: RtcConnection.Quality) = connectionQuality.onNext(quality)
 
+    fun observeEpochAuthenticator(): Observable<String?> = epochAuthenticator.distinctUntilChanged()
+
+    /** Same payload as the call connection's; only the authenticator is rendered. */
+    @StoreThread
+    fun handleSecureFramesState(stateUpdateJson: String) {
+        val authenticator = try {
+            org.json.JSONObject(stateUpdateJson).optString(KEY_EPOCH_AUTHENTICATOR)
+        } catch (e: org.json.JSONException) {
+            ""
+        }
+        epochAuthenticator.onNext(authenticator.takeIf { it.isNotEmpty() })
+    }
+
     fun updateFocusedParticipant(focusedParticipant: Long?) =
         streamConnectionController.setFocusedParticipant(focusedParticipant)
 
@@ -200,5 +215,8 @@ class StoreStreamRtcConnection(
     private companion object {
         /** Full volume on the media engine's 0..300 scale. */
         private const val MAX_STREAM_VOLUME = 300f
+
+        /** Spelled as the engine emits it; see `epochAuthenticator` in libdiscord. */
+        private const val KEY_EPOCH_AUTHENTICATOR = "epochAuthenticator"
     }
 }

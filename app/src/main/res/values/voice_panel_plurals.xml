@@ -4,4 +4,8 @@
         <item quantity="one">%1$d Member</item>
         <item quantity="other">%1$d Members</item>
     </plurals>
+    <plurals name="voice_panel_overview_header_3_or_more_people">
+        <item quantity="one">%1$s, %2$s, and %3$d other</item>
+        <item quantity="other">%1$s, %2$s, and %3$d others</item>
+    </plurals>
 </resources>

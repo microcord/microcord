@@ -43,6 +43,9 @@ class WidgetVoiceSettingsBottomSheetViewModel(
         data class Valid(
             val callModel: CallModel,
             val myStageRoles: StageRoles?,
+            val daveProtocolVersion: Int,
+            val epochAuthenticator: String?,
+            val streamEpochAuthenticator: String?,
         ) : StoreState()
     }
 
@@ -57,6 +60,9 @@ class WidgetVoiceSettingsBottomSheetViewModel(
         override val showVoiceParticipantsToggle: Boolean,
         override val showInviteItem: Boolean,
         override val noiseProcessing: StoreMediaSettings.NoiseProcessing,
+        override val isEndToEndEncrypted: Boolean,
+        override val privacyCode: String?,
+        override val isStreamPrivacyCode: Boolean,
         override val showStageSettings: Boolean,
         override val showReportItem: Boolean,
         override val guild: Guild?,
@@ -97,6 +103,7 @@ class WidgetVoiceSettingsBottomSheetViewModel(
         internal fun toViewState(storeState: StoreState): ViewState? {
             if (storeState !is StoreState.Valid) return null
             val model = storeState.callModel
+            val watchingStream = model.activeStream != null && !model.isStreaming
             val isStage = model.channel.isStageVoiceChannel()
             return ViewState(
                 channel = model.channel,
@@ -116,6 +123,13 @@ class WidgetVoiceSettingsBottomSheetViewModel(
                 showVoiceParticipantsToggle = true,
                 showInviteItem = model.canInvite() && !isStage,
                 noiseProcessing = model.voiceSettings.noiseProcessing,
+                isEndToEndEncrypted = model.isConnected && storeState.daveProtocolVersion > 0,
+                privacyCode = when {
+                    !model.isConnected -> null
+                    watchingStream -> storeState.streamEpochAuthenticator
+                    else -> storeState.epochAuthenticator
+                },
+                isStreamPrivacyCode = watchingStream,
                 showStageSettings = isStage && storeState.myStageRoles?.isModerator == true,
                 showReportItem = isStage,
                 guild = model.guild,
@@ -133,8 +147,14 @@ class WidgetVoiceSettingsBottomSheetViewModel(
                     if (callModel == null) {
                         Observable.just(StoreState.Invalid)
                     } else {
-                        stageChannelsStore.observeMyRoles(channelId)
-                            .map<StoreState> { roles -> StoreState.Valid(callModel, roles) }
+                        Observable.combineLatest(
+                            stageChannelsStore.observeMyRoles(channelId),
+                            StoreStream.getRtcConnection().observeDaveProtocolVersion(),
+                            StoreStream.getRtcConnection().observeEpochAuthenticator(),
+                            StoreStream.getStreamRtcConnection().observeEpochAuthenticator(),
+                        ) { roles, daveVersion, authenticator, streamAuthenticator ->
+                            StoreState.Valid(callModel, roles, daveVersion, authenticator, streamAuthenticator)
+                        }
                     }
                 }
     }

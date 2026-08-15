@@ -8,6 +8,7 @@ import androidx.annotation.StringRes
 import androidx.core.view.isVisible
 import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.guild.GuildFeature
@@ -53,6 +54,9 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
         val showSelfVideo: Boolean
         val showInviteItem: Boolean
         val noiseProcessing: StoreMediaSettings.NoiseProcessing
+        val isEndToEndEncrypted: Boolean
+        val privacyCode: String?
+        val isStreamPrivacyCode: Boolean
         val showStageSettings: Boolean
         val showReportItem: Boolean
         val guild: Guild?
@@ -95,7 +99,16 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
         val channel = viewState.channel
         val isMenu = mode == VoiceSettingsMode.MENU
 
-        binding.voiceSettingsSheetTitle.setText(R.string.voice)
+        if (isMenu) {
+            binding.voiceSettingsSheetTitle.text = channel.getDisplayName()
+        } else {
+            binding.voiceSettingsSheetTitle.setText(R.string.voice)
+        }
+        val subtitle = if (isMenu) memberSummary(viewState.members) else null
+        binding.voiceSettingsSheetSubtitle.text = subtitle
+        binding.voiceSettingsSheetSubtitle.visibility = if (subtitle == null) View.GONE else View.VISIBLE
+        binding.voiceSettingsE2ee.visibility =
+            if (isMenu && viewState.isEndToEndEncrypted) View.VISIBLE else View.GONE
 
         val showChannelSettings = isMenu && viewState.showChannelSettings
         binding.voiceSettingsChannelGroup.visibility = if (showChannelSettings) View.VISIBLE else View.GONE
@@ -158,6 +171,24 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
             checked = viewState.showSelfVideo,
         ) { viewModel.onToggleSelfVideoHidden() }
 
+        val showPrivacyCode = isMenu && viewState.privacyCode != null
+        binding.voiceSettingsPrivacyCode.root.visibility = if (showPrivacyCode) View.VISIBLE else View.GONE
+        binding.voiceSettingsPrivacyCodeDivider.visibility = if (showPrivacyCode) View.VISIBLE else View.GONE
+        val isStream = viewState.isStreamPrivacyCode
+        binding.voiceSettingsPrivacyCode.bind(
+            label = if (isStream) R.string.e2ee_stream_privacy_code else R.string.e2ee_voice_privacy_code,
+            sublabel = if (isStream) {
+                R.string.e2ee_check_stream_privacy_code
+            } else {
+                R.string.e2ee_check_call_privacy_code
+            },
+            icon = R.drawable.ic_lock_24dp,
+        ) {
+            val code = viewState.privacyCode ?: return@bind
+            dismiss()
+            WidgetVoicePrivacyCodeBottomSheet.show(parentFragmentManager, code, isStream)
+        }
+
         binding.voiceSettingsNoiseGroup.root.visibility = if (isMenu) View.GONE else View.VISIBLE
         bindNoiseOptions(viewState.noiseProcessing)
 
@@ -177,6 +208,19 @@ class WidgetVoiceSettingsBottomSheet : AppBottomSheet() {
             launchChannelInvite(this, channel, INVITE_ANALYTICS_SOURCE)
         }
         bindMembers(viewState.members, viewState.showInviteItem)
+    }
+
+    private fun memberSummary(members: List<VoiceMember>): String? = when (members.size) {
+        0 -> null
+        1 -> members[0].name
+        2 -> getString(R.string.voice_panel_overview_header_2_people, members[0].name, members[1].name)
+        else -> resources.getQuantityString(
+            R.plurals.voice_panel_overview_header_3_or_more_people,
+            members.size - 2,
+            members[0].name,
+            members[1].name,
+            members.size - 2,
+        )
     }
 
     private fun bindNoiseOptions(selected: StoreMediaSettings.NoiseProcessing) {
