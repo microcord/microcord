@@ -169,6 +169,7 @@ data class WidgetChannelListModel(
         val mentionCounts: Map<Long, Int>,
         val unreadChannelIds: Set<Long>,
         val collapsedCategories: Set<Long>,
+        val collapsedVoiceChannels: Set<Long>,
         val lowImportanceMentionChannels: Set<Long>,
         val useNewNotifications: Boolean,
     )
@@ -383,6 +384,7 @@ data class WidgetChannelListModel(
                     mentionCounts = selection.mentionCounts,
                     unreadChannelIds = selection.unreadChannelIds,
                     collapsedCategories = selection.collapsedCategories,
+                    collapsedVoiceChannels = selection.collapsedVoiceChannels,
                     lowImportanceMentionChannels = selection.lowImportanceMentionChannels,
                     useNewNotifications = selection.useNewNotifications,
                     stageChannels = events.stageChannels,
@@ -455,16 +457,18 @@ data class WidgetChannelListModel(
                 StoreStream.getMentions().observeMentionCounts(),
                 StoreStream.getReadStates().getUnreadChannelIds(),
                 StoreStream.getCollapsedChannelCategories().observeCollapsedCategories(guildId),
+                StoreStream.getCollapsedVoiceChannels().observeCollapsedVoiceChannels(),
                 StoreStream.getMentions().observeLowImportanceMentionChannels(),
                 StoreStream.getUserGuildSettings().observeAccountNotificationSettings(),
-            ) { selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed, lowImportance,
-                accountSettings ->
+            ) { selectedChannel, voiceChannelId, mentionCounts, unreadIds, collapsed, collapsedVoice,
+                lowImportance, accountSettings ->
                 SelectionState(
                     selectedChannel = selectedChannel,
                     selectedVoiceChannelId = voiceChannelId,
                     mentionCounts = mentionCounts,
                     unreadChannelIds = unreadIds,
                     collapsedCategories = collapsed,
+                    collapsedVoiceChannels = collapsedVoice,
                     lowImportanceMentionChannels = lowImportance,
                     useNewNotifications = accountSettings.useNewNotifications,
                 )
@@ -596,6 +600,7 @@ data class WidgetChannelListModel(
             mentionCounts: Map<Long, Int>,
             unreadChannelIds: Set<Long>,
             collapsedCategories: Set<Long>,
+            collapsedVoiceChannels: Set<Long> = emptySet(),
             lowImportanceMentionChannels: Set<Long> = emptySet(),
             useNewNotifications: Boolean = false,
             stageChannels: Map<Long, StageChannel> = emptyMap(),
@@ -931,7 +936,9 @@ data class WidgetChannelListModel(
                         Channel.GUILD_VOICE -> {
                             val item = toVoiceChannelItem() ?: continue
                             items.add(item)
-                            items.addAll(voiceStates[channelId] ?: emptyList())
+                            if (channelId !in collapsedVoiceChannels) {
+                                items.addAll(voiceStates[channelId] ?: emptyList())
+                            }
                         }
 
                         Channel.CATEGORY -> {

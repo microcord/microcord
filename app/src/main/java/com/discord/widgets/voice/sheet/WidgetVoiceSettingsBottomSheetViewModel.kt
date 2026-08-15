@@ -3,6 +3,8 @@ package com.discord.widgets.voice.sheet
 import androidx.annotation.MainThread
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.permission.Permission
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.app.AppViewModel
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreMediaSettings
@@ -47,9 +49,14 @@ class WidgetVoiceSettingsBottomSheetViewModel(
     data class ViewState(
         override val channel: Channel,
         override val showVoiceParticipants: Boolean,
+        override val showChannelSettings: Boolean,
+        override val showActivitiesItem: Boolean,
+        override val members: List<VoiceMember>,
+        override val isDeafened: Boolean,
+        override val showSelfVideo: Boolean,
         override val showVoiceParticipantsToggle: Boolean,
         override val showInviteItem: Boolean,
-        override val noiseCancellationEnabled: Boolean,
+        override val noiseProcessing: StoreMediaSettings.NoiseProcessing,
         override val showStageSettings: Boolean,
         override val showReportItem: Boolean,
         override val guild: Guild?,
@@ -66,6 +73,19 @@ class WidgetVoiceSettingsBottomSheetViewModel(
     }
 
     @MainThread
+    fun onToggleSelfVideoHidden() {
+        val currentViewState = viewState ?: return
+        mediaSettingsStore.updateSelfVideoHidden(currentViewState.showSelfVideo)
+    }
+
+    fun onSelectNoiseProcessing(value: StoreMediaSettings.NoiseProcessing) {
+        mediaSettingsStore.setNoiseProcessing(value)
+    }
+
+    fun onToggleDeafen() {
+        mediaSettingsStore.toggleSelfDeafened()
+    }
+
     fun onToggleVoiceParticipantsHidden() {
         // The current state *is* the new hidden flag: the switch shows "show participants", so
         // toggling it off is what hides them.
@@ -81,11 +101,21 @@ class WidgetVoiceSettingsBottomSheetViewModel(
             return ViewState(
                 channel = model.channel,
                 showVoiceParticipants = !model.voiceSettings.voiceParticipantsHidden,
-                // Hiding non-video participants only means anything once there is video.
-                showVoiceParticipantsToggle = model.isVideoCall || model.activeStream != null,
+                showChannelSettings = PermissionUtils.can(Permission.MANAGE_CHANNELS, model.channelPermissions),
+                showActivitiesItem = model.isConnected && model.canUseActivities(),
+                members = model.participants.values.filter { it.voiceState != null }.map { participant ->
+                    VoiceMember(
+                        user = participant.user,
+                        name = participant.guildMember?.nick ?: participant.user.username,
+                        hasVideo = participant.voiceState?.selfVideo == true,
+                        isMuted = participant.isMuted || participant.isDeafened,
+                    )
+                },
+                isDeafened = model.isDeafenedByAnySource,
+                showSelfVideo = !model.voiceSettings.selfVideoHidden,
+                showVoiceParticipantsToggle = true,
                 showInviteItem = model.canInvite() && !isStage,
-                noiseCancellationEnabled = model.voiceSettings.noiseProcessing ==
-                    StoreMediaSettings.NoiseProcessing.Cancellation,
+                noiseProcessing = model.voiceSettings.noiseProcessing,
                 showStageSettings = isStage && storeState.myStageRoles?.isModerator == true,
                 showReportItem = isStage,
                 guild = model.guild,

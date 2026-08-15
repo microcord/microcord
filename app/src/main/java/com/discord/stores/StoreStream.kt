@@ -376,6 +376,7 @@ class StoreStream private constructor(
     private val guildsSorted = StoreGuildsSorted(observationDeck, dispatcher)
     private val expandedGuildFolders = StoreExpandedGuildFolders(dispatcher, observationDeck)
     private val collapsedChannelCategories = StoreCollapsedChannelCategories(dispatcher, observationDeck)
+    private val collapsedVoiceChannels = StoreCollapsedVoiceChannels(dispatcher, observationDeck)
     private var guildFolders: List<ModelGuildFolder> = emptyList()
     private val guildSettings = StoreUserGuildSettings(
         dispatcher,
@@ -1058,6 +1059,7 @@ class StoreStream private constructor(
         guildsSorted,
         expandedGuildFolders,
         collapsedChannelCategories,
+        collapsedVoiceChannels,
         guildSettings,
         channels,
         stageInstances,
@@ -1666,6 +1668,7 @@ class StoreStream private constructor(
             channelsSelected.restore()
             expandedGuildFolders.restore()
             collapsedChannelCategories.restore()
+            collapsedVoiceChannels.restore()
             guildSettings.restore()
             clientDataState.init()
             userSettings.handleUserSettingsProto(userSettingsProto.init())
@@ -1712,6 +1715,7 @@ class StoreStream private constructor(
             channelsSelected.restore()
             expandedGuildFolders.restore()
             collapsedChannelCategories.restore()
+            collapsedVoiceChannels.restore()
             guildSettings.restore()
             clientDataState.init()
             userSettings.handleUserSettingsProto(userSettingsProto.init())
@@ -1779,6 +1783,7 @@ class StoreStream private constructor(
                     mediaSettings.handleVoiceChannelSelected(voiceChannelId)
                     stageChannelSelfPresence.handleVoiceChannelSelected()
                     lurking.handleVoiceChannelSelected(voiceChannelId)
+                    messages.handleVoiceChannelSelected(voiceChannelId)
                     messagesLoader.handleVoiceChannelJoined(voiceChannelId)
                 }
             },
@@ -3244,6 +3249,7 @@ class StoreStream private constructor(
         resetStore("guildSubscriptions", guildSubscriptions::reset)
         resetStore("expandedGuildFolders", expandedGuildFolders::reset)
         resetStore("collapsedChannelCategories", collapsedChannelCategories::reset)
+        resetStore("collapsedVoiceChannels", collapsedVoiceChannels::reset)
         resetStore("guildSettings", guildSettings::reset)
         resetStore("stageInstances", stageInstances::reset)
         resetStore("presences", presences::reset)
@@ -3318,6 +3324,7 @@ class StoreStream private constructor(
         guildSelected.handleConnectionOpen(payload)
         channelsSelected.handleConnectionOpen(payload)
         collapsedChannelCategories.handleConnectionOpen(payload)
+        collapsedVoiceChannels.handleConnectionOpen(payload)
         stageInstances.handleConnectionOpen(payload.guilds.orEmpty())
         presences.handleConnectionOpen(
             payload,
@@ -3845,6 +3852,7 @@ class StoreStream private constructor(
         @JvmStatic fun getGuildsSorted() = requireInstance().guildsSorted
         @JvmStatic fun getExpandedGuildFolders() = requireInstance().expandedGuildFolders
         @JvmStatic fun getCollapsedChannelCategories() = requireInstance().collapsedChannelCategories
+        @JvmStatic fun getCollapsedVoiceChannels() = requireInstance().collapsedVoiceChannels
         @JvmStatic fun getChannels() = requireInstance().channels
         @JvmStatic fun getChannelsSelected() = requireInstance().channelsSelected
         @JvmStatic fun getChannelMembers() = requireInstance().channelMembers
@@ -3953,6 +3961,7 @@ class StoreStream private constructor(
 
         // Guild administration
         @JvmStatic fun getBans() = requireInstance().bans
+        @JvmStatic fun getChannelFollowerStats() = requireInstance().channelFollowerStats
         @JvmStatic fun getGuildIntegrations() = requireInstance().guildIntegrations
         @JvmStatic fun getGuildJoinRequests() = requireInstance().guildJoinRequests
         @JvmStatic fun getGuildTemplates() = requireInstance().guildTemplates

@@ -33,6 +33,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
     private val peekContainer: LinearLayout
     private val videoButton: ImageView
     private val screenShareButton: ImageView
+    private val activitiesSecondaryButton: TextView
     private val soundboardSecondaryButton: TextView
     private val moveToAudienceButton: ImageView
     private val raiseHandBadge: NumericBadgingView
@@ -60,6 +61,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         peekContainer = requireNotNull(findViewById(R.id.peek_container))
         videoButton = requireNotNull(findViewById(R.id.video_button))
         screenShareButton = requireNotNull(findViewById(R.id.screen_share_button))
+        activitiesSecondaryButton = requireNotNull(findViewById(R.id.activities_secondary_button))
         soundboardSecondaryButton = requireNotNull(findViewById(R.id.soundboard_secondary_button))
         moveToAudienceButton = requireNotNull(findViewById(R.id.move_to_audience_button))
         raiseHandBadge = requireNotNull(findViewById(R.id.raise_hand_badge))
@@ -110,6 +112,7 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         onMoveToAudienceClick: () -> Unit,
         isUpdatingRequestToSpeak: Boolean,
         stageRoles: StageRoles?,
+        onActivitiesClick: () -> Unit = {},
     ) {
         stopWatchingButton.show(isStreamFocused)
         stopWatchingButton.setOnClickListener { onStopWatchingClick() }
@@ -144,6 +147,8 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         // whether the call is showing its primary controls.
         soundboardSecondaryButton.show(model.canUseSoundboard() && !isStage)
         soundboardSecondaryButton.setOnClickListener { onSoundboardClick() }
+        activitiesSecondaryButton.show(model.canUseActivities())
+        activitiesSecondaryButton.setOnClickListener { onActivitiesClick() }
         configureStreamVolume(showStreamVolume, streamVolume, onStreamVolumeChange)
         configureInvites(model, onInviteClick, isStage)
     }

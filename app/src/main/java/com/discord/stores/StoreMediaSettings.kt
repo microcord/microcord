@@ -70,6 +70,7 @@ class StoreMediaSettings(
         val userOutputVolumes: Map<Long, Float> = emptyMap(),
         val offScreenUsers: Map<Long, Boolean> = emptyMap(),
         val voiceParticipantsHidden: Boolean = false,
+        val selfVideoHidden: Boolean = false,
     ) {
         /**
          * Deafened implies muted: nobody should be able to hear you while you cannot hear them.
@@ -346,6 +347,12 @@ class StoreMediaSettings(
         voiceConfiguration = voiceConfiguration.copy(voiceParticipantsHidden = hidden)
     }
 
+    @Synchronized
+    fun updateSelfVideoHidden(hidden: Boolean) {
+        if (voiceConfiguration.selfVideoHidden == hidden) return
+        voiceConfiguration = voiceConfiguration.copy(selfVideoHidden = hidden)
+    }
+
     // endregion
 }
 
@@ -422,6 +429,7 @@ class VoiceConfigurationCache(private val sharedPreferences: SharedPreferences) 
             sharedPreferences.getBoolean(KEY_SIDECHAIN_COMPRESSION, defaults.sidechainCompression),
             voiceParticipantsHidden =
             sharedPreferences.getBoolean(KEY_HIDE_VOICE_PARTICIPANTS, defaults.voiceParticipantsHidden),
+            selfVideoHidden = sharedPreferences.getBoolean(KEY_HIDE_SELF_VIDEO, defaults.selfVideoHidden),
         )
     }
 
@@ -449,6 +457,7 @@ class VoiceConfigurationCache(private val sharedPreferences: SharedPreferences) 
         ) { it.toString() }
         editor.putBoolean(KEY_SIDECHAIN_COMPRESSION, voiceConfiguration.sidechainCompression)
         editor.putBoolean(KEY_HIDE_VOICE_PARTICIPANTS, voiceConfiguration.voiceParticipantsHidden)
+        editor.putBoolean(KEY_HIDE_SELF_VIDEO, voiceConfiguration.selfVideoHidden)
         editor.apply()
     }
 
@@ -468,5 +477,6 @@ class VoiceConfigurationCache(private val sharedPreferences: SharedPreferences) 
         private const val KEY_USER_OUTPUT_VOLUMES = "USER_OUTPUT_VOLUMES_V2"
         private const val KEY_SIDECHAIN_COMPRESSION = "CACHE_KEY_VOICE_SETTINGS_SIDECHAIN_COMPRESSION"
         private const val KEY_HIDE_VOICE_PARTICIPANTS = "CACHE_KEY_HIDE_VOICE_PARTICIPANTS"
+        private const val KEY_HIDE_SELF_VIDEO = "CACHE_KEY_HIDE_SELF_VIDEO"
     }
 }

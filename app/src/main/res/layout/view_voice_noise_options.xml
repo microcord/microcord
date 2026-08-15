@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/voice_noise_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="@string/noise_suppression"
+        android:textColor="?attr/colorTextMuted"
+        style="@style/UiKit.TextView.Semibold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/drawable_voice_settings_group"
+        android:orientation="vertical"
+        android:paddingVertical="4dp">
+
+        <include android:id="@+id/voice_noise_krisp" layout="@layout/view_voice_settings_radio_row" />
+        <include android:id="@+id/voice_noise_standard" layout="@layout/view_voice_settings_radio_row" />
+        <include android:id="@+id/voice_noise_none" layout="@layout/view_voice_settings_radio_row" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/noise_cancellation_popout_footer"
+            android:textColor="?attr/colorTextMuted"
+            style="@style/UiKit.TextView.Subtext" />
+
+        <ImageView
+            android:id="@+id/voice_noise_krisp_logo"
+            android:layout_width="wrap_content"
+            android:layout_height="12dp"
+            android:layout_marginStart="4dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="@null"
+            android:src="?attr/ic_krisp_logo" />
+    </LinearLayout>
+</LinearLayout>

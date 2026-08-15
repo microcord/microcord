@@ -82,6 +82,7 @@ class VoiceEngineServiceController(
             }
         }
         .computationLatest()
+        .distinctUntilChanged()
         .replay(1)
         .refCount()
 

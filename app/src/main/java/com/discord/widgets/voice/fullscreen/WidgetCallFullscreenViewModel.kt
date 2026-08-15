@@ -204,7 +204,13 @@ class WidgetCallFullscreenViewModel constructor(
                 selectedVideoInputDevice = callModel.selectedVideoDevice,
                 showLabels = !(previousViewState?.isIdleFooter ?: false),
             )
-        }.filter { !callModel.voiceSettings.voiceParticipantsHidden || it.hasActiveVideo() }
+        }
+            .filter { !callModel.voiceSettings.voiceParticipantsHidden || it.hasActiveVideo() }
+            .filter { participant ->
+                !callModel.voiceSettings.selfVideoHidden ||
+                    (participant as? CallParticipant.UserOrStreamParticipant)
+                        ?.participantData?.voiceParticipant?.user?.id != callModel.myId
+            }
 
         allVideoParticipants = embeddedParticipants + userParticipants
         if (isOneOnOneMeCall(allVideoParticipants)) focusedVideoParticipantKey = null
@@ -1124,6 +1130,7 @@ class WidgetCallFullscreenViewModel constructor(
         SWITCH_CAMERA,
         SHOW_PARTICIPANT_LIST,
         TEXT_IN_VOICE,
+        ACTIVITIES,
     }
 
     enum class OverlayStatus { DISABLED, ENABLED }
@@ -1227,6 +1234,7 @@ class WidgetCallFullscreenViewModel constructor(
                     if (callModel.selectedVideoDevice != null && callModel.videoDevices.size > 1) add(MenuItem.SWITCH_CAMERA)
                     if (!callModel.channel.isStageVoiceChannel()) add(MenuItem.TEXT_IN_VOICE)
                     if (!callModel.channel.isStageVoiceChannel()) add(MenuItem.SHOW_PARTICIPANT_LIST)
+                    if (callModel.canUseActivities()) add(MenuItem.ACTIVITIES)
                 }
             }
             val titleText: String? by lazy {

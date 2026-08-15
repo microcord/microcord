@@ -107,6 +107,8 @@ class WidgetVoiceBottomSheetViewModel(
         override val subtitle: String?,
         override val channel: Channel,
         override val showInviteOption: Boolean,
+        override val showActivitiesOption: Boolean,
+        override val isSelfMuted: Boolean,
         override val isNoiseCancellationActive: Boolean?,
         override val isDeafened: Boolean,
         override val centerContent: WidgetVoiceBottomSheet.CenterContent,
@@ -216,6 +218,8 @@ class WidgetVoiceBottomSheetViewModel(
                 channel = channel,
                 // A stage channel invites through its own surface, not through this row.
                 showInviteOption = callModel.canInvite() && !channel.isStageVoiceChannel(),
+                showActivitiesOption = callModel.isConnected && callModel.canUseActivities(),
+                isSelfMuted = callModel.voiceSettings.isSelfMuted(),
                 isNoiseCancellationActive = storeState.noiseCancellation,
                 isDeafened = callModel.isDeafenedByAnySource,
                 centerContent = centerContent,

@@ -82,11 +82,12 @@ object ChannelListNavigation {
         WidgetCreateChannel.show(fragment.requireContext(), guildId, channelType, categoryId)
     }
 
-    fun shareGuildInvite(fragment: Fragment, guildId: Long) {
+    fun shareGuildInvite(fragment: Fragment, guildId: Long, channelId: Long? = null) {
         WidgetGuildInviteShare.launch(
             context = fragment.requireContext(),
             fragmentManager = fragment.parentFragmentManager,
             guildId = guildId,
+            channelId = channelId,
             source = WidgetChannelsList.ANALYTICS_SOURCE,
         )
     }

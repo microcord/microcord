@@ -86,6 +86,7 @@ class StoreMessagesHolder @JvmOverloads constructor(
     private val updatedChannels = HashSet<Long>()
 
     private var selectedChannelId = 0L
+    private var activeVoiceChannelId = 0L
     private var myUserId = 0L
 
     private var cacheEnabled = false
@@ -145,6 +146,19 @@ class StoreMessagesHolder @JvmOverloads constructor(
         val existing = messages.remove(channelId)
         messages[channelId] = existing ?: TreeMap()
         activeChannels += channelId
+    }
+
+    /** The joined voice channel is watched alongside the open one: its chat is reachable in call. */
+    @Synchronized
+    fun selectVoiceChannel(channelId: Long) {
+        if (channelId == activeVoiceChannelId) return
+        val previous = activeVoiceChannelId
+        activeVoiceChannelId = channelId
+        if (previous > 0L && previous != selectedChannelId) activeChannels -= previous
+        if (channelId > 0L) {
+            messages.getOrPut(channelId) { TreeMap() }
+            activeChannels += channelId
+        }
     }
 
     @Synchronized
@@ -289,6 +303,7 @@ class StoreMessagesHolder @JvmOverloads constructor(
         messages.values.forEach { staleMessages += it.keys }
         activeChannels.clear()
         if (selectedChannelId > 0) activeChannels += selectedChannelId
+        if (activeVoiceChannelId > 0) activeChannels += activeVoiceChannelId
     }
 
     /**
@@ -756,6 +771,12 @@ class StoreMessages @JvmOverloads constructor(
     @StoreThread
     fun handleChannelSelected(channelId: Long) {
         holder.selectChannel(channelId)
+        markChanged()
+    }
+
+    @StoreThread
+    fun handleVoiceChannelSelected(channelId: Long) {
+        holder.selectVoiceChannel(channelId)
         markChanged()
     }
 

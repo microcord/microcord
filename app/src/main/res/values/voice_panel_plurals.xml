@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <plurals name="voice_panel_member_count_plural">
+        <item quantity="one">%1$d Member</item>
+        <item quantity="other">%1$d Members</item>
+    </plurals>
+</resources>

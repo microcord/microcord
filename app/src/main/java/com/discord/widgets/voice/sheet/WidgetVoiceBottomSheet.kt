@@ -3,6 +3,7 @@ package com.discord.widgets.voice.sheet
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.widget.ImageView
 import android.widget.RelativeLayout
@@ -20,10 +21,14 @@ import com.discord.app.appViewModels
 import com.discord.dialogs.CameraCapacityDialog
 import com.discord.dialogs.GuildVideoAtCapacityDialog
 import com.discord.dialogs.audio.AudioOutputSelectionDialog
+import com.discord.utilities.channel.ChannelSelector
+import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.stores.StoreAudioManagerV2
 import com.discord.stores.StoreStream
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
+import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
@@ -69,6 +74,8 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         val subtitle: String?
         val channel: Channel
         val showInviteOption: Boolean
+        val showActivitiesOption: Boolean
+        val isSelfMuted: Boolean
         val isNoiseCancellationActive: Boolean?
         val isDeafened: Boolean
         val centerContent: CenterContent
@@ -126,17 +133,17 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
 
     private lateinit var root: CoordinatorLayout
     private lateinit var headerTitle: TextView
-    private lateinit var headerSubtitle: TextView
-    private lateinit var headerDeafen: ImageView
+    private lateinit var headerAudioOutput: ImageView
+    private lateinit var headerChat: ImageView
+    private lateinit var prejoinMute: ImageView
+    private lateinit var prejoinChat: ImageView
+    private lateinit var optionsHandle: View
     private lateinit var headerInvite: ImageView
-    private lateinit var headerNoiseCancellation: ImageView
-    private lateinit var headerSettings: ImageView
     private lateinit var recycler: RecyclerView
     private lateinit var emptyView: View
     private lateinit var controls: AnchoredVoiceControlsView
-    private lateinit var connectContainer: RelativeLayout
+    private lateinit var connectContainer: View
     private lateinit var connectButton: MaterialButton
-    private lateinit var joinVideoButton: MaterialButton
 
     override fun getContentViewResId(): Int = R.layout.widget_voice_bottom_sheet
 
@@ -187,54 +194,87 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     private fun bindViews(view: View) {
         root = view.findViewById(R.id.voice_bottom_sheet_root)
         headerTitle = view.findViewById(R.id.voice_bottom_sheet_header_title)
-        headerSubtitle = view.findViewById(R.id.voice_bottom_sheet_header_subtitle)
-        headerDeafen = view.findViewById(R.id.voice_bottom_sheet_header_deafen)
         headerInvite = view.findViewById(R.id.voice_bottom_sheet_header_invite)
-        headerNoiseCancellation =
-            view.findViewById(R.id.voice_bottom_sheet_header_noise_cancellation)
-        headerSettings = view.findViewById(R.id.voice_bottom_sheet_header_settings)
+        headerAudioOutput = view.findViewById(R.id.voice_bottom_sheet_header_audio_output)
+        headerChat = view.findViewById(R.id.voice_bottom_sheet_header_chat)
+        prejoinMute = view.findViewById(R.id.voice_bottom_sheet_prejoin_mute)
+        prejoinChat = view.findViewById(R.id.voice_bottom_sheet_prejoin_chat)
+        optionsHandle = view.findViewById(R.id.voice_bottom_sheet_options_handle)
         recycler = view.findViewById(R.id.voice_bottom_sheet_recycler)
         emptyView = view.findViewById(R.id.empty)
         controls = view.findViewById(R.id.voice_bottom_sheet_controls)
         connectContainer = view.findViewById(R.id.voice_bottom_sheet_connect_container)
         connectButton = view.findViewById(R.id.voice_bottom_sheet_connect)
-        joinVideoButton = view.findViewById(R.id.voice_bottom_sheet_join_video)
     }
 
     // ---- rendering -----------------------------------------------------------------------------
 
     private fun configureUI(viewState: ViewState) {
         headerTitle.text = viewState.title
-        headerSubtitle.setTextAndVisibilityBy(viewState.subtitle)
-
-        headerDeafen.isActivated = viewState.isDeafened
-        headerDeafen.contentDescription =
-            getString(if (viewState.isDeafened) R.string.undeafen else R.string.deafen)
-        headerDeafen.setOnClickListener { viewModel.onDeafenPressed() }
 
         headerInvite.visibility = if (viewState.showInviteOption) View.VISIBLE else View.GONE
         headerInvite.setOnClickListener {
             launchChannelInvite(this, viewState.channel, INVITE_ANALYTICS_SOURCE)
         }
 
-        headerSettings.setOnClickListener {
-            WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, viewState.channel.id)
+        optionsHandle.setOnTouchListener(OptionsDragListener(viewState.channel.id))
+        headerTitle.setOnClickListener { showVoiceSettings(viewState.channel.id) }
+
+        headerAudioOutput.setOnClickListener { AudioOutputSelectionDialog.show(parentFragmentManager) }
+        listOf(headerChat, prejoinChat).forEach { chat ->
+            chat.setOnClickListener { openTextInVoice(viewState.channel) }
         }
 
-        headerNoiseCancellation.setOnClickListener { viewModel.onNoiseCancellationPressed() }
-        val noiseCancellationActive = viewState.isNoiseCancellationActive
-        if (noiseCancellationActive == null) {
-            headerNoiseCancellation.visibility = View.GONE
-        } else {
-            headerNoiseCancellation.setImageResource(
-                if (noiseCancellationActive) R.drawable.ic_noise_cancellation_active_24dp
-                else R.drawable.ic_noise_cancellation_disabled_24dp,
-            )
-            headerNoiseCancellation.visibility = View.VISIBLE
-        }
+        prejoinMute.setImageResource(
+            if (viewState.isSelfMuted) R.drawable.ic_mic_muted_grey_24dp else R.drawable.ic_mic_white_24dp,
+        )
+        prejoinMute.contentDescription = getString(if (viewState.isSelfMuted) R.string.unmute else R.string.mute)
+        prejoinMute.setOnClickListener { viewModel.onMutePressed() }
 
         configureCenterContent(viewState.centerContent, viewState.channel)
         configureBottomContent(viewState.bottomContent, viewState.channel)
+    }
+
+    private fun showVoiceSettings(channelId: Long) =
+        WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId, VoiceSettingsMode.MENU)
+
+    private fun showVoiceOptions(channelId: Long) =
+        WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId, VoiceSettingsMode.OPTIONS)
+
+    /** A tap or an upward drag on the handle pulls the voice options up. */
+    private inner class OptionsDragListener(private val channelId: Long) : View.OnTouchListener {
+        private var startY = 0f
+        private var opened = false
+
+        override fun onTouch(view: View, event: MotionEvent): Boolean {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    startY = event.rawY
+                    opened = false
+                    view.parent.requestDisallowInterceptTouchEvent(true)
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dragged = startY - event.rawY
+                    if (!opened && dragged >= OPTIONS_DRAG_SLOP_DP * resources.displayMetrics.density) {
+                        opened = true
+                        showVoiceOptions(channelId)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    view.parent.requestDisallowInterceptTouchEvent(false)
+                    if (!opened && event.actionMasked == MotionEvent.ACTION_UP) showVoiceOptions(channelId)
+                }
+            }
+            return true
+        }
+    }
+
+    private fun openTextInVoice(channel: Channel) {
+        ChannelSelector.getInstance().selectChannel(
+            channel,
+            analyticsLocation = SelectedChannelAnalyticsLocation.TEXT_IN_VOICE,
+        )
+        dismissSheet()
     }
 
     private fun configureCenterContent(centerContent: CenterContent, channel: Channel) {
@@ -317,7 +357,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 connectContainer.visibility = View.VISIBLE
 
                 connectButton.setText(
-                    if (bottomContent.isConnectEnabled) R.string.join_voice_channel_cta
+                    if (bottomContent.isConnectEnabled) R.string.join_voice
                     else R.string.channel_locked_short,
                 )
                 connectButton.isEnabled = bottomContent.isConnectEnabled
@@ -325,10 +365,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     requestMicrophone(null) { viewModel.tryConnectToVoice(false) }
                 }
 
-                joinVideoButton.isEnabled = bottomContent.isConnectEnabled
-                joinVideoButton.setOnClickListener {
-                    requestVideoCallPermissions { viewModel.tryConnectToVoice(true) }
-                }
                 root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
             }
         }
@@ -487,6 +523,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         private const val ARG_FEATURE_CONTEXT = "ARG_FEATURE_CONTEXT"
         private const val ARG_FORWARD_TO_FULLSCREEN_IF_VIDEO_ACTIVATED =
             "ARG_FORWARD_TO_FULLSCREEN_IF_VIDEO_ACTIVATED"
+        private const val OPTIONS_DRAG_SLOP_DP = 12
         private const val INVITE_ANALYTICS_SOURCE = "Voice Channel Bottom Sheet"
 
         fun show(

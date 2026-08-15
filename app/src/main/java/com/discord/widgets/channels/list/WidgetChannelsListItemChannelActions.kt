@@ -14,7 +14,10 @@ import com.discord.api.channel.isCategory
 import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isThreadOnlyChannel
+import com.discord.api.channel.isAnnouncementChannel
+import com.discord.api.channel.isGuildForumChannel
 import com.discord.api.channel.isGuildTextChannel
+import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isMultiUserDM
 import com.discord.api.channel.isPrivate
@@ -27,6 +30,7 @@ import com.discord.api.channel.isThreaded
 import com.discord.api.guild.GuildFeature
 import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
+import com.discord.app.AppToast
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreStream
 import com.discord.utilities.drawable.getThemedDrawableRes
@@ -35,7 +39,14 @@ import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.widgets.channels.WidgetCreateChannel
+import com.discord.widgets.channels.GroupDmLeave
+import com.discord.widgets.servers.settings.invites.WidgetServerSettingsInstantInvites
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
+import com.discord.widgets.stage.StageChannelJoinHelper
+import com.discord.widgets.stage.sheet.WidgetEndStageBottomSheet
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.facebook.drawee.view.SimpleDraweeView
 import rx.Observable
@@ -65,6 +76,12 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     private lateinit var invite: TextView
     private lateinit var openChat: TextView
     private lateinit var rehideSpoiler: TextView
+    private lateinit var copyLink: TextView
+    private lateinit var cloneChannel: TextView
+    private lateinit var joinStage: TextView
+    private lateinit var hideNames: TextView
+    private lateinit var endStage: TextView
+    private lateinit var closeChannel: TextView
     private lateinit var developerDivider: View
     private lateinit var copyId: TextView
 
@@ -83,6 +100,12 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         notifications = view.findViewById(R.id.action_channel_notifications)
         invite = view.findViewById(R.id.action_invite)
         rehideSpoiler = view.findViewById(R.id.action_rehide_spoiler)
+        copyLink = view.findViewById(R.id.action_copy_link)
+        cloneChannel = view.findViewById(R.id.action_clone_channel)
+        joinStage = view.findViewById(R.id.action_join_stage)
+        hideNames = view.findViewById(R.id.action_hide_names)
+        endStage = view.findViewById(R.id.action_end_stage)
+        closeChannel = view.findViewById(R.id.action_close_dm)
         developerDivider = view.findViewById(R.id.developer_divider)
         copyId = view.findViewById(R.id.action_copy_id)
     }
@@ -175,9 +198,16 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
             dmRecipient?.let { WidgetUserSheet.show(it.id, parentFragmentManager) }
         }
 
-        invite.visibility = if (model.canCreateInstantInvite) View.VISIBLE else View.GONE
+        // A group DM's owner manages its links instead; everyone else there has no invite row.
+        val gdmInviteLinks = channel.isMultiUserDM() && model.isOwner
+        invite.visibility = if (model.canCreateInstantInvite || gdmInviteLinks) View.VISIBLE else View.GONE
+        invite.setText(if (gdmInviteLinks) R.string.invite_links else R.string.instant_invite)
         invite.setOnClickAndDismissListener {
-            ChannelListNavigation.shareGuildInvite(this, channel.guildId)
+            if (gdmInviteLinks) {
+                WidgetServerSettingsInstantInvites.launchForChannel(requireContext(), 0L, channel.id)
+            } else {
+                ChannelListNavigation.shareGuildInvite(this, channel.guildId, channel.id)
+            }
         }
 
         // Only things that hold messages, and categories (which mute their children), can be muted.
@@ -197,7 +227,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
         // Forums have their own browser surface, and an NSFW channel's threads are not previewed.
         threadBrowser.visibility = if (
-            channel.isThreaded() && !channel.isThreadOnlyChannel() && !channel.nsfw
+            channel.isThreaded() && !channel.isThreadOnlyChannel() && !channel.nsfw && model.hasThreads
         ) {
             View.VISIBLE
         } else {
@@ -254,6 +284,10 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
         configureOptIn(channel)
         configurePinChannel(channel)
+        configureCopyLink(channel)
+        configureCloneChannel(model)
+        configureVoice(model)
+        configureCloseChannel(channel)
 
         val spoilerAgree = StoreStream.getChannelSpoilerAgree()
         rehideSpoiler.visibility =
@@ -270,17 +304,112 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     private fun settingsText(channel: Channel, canManageChannel: Boolean): String = getString(
         when {
             channel.isCategory() -> R.string.edit_category
+            channel.isMultiUserDM() -> R.string.customize_group
             canManageChannel -> R.string.edit_channel
             else -> R.string.channel_settings
         },
     )
+
+    private fun configureCopyLink(channel: Channel) {
+        copyLink.visibility = if (channel.isGuildTextyChannel() || channel.isGuildVocalChannel()) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        copyLink.setOnClickAndDismissListener {
+            AppToast.copyToClipboard(
+                requireContext(),
+                "https://discord.com/channels/${channel.guildId}/${channel.id}",
+                getString(R.string.link_copied),
+            )
+        }
+    }
+
+    /** A category clones into a new channel inside it; anything else clones its own type. */
+    private fun configureCloneChannel(model: Model) {
+        val channel = model.channel
+        val supported = channel.isCategory() || channel.type == Channel.GUILD_TEXT ||
+            channel.isAnnouncementChannel() || channel.isGuildForumChannel() ||
+            channel.type == Channel.GUILD_VOICE
+        cloneChannel.visibility = if (model.canManageChannel && supported) View.VISIBLE else View.GONE
+        cloneChannel.setText(if (channel.isCategory()) R.string.create_channel else R.string.clone_channel)
+        cloneChannel.setOnClickAndDismissListener {
+            WidgetCreateChannel.show(
+                requireContext(),
+                channel.guildId,
+                if (channel.isCategory()) Channel.GUILD_TEXT else channel.type,
+                if (channel.isCategory()) channel.id else channel.parentId.takeIf { it != 0L },
+            )
+        }
+    }
+
+    private fun configureVoice(model: Model) {
+        val channel = model.channel
+        val isStage = channel.isStageVoiceChannel()
+
+        joinStage.visibility = if (isStage) View.VISIBLE else View.GONE
+        joinStage.setOnClickAndDismissListener {
+            StageChannelJoinHelper.connectToStage(requireContext(), parentFragmentManager, channel.id)
+        }
+
+        hideNames.visibility = if (channel.type == Channel.GUILD_VOICE) View.VISIBLE else View.GONE
+        hideNames.setText(
+            if (model.isVoiceCollapsed) R.string.voice_channel_show_names else R.string.voice_channel_hide_names,
+        )
+        hideNames.setOnClickAndDismissListener {
+            StoreStream.getCollapsedVoiceChannels().toggle(channel.id)
+        }
+
+        endStage.visibility = if (isStage && model.isStageLive && model.canModerateStage) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+        endStage.setOnClickAndDismissListener {
+            WidgetEndStageBottomSheet.show(parentFragmentManager, END_STAGE_REQUEST_KEY, channel.id)
+        }
+    }
+
+    /**
+     * Closing a one-to-one DM only hides it, so it goes through unconfirmed; leaving a group needs a
+     * re-invite to undo and does not.
+     */
+    private fun configureCloseChannel(channel: Channel) {
+        val isGroup = channel.isMultiUserDM()
+        closeChannel.visibility = if (channel.isPrivate()) View.VISIBLE else View.GONE
+        closeChannel.setText(if (isGroup) R.string.leave_group_dm else R.string.close_dm)
+        closeChannel.setOnClickAndDismissListener {
+            if (!isGroup) {
+                closePrivateChannel(channel.id, silent = false)
+                return@setOnClickAndDismissListener
+            }
+            GroupDmLeave.confirm(
+                requireContext(),
+                parentFragmentManager,
+                channel.getDisplayNameOrDefault(requireContext()),
+            ) { silent -> closePrivateChannel(channel.id, silent) }
+        }
+    }
+
+    private fun closePrivateChannel(channelId: Long, silent: Boolean) {
+        RestAPI.api.deleteChannel(channelId, silent)
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(WidgetChannelsListItemChannelActions::class.java, context) { }
+    }
 
     private data class Model(
         val channel: Channel,
         val guild: Guild?,
         val permissions: Long?,
         val isMuted: Boolean,
+        val hasThreads: Boolean,
+        val isVoiceCollapsed: Boolean,
+        val isStageLive: Boolean,
     ) {
+        val canModerateStage: Boolean =
+            PermissionUtils.can(Permission.MODERATE_STAGE_CHANNEL, permissions)
+
         /** Developer mode adds the "Copy ID" row and its divider. */
         val isDeveloper: Boolean = StoreStream.getUserSettings().getIsDeveloperMode()
 
@@ -290,6 +419,8 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
         val canCreateInstantInvite: Boolean =
             PermissionUtils.can(Permission.CREATE_INSTANT_INVITE, permissions)
+
+        val isOwner: Boolean = channel.ownerId == StoreStream.getUsers().getMe().id
 
         fun muteChannelText(context: Context, channel: Channel): CharSequence = context.getString(
             when {
@@ -316,11 +447,23 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
                             StoreStream.getGuilds().observeFromChannelId(channelId),
                             StoreStream.getPermissions().observePermissionsForChannel(channelId),
                             StoreStream.getUserGuildSettings().observeGuildSettings(),
-                        ) { guild, permissions, guildSettings ->
+                            StoreStream.getThreadsActive()
+                                .observeChannelsWithActiveThreadsByGuild(channel.guildId),
+                            StoreStream.getCollapsedVoiceChannels().observeCollapsedVoiceChannels(),
+                            StoreStream.getStageInstances().observeStageInstanceForChannel(channelId),
+                        ) { guild, permissions, guildSettings, threadedChannels, collapsedVoice, stage ->
                             val isMuted = guildSettings[channel.guildId]
                                 ?.getChannelOverride(channel.id)
                                 ?.isMuted == true
-                            Model(channel, guild, permissions, isMuted)
+                            Model(
+                                channel,
+                                guild,
+                                permissions,
+                                isMuted,
+                                hasThreads = channel.id in threadedChannels,
+                                isVoiceCollapsed = channel.id in collapsedVoice,
+                                isStageLive = stage != null,
+                            )
                         }
                     }
                     source
@@ -333,6 +476,8 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     companion object {
         private const val INTENT_EXTRA_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
         private const val INVALID_CHANNEL_ID = -1L
+        private const val END_STAGE_REQUEST_KEY = "CHANNEL_ACTIONS_END_STAGE"
+
 
         @JvmStatic
         fun show(fragmentManager: FragmentManager, channelId: Long) {

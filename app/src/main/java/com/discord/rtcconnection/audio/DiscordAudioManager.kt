@@ -119,6 +119,9 @@ class DiscordAudioManager(context: Context) {
     private var headsetProfile: BluetoothHeadset? = null
     private var scoState: BluetoothScoState = BluetoothScoState.INVALID
 
+    /** A link that drops on its own is re-opened once; retrying every drop flaps the device list. */
+    private var scoReopenAttempted = false
+
     private var audioFocusChangeListener: AudioManager.OnAudioFocusChangeListener? = null
     private var audioFocusRequest: AudioFocusRequest? = null
 
@@ -428,11 +431,16 @@ class DiscordAudioManager(context: Context) {
             false
         }
 
+        val settling = synchronized(this) {
+            scoState == BluetoothScoState.TURNING_ON || scoState == BluetoothScoState.TURNING_OFF
+        }
+
         synchronized(lock) {
             val routedToBluetooth = inCommunicationMode && activeDevice == DeviceTypes.BLUETOOTH_HEADSET
             // Once routed to Bluetooth, "available" means an audio link exists — the adapter keeps
-            // reporting a connected profile after the SCO link has died.
-            val available = if (routedToBluetooth) activeBluetoothDevice != null else hasHeadset
+            // reporting a connected profile after the SCO link has died. A link that is still being
+            // set up has no audio device yet, and is not evidence that the headset went away.
+            val available = if (routedToBluetooth && !settling) activeBluetoothDevice != null else hasHeadset
             publishDevices(
                 devices.map { device ->
                     if (device.type != DeviceTypes.BLUETOOTH_HEADSET) {
@@ -515,6 +523,7 @@ class DiscordAudioManager(context: Context) {
         if (scoState == BluetoothScoState.ON || scoState == BluetoothScoState.TURNING_ON) return
         if (audioManager.isBluetoothScoOn) {
             scoState = BluetoothScoState.ON
+            scoReopenAttempted = false
             return
         }
         scoState = BluetoothScoState.TURNING_ON
@@ -537,6 +546,7 @@ class DiscordAudioManager(context: Context) {
 
     /** Must hold [lock]. */
     private fun publishDevices(updated: List<AudioDevice>) {
+        if (updated == devices) return
         devices = updated
         devicesSubject.onNext(updated)
     }
@@ -573,6 +583,7 @@ class DiscordAudioManager(context: Context) {
             when (update.state) {
                 ScoAudioState.Connected -> {
                     AppLog.i(TAG, "[onScoAudioStateUpdate] scoAudioStateUpdate = $update")
+                    scoReopenAttempted = false
                     startBluetoothSco()
                 }
                 ScoAudioState.Disconnected -> {
@@ -581,8 +592,9 @@ class DiscordAudioManager(context: Context) {
                     stopBluetoothSco()
                     when (previous) {
                         BluetoothScoState.ON -> {
-                            if (synchronized(lock) { inCommunicationMode }) {
+                            if (synchronized(lock) { inCommunicationMode } && !scoReopenAttempted) {
                                 AppLog.i(TAG, "SCO off detected directly from ON. Refreshing Bluetooth device")
+                                scoReopenAttempted = true
                                 startBluetoothSco()
                                 updateAudioDevices()
                             }

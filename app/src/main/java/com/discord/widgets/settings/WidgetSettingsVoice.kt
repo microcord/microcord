@@ -47,9 +47,9 @@ import kotlin.math.roundToInt
  * *perceived loudness* and is converted to amplitude on write, and sensitivity is stored in dBFS
  * (−100…0) and offset by 100 to fit a progress bar.
  *
- * The Krisp-backed rows — noise cancellation, its Learn More link and Advanced Voice Activity — are
- * shown only when [KrispAvailability.isAvailable]; without them suppression stands alone, which is
- * the fallback the reference uses when the engine reports Krisp unsupported.
+ * The Krisp radio group and Advanced Voice Activity are shown only when
+ * [KrispAvailability.isAvailable]; without them a lone suppression switch stands in, which is the
+ * fallback the reference uses when the engine reports Krisp unsupported.
  */
 class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
 
@@ -69,7 +69,11 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
     private lateinit var echoCancellationToggle: CheckedSetting
     private lateinit var noiseSuppressionToggle: CheckedSetting
     private lateinit var gainControlToggle: CheckedSetting
-    private lateinit var noiseCancellationToggle: CheckedSetting
+    private lateinit var noiseHeader: TextView
+    private lateinit var noiseKrisp: CheckedSetting
+    private lateinit var noiseStandard: CheckedSetting
+    private lateinit var noiseNone: CheckedSetting
+    private lateinit var krispFooter: TextView
     private lateinit var krispInfo: TextView
     private lateinit var krispVadToggle: CheckedSetting
     private lateinit var sidechainCompressionToggle: CheckedSetting
@@ -95,7 +99,11 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         echoCancellationToggle = view.findViewById(R.id.settings_voice_echo_cancellation_toggle)
         noiseSuppressionToggle = view.findViewById(R.id.settings_voice_noise_suppression_toggle)
         gainControlToggle = view.findViewById(R.id.settings_voice_gain_control_toggle)
-        noiseCancellationToggle = view.findViewById(R.id.settings_voice_noise_cancellation_toggle)
+        noiseHeader = view.findViewById(R.id.settings_voice_noise_header)
+        noiseKrisp = view.findViewById(R.id.settings_voice_noise_krisp)
+        noiseStandard = view.findViewById(R.id.settings_voice_noise_standard)
+        noiseNone = view.findViewById(R.id.settings_voice_noise_none)
+        krispFooter = view.findViewById(R.id.settings_voice_krisp_footer)
         krispInfo = view.findViewById(R.id.settings_voice_krisp_info)
         krispVadToggle = view.findViewById(R.id.settings_voice_krisp_vad_toggle)
         sidechainCompressionToggle =
@@ -111,7 +119,6 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             "helpdeskArticle" to KRISP_HELP_URL,
         )
         krispInfo.movementMethod = LinkMovementMethod.getInstance()
-
         configureOverlayToggle()
 
         listOf(
@@ -119,6 +126,8 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             view.findViewById(R.id.settings_voice_output_header),
             view.findViewById(R.id.settings_voice_overlay_header),
             view.findViewById(R.id.settings_voice_processing_header),
+            view.findViewById(R.id.settings_voice_noise_header),
+            view.findViewById(R.id.settings_voice_advanced_header),
         ).forEach(AccessibilityUtils::setViewIsHeading)
 
         val targetResId = mostRecentIntent.getIntExtra(ARG_TARGET_RES_ID, 0)
@@ -215,17 +224,24 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
      */
     private fun configureNoiseProcessing(config: StoreMediaSettings.VoiceConfiguration) {
         val krisp = KrispAvailability.isAvailable
-        listOf<View>(noiseCancellationToggle, krispInfo, krispVadToggle)
+        val options = listOf(
+            noiseKrisp to StoreMediaSettings.NoiseProcessing.Cancellation,
+            noiseStandard to StoreMediaSettings.NoiseProcessing.Suppression,
+            noiseNone to StoreMediaSettings.NoiseProcessing.None,
+        )
+        listOf<View>(noiseHeader, krispFooter, krispInfo, krispVadToggle).plus(options.map { it.first })
             .forEach { it.isVisible = krisp }
+        noiseSuppressionToggle.isVisible = !krisp
 
         if (krisp) {
-            noiseCancellationToggle.setChecked(
-                config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation,
-                false,
-            )
-            noiseCancellationToggle.setOnCheckedListener(
-                Action1 { StoreStream.getMediaSettings().toggleNoiseCancellation() },
-            )
+            options.forEach { (row, value) ->
+                row.setChecked(config.noiseProcessing == value, false)
+                row.setOnCheckedListener(
+                    Action1 { checked ->
+                        if (checked) StoreStream.getMediaSettings().setNoiseProcessing(value)
+                    },
+                )
+            }
             krispVadToggle.setChecked(
                 config.vadUseKrisp == StoreMediaSettings.VadUseKrisp.Enabled,
                 false,
@@ -233,36 +249,24 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
             krispVadToggle.setOnCheckedListener(
                 Action1 { StoreStream.getMediaSettings().toggleVADUseKrisp() },
             )
+            return
         }
 
-        val cancelling = krisp && config.noiseProcessing == StoreMediaSettings.NoiseProcessing.Cancellation
         noiseSuppressionToggle.setChecked(
             config.noiseProcessing != StoreMediaSettings.NoiseProcessing.None,
             false,
         )
-        if (cancelling) {
-            noiseSuppressionToggle.setDisabledTooltip(R.string.user_settings_disable_noise_suppression)
-            noiseSuppressionToggle.setSubtext(
-                getString(R.string.user_settings_disable_noise_suppression),
-            )
-        } else {
-            // Must go through setContainerClickListener: it is what clears the disabled tooltip and
-            // restores the row's alpha after a spell of Krisp cancellation. And the value is set
-            // rather than toggled, because from Cancellation a toggle only reaches Suppression and
-            // the row would stay checked.
-            noiseSuppressionToggle.setContainerClickListener {
+        noiseSuppressionToggle.setOnCheckedListener(
+            Action1 { checked ->
                 StoreStream.getMediaSettings().setNoiseProcessing(
-                    if (config.noiseProcessing == StoreMediaSettings.NoiseProcessing.None) {
+                    if (checked) {
                         StoreMediaSettings.NoiseProcessing.Suppression
                     } else {
                         StoreMediaSettings.NoiseProcessing.None
                     },
                 )
-            }
-            noiseSuppressionToggle.setSubtext(
-                getString(R.string.user_settings_noise_cancellation_description),
-            )
-        }
+            },
+        )
     }
 
     private fun configureVoiceSensitivity(viewState: SettingsVoiceViewModel.ViewState) {

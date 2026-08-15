@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="60dp"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <ImageView
+        android:id="@+id/voice_row_icon"
+        android:layout_width="32dp"
+        android:layout_height="24dp"
+        android:importantForAccessibility="no"
+        android:scaleType="fitCenter"
+        android:tint="?attr/colorInteractiveNormal" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/voice_row_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="?attr/colorHeaderPrimary"
+            style="@style/UiKit.TextView" />
+
+        <TextView
+            android:id="@+id/voice_row_sublabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="?attr/colorTextMuted"
+            android:visibility="gone"
+            style="@style/UiKit.TextView.Subtext" />
+    </LinearLayout>
+
+    <com.google.android.material.switchmaterial.SwitchMaterial
+        android:id="@+id/voice_row_switch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="18dp"
+        android:clickable="false"
+        android:duplicateParentState="true"
+        android:focusable="false" />
+</LinearLayout>

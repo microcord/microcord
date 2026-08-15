@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="60dp"
+    android:orientation="horizontal"
+    android:padding="12dp">
+
+    <com.facebook.drawee.view.SimpleDraweeView
+        android:id="@+id/voice_member_avatar"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        app:roundAsCircle="true" />
+
+    <TextView
+        android:id="@+id/voice_member_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/colorHeaderPrimary"
+        style="@style/UiKit.TextView" />
+
+    <ImageView
+        android:id="@+id/voice_member_video"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="8dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_videocam_white_24dp"
+        android:tint="?attr/colorInteractiveNormal"
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/voice_member_mute"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="8dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_mic_muted_grey_24dp"
+        android:tint="?attr/colorInteractiveNormal"
+        android:visibility="gone" />
+</LinearLayout>

@@ -64,6 +64,12 @@ data class CallModel(
     val isStreaming get() = activeStream?.stream?.ownerId == myId
     val isSuppressed get() = participants[myId]?.voiceState?.suppress == true
 
+    fun canUseActivities(): Boolean {
+        if (channel.isStageVoiceChannel() || guild?.afkChannelId == channel.id) return false
+        return channel.isPrivate() ||
+            (channel.isGuildVocalChannel() && hasPermission(USE_EMBEDDED_ACTIVITIES))
+    }
+
     fun canInvite(): Boolean {
         val isPrivate = channel.isPrivate()
         val canCreateInvite = channel.isGuildVocalChannel() && hasPermission(CREATE_INSTANT_INVITE)
@@ -95,6 +101,7 @@ data class CallModel(
 
     companion object {
         private const val CREATE_INSTANT_INVITE = Permission.CREATE_INSTANT_INVITE
+        private const val USE_EMBEDDED_ACTIVITIES = Permission.USE_EMBEDDED_ACTIVITIES
         private const val REQUEST_TO_SPEAK = Permission.REQUEST_TO_SPEAK
 
         /** `MANAGE_EVENTS | SEND_MESSAGES` — the floor for touching any scheduled event. */

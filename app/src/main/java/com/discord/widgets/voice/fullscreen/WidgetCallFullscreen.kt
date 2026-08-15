@@ -51,6 +51,8 @@ import com.discord.widgets.voice.fullscreen.stage.StageCallAdapter
 import com.discord.widgets.voice.fullscreen.stage.StageCallBottomSheetManager
 import com.discord.widgets.voice.fullscreen.stage.StageCallItem
 import com.discord.widgets.voice.model.CallModel
+import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
+import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.discord.widgets.voice.sheet.WidgetVoiceSettingsBottomSheet
 import com.discord.widgets.voice.stream.StreamNavigator
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -337,6 +339,9 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                 com.discord.widgets.voice.sheet.launchChannelInvite(this, state.callModel.channel, "Voice Call")
             },
             onScreenshareClick = viewModel::onScreenShareClick,
+            onActivitiesClick = {
+                WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.VOICE)
+            },
             onSoundboardClick = {
                 com.discord.widgets.voice.sheet.WidgetSoundboardBottomSheet.show(
                     parentFragmentManager,
@@ -471,6 +476,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                         false,
                         com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet.FeatureContext.FULLSCREEN_CALL,
                     ).onStreamPreviewClickedListener = { viewModel.targetAndFocusStream(it.stream.encodedStreamKey) }
+                    R.id.menu_call_activities ->
+                        WidgetAppLauncher.show(parentFragmentManager, channelId, AppLauncherEntrypoint.VOICE)
                     R.id.menu_call_voice_settings ->
                         WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId)
                     R.id.menu_text_in_voice -> openTextInVoice()
@@ -483,6 +490,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                     WidgetCallFullscreenViewModel.MenuItem.SWITCH_CAMERA in state.menuItems
                 menu.findItem(R.id.menu_call_video_list).isVisible =
                     WidgetCallFullscreenViewModel.MenuItem.SHOW_PARTICIPANT_LIST in state.menuItems
+                menu.findItem(R.id.menu_call_activities).isVisible =
+                    WidgetCallFullscreenViewModel.MenuItem.ACTIVITIES in state.menuItems
                 menu.findItem(R.id.menu_call_voice_settings).isVisible =
                     WidgetCallFullscreenViewModel.MenuItem.VOICE_SETTINGS in state.menuItems
                 menu.findItem(R.id.menu_text_in_voice).apply {
