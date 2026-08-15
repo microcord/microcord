@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.i18n.i18nRenderPlural
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
@@ -100,6 +101,7 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
                 drawableNoChildren = themedDrawable(R.attr.bg_folder_no_children),
                 tintableDrawableNoChildren = themedDrawable(R.attr.bg_folder_tintable_no_children),
                 drawableWithChildren = themedDrawable(R.attr.bg_folder_with_children),
+                defaultColor = ColorCompat.getThemedColor(requireContext(), R.attr.color_brand_500),
                 sizePx = resources.getDimensionPixelSize(R.dimen.avatar_size_large),
             ),
         )

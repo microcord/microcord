@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewStub
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
@@ -116,6 +119,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         pluginHeaderRegistration = PluginUiRegistry.addHeaderListener { view.post(::refreshChatToolbar) }
         panels = view.findViewById(R.id.overlapping_panels)
         centerBorder = view.findViewById(R.id.widget_home_panel_center_border)
+        applyPanelInsets(view)
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
@@ -160,6 +164,18 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             privateCallLauncher().let { launcher ->
                 if (isVideo) launcher.launchVideoCall(channelId) else launcher.launchVoiceCall(channelId)
             }
+        }
+    }
+
+    /** The panels take the bottom inset so the gesture bar's strip slides with them. */
+    private fun applyPanelInsets(root: View) {
+        val panelViews = listOf(R.id.panel_left, R.id.panel_center, R.id.panel_right)
+            .map { root.findViewById<View>(it) }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { frame, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            frame.updatePadding(top = bars.top)
+            panelViews.forEach { it.updatePadding(left = bars.left, right = bars.right, bottom = bars.bottom) }
+            WindowInsetsCompat.CONSUMED
         }
     }
 

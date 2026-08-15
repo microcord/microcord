@@ -65,10 +65,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         configureTheme(state)
         // Owned here rather than by each host: the pill is part of this view, and three screens
         // render it, of which only one ever remembered to colour it.
-        badgeRowColor = ProfileThemeColors.surfaceOverlay(
-            state.profileThemeColors(isDarkTheme()),
-            isDarkTheme(),
-        )
+        badgeRowColor = ProfileThemeColors.surfaceOverlay(state.profileThemeColors(isDarkTheme()))
         binding.largeAvatar.setOnAvatarBitmapLoadedListener { bitmap, _ ->
             val pixel = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
             onAvatarRepresentativeColorUpdated(pixel)
@@ -267,7 +264,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
     }
 
     /** Matches the content cards, which is where the reference takes this pill's colour from. */
-    var badgeRowColor: Int = ColorCompat.getThemedColor(context, R.attr.colorBackgroundPrimary)
+    var badgeRowColor: Int = ProfileThemeColors.SURFACE_OVERLAY
         set(value) {
             if (field == value) return
             field = value

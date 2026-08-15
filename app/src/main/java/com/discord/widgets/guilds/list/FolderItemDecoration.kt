@@ -2,6 +2,7 @@ package com.discord.widgets.guilds.list
 
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import androidx.annotation.ColorInt
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.recyclerview.widget.RecyclerView
 
@@ -12,15 +13,18 @@ import androidx.recyclerview.widget.RecyclerView
  * purely decorative and has to be painted underneath them here.
  *
  * Three drawables, all resolved from theme attributes by the fragment:
- * * [drawableNoChildren] — a collapsed folder, and the folder-creation preview under a guild that
- *   is currently being dragged onto,
- * * [tintableDrawableNoChildren] — the same, tinted when the folder has a custom colour,
+ * * [drawableNoChildren] — the folder-creation preview under a guild that is currently being
+ *   dragged onto,
+ * * [tintableDrawableNoChildren] — a collapsed folder, always tinted with its colour,
  * * [drawableWithChildren] — the tall capsule spanning a folder and its expanded children.
+ *
+ * [defaultColor] is the reference's `DEFAULT_FOLDER_COLOR`, used where a folder sets none.
  */
 class FolderItemDecoration(
     private val drawableNoChildren: Drawable,
     private val tintableDrawableNoChildren: Drawable,
     private val drawableWithChildren: Drawable,
+    @ColorInt private val defaultColor: Int,
     sizePx: Int,
 ) : RecyclerView.ItemDecoration() {
 
@@ -40,13 +44,8 @@ class FolderItemDecoration(
                 val centerY = (view.top + view.bottom) / 2
                 val numChildren = holder.numChildren
                 if (numChildren == 0) {
-                    val color = holder.color
-                    val drawable = if (color != null) {
-                        DrawableCompat.setTint(tintableDrawableNoChildren, color)
-                        tintableDrawableNoChildren
-                    } else {
-                        drawableNoChildren
-                    }
+                    DrawableCompat.setTint(tintableDrawableNoChildren, holder.color ?: defaultColor)
+                    val drawable = tintableDrawableNoChildren
                     drawable.setBounds(
                         centerX - halfSize,
                         centerY - halfSize,

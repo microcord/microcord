@@ -13,7 +13,6 @@ import com.discord.stores.StoreMessagesLoader
 import com.discord.app.AppFragment
 import com.discord.app.appActivityViewModels
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
-import com.discord.widgets.chat.overlay.ChatTypingModel
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AppFlexInputViewModel
@@ -69,24 +68,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
             .appSubscribe(WidgetChatList::class.java, onNext = ::configureUI)
         StoreStream.getMessagesLoader().observeScrollTo().ui(this)
             .appSubscribe(WidgetChatList::class.java, onNext = ::scrollTo)
-        ChatTypingModel.get().ui(this)
-            .appSubscribe(WidgetChatList::class.java, onNext = ::reserveOverlaySpace)
         defaultItemAnimator = recycler?.itemAnimator
-    }
-
-    /**
-     * The typing/slowmode bar is an overlay pinned to the same bottom edge as this list, so without
-     * this the last message sits underneath it once scrolled to the end.
-     */
-    private fun reserveOverlaySpace(model: ChatTypingModel) {
-        val list = recycler ?: return
-        val inset = if (model.showsBar) {
-            resources.getDimensionPixelSize(R.dimen.uikit_typing_indicator_height)
-        } else {
-            0
-        }
-        if (list.paddingBottom == inset) return
-        list.setPadding(list.paddingLeft, list.paddingTop, list.paddingRight, inset)
     }
 
     override fun onPause() {

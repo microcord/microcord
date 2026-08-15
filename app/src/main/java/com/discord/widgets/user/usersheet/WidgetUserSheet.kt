@@ -608,7 +608,7 @@ class WidgetUserSheet : AppBottomSheet() {
 
     private fun isDarkTheme() = StoreStream.getUserSettingsSystem().isDarkTheme()
 
-    private fun surfaceColor() = ProfileThemeColors.surfaceOverlay(profileThemeColors, isDarkTheme())
+    private fun surfaceColor() = ProfileThemeColors.surfaceOverlay(profileThemeColors)
 
     private fun borderColor() = profileThemeColors?.borderOverlay
         ?: if (isDarkTheme()) BORDER_OVERLAY_DARK else BORDER_OVERLAY_LIGHT
