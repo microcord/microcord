@@ -292,18 +292,9 @@ class StoreMessagesHolder @JvmOverloads constructor(
         publishIfUpdated()
     }
 
-    /**
-     * Marks everything stale and narrows the active set to the open channel.
-     *
-     * Called on disconnect: anything the client believes about a channel it is no longer watching
-     * is unverifiable, and re-opening it must re-fetch.
-     */
     @Synchronized
-    fun invalidate() {
-        messages.values.forEach { staleMessages += it.keys }
-        activeChannels.clear()
-        if (selectedChannelId > 0) activeChannels += selectedChannelId
-        if (activeVoiceChannelId > 0) activeChannels += activeVoiceChannelId
+    fun invalidateChannels(channelIds: Set<Long>) {
+        channelIds.forEach { channelId -> messages[channelId]?.keys?.let(staleMessages::addAll) }
     }
 
     /**
@@ -780,16 +771,14 @@ class StoreMessages @JvmOverloads constructor(
         markChanged()
     }
 
-    /**
-     * On disconnect, invalidate history; on reconnect, let every queue retry.
-     *
-     * The reconnect half is what drains messages that failed while offline without waiting for
-     * their individual backoffs to expire.
-     */
+    /** Reconnecting lets every queued send retry without discarding resumable message history. */
     @StoreThread
     fun handleConnected(connected: Boolean) {
-        if (!connected) holder.invalidate() else sendCoordinator?.handleConnected()
+        if (connected) sendCoordinator?.handleConnected()
     }
+
+    @StoreThread
+    fun handleFreshSessionReady(staleChannelIds: Set<Long>) = holder.invalidateChannels(staleChannelIds)
 
     /** Records the current user so reaction updates can be attributed. */
     @StoreThread

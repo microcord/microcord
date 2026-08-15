@@ -2012,6 +2012,7 @@ class StoreStream private constructor(
         val events = gatewayConnection
 
         dispatchSubscribe(events.getConnected(), "streamConnected", ::handleGatewayConnectedInternal)
+        dispatchSubscribe(events.getFreshSession(), "streamFreshSession") { messagesLoader.handleFreshSession() }
         dispatchSubscribe(events.getConnectionReady(), "streamReady", ::handleGatewayConnectionReadyInternal)
         dispatchSubscribe(events.ready, "streamConnectionOpen", ::handleConnectionOpenInternal)
         dispatchSubscribe(events.readySupplemental, "streamConnectionOpenSupplemental", ::handleConnectionOpenSupplementalInternal)
@@ -3365,6 +3366,10 @@ class StoreStream private constructor(
         permissions.handleConnectionOpen()
         guildSelected.handleConnectionOpen(payload)
         channelsSelected.handleConnectionOpen(payload)
+        val staleMessageChannels = messagesLoader.handleFreshSessionReady(
+            rawPayload.readyLastMessageIds(),
+        ) { channelId -> messages.getMessages(channelId).maxOfOrNull(DomainMessage::id) }
+        messages.handleFreshSessionReady(staleMessageChannels)
         collapsedChannelCategories.handleConnectionOpen(payload)
         collapsedVoiceChannels.handleConnectionOpen(payload)
         stageInstances.handleConnectionOpen(payload.guilds.orEmpty())
@@ -3431,6 +3436,23 @@ class StoreStream private constructor(
             .forEach(::requestDeletedGuildEntities)
         BootLog.record(BootLogEvent.CACHE_HYDRATION_FINISHED)
         navigation.updateAuthState(authentication.getAuthState())
+    }
+
+    private fun ModelPayload.readyLastMessageIds(): Map<Long, Long> = buildMap {
+        fun addChannels(channels: List<Channel>?) {
+            channels.orEmpty().forEach { put(it.id, it.lastMessageId) }
+        }
+        addChannels(privateChannels)
+        guilds.orEmpty().forEach { guild ->
+            addChannels(guild.channels)
+            addChannels(guild.threads)
+        }
+        readyGuilds.orEmpty().forEach { guild ->
+            addChannels(guild.channels)
+            addChannels(guild.threads)
+            addChannels(guild.partialUpdates?.channels)
+            guild.channelUpdates.orEmpty().forEach { put(it.id, it.lastMessageId) }
+        }
     }
 
     /**
@@ -3774,6 +3796,10 @@ class StoreStream private constructor(
         private const val GATEWAY_INIT_TIMEOUT_MS = 10_000L
         private const val GATEWAY_TAG = "ManticordGateway"
         @Volatile private var instance: StoreStream? = null
+
+        fun disconnectGatewayForTaskRemoval() {
+            instance?.gateway?.close()
+        }
 
         private fun acceptLanguages(): String {
             val locales = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {

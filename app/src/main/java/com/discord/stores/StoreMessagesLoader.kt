@@ -130,8 +130,6 @@ class StoreMessagesLoader @JvmOverloads constructor(
 
     private var selectedChannelId = 0L
     private var authed = false
-    private var hasConnected = false
-
     /**
      * Whether the app is in the background; nothing loads while it is.
      *
@@ -149,6 +147,7 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private var jumpChannelSubscription: Subscription? = null
     private var pendingJump: PendingJump? = null
     private var lastRequest: LoadRequest? = null
+    private var awaitingFreshSessionReady = false
 
     /**
      * Subscribes to the scroll position and the detached-channel set.
@@ -174,16 +173,35 @@ class StoreMessagesLoader @JvmOverloads constructor(
         tryLoadMessages(resetRetry = true)
     }
 
-    /**
-     * Resets loaded state only on a disconnect that follows a real connection.
-     *
-     * The `hasConnected` guard stops the very first "not connected yet" callback from wiping
-     * state that was just restored from cache.
-     */
     @Synchronized
-    fun handleConnected(connected: Boolean) {
-        if (connected) hasConnected = true else if (hasConnected) channelLoadedStatesReset()
-        tryLoadMessages(resetRetry = true, resetDelay = hasConnected)
+    fun handleConnected(@Suppress("UNUSED_PARAMETER") connected: Boolean) {
+        tryLoadMessages(resetRetry = true, resetDelay = true)
+    }
+
+    /** A fresh IDENTIFY cannot replay missed messages; READY will identify stale channels. */
+    @Synchronized
+    fun handleFreshSession() {
+        awaitingFreshSessionReady = true
+    }
+
+    @Synchronized
+    fun handleFreshSessionReady(
+        serverLastMessageIds: Map<Long, Long>,
+        localLastMessageId: (Long) -> Long?,
+    ): Set<Long> {
+        if (!awaitingFreshSessionReady) return emptySet()
+        awaitingFreshSessionReady = false
+        val staleChannels = channelLoadedStates.keys.filterTo(HashSet()) { channelId ->
+            serverLastMessageIds[channelId]?.let { it != (localLastMessageId(channelId) ?: 0L) } == true
+        }
+        staleChannels.forEach { channelId ->
+            channelLoadedStates[channelId] = requireNotNull(channelLoadedStates[channelId]).let {
+                it.copy(isInitialMessagesLoaded = false, isOldestMessagesLoaded = false, isLoadingMessages = false)
+            }
+        }
+        channelLoadedStateSubject.onNext(Collections.unmodifiableMap(HashMap(channelLoadedStates)))
+        tryLoadMessages(resetRetry = true, resetDelay = true)
+        return staleChannels
     }
 
     /**
@@ -394,6 +412,7 @@ class StoreMessagesLoader @JvmOverloads constructor(
         interactionState = null
         detachedChannels = emptySet()
         lastRequest = null
+        awaitingFreshSessionReady = false
         channelMessagesLoadingSubject.onNext(false)
     }
 

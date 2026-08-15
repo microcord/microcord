@@ -90,6 +90,7 @@ internal class DeferredGatewayEventHandler : GatewayEventHandler {
 
     override fun handleConnected(connected: Boolean) = deliver { it.handleConnected(connected) }
     override fun handleConnectionReady(connectionReady: Boolean) = deliver { it.handleConnectionReady(connectionReady) }
+    override fun handleFreshSession() = deliver(GatewayEventHandler::handleFreshSession)
     override fun handleDisconnect(authenticationFailed: Boolean) = deliver { it.handleDisconnect(authenticationFailed) }
     override fun handleDispatch(type: String?, data: Any) = deliver { it.handleDispatch(type, data) }
 }

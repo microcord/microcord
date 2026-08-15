@@ -223,6 +223,30 @@ class MessageHistoryStoreTest {
     }
 
     @Test
+    fun freshGatewayReadyRefetchesOnlyMismatchedChannels() {
+        val requests = mutableListOf<LoadRequest>()
+        val states = mutableListOf<StoreMessagesLoader.ChannelLoadedState>()
+        val loader = loader(requests) { Result.success(emptyList()) }
+        loader.getMessagesLoadedState(12).subscribe(states::add)
+        loader.handleAuthToken("token")
+        loader.handleConnected(true)
+        loader.handleChannelSelected(12)
+
+        loader.handleConnected(false)
+        assertEquals(listOf(12L), requests.map(LoadRequest::channelId))
+        loader.handleFreshSession()
+        assertEquals(listOf(12L), requests.map(LoadRequest::channelId))
+        assertTrue(loader.handleFreshSessionReady(mapOf(12L to 2L)) { 1L }.contains(12L))
+
+        assertEquals(listOf(12L, 12L), requests.map(LoadRequest::channelId))
+        assertTrue(states.count { it.isLoadingMessages } >= 2)
+
+        loader.handleFreshSession()
+        assertTrue(loader.handleFreshSessionReady(mapOf(12L to 2L)) { 2L }.isEmpty())
+        assertEquals(2, requests.size)
+    }
+
+    @Test
     fun forumParentSelectionDoesNotLoadMessageHistoryButItsPostDoes() {
         val requests = mutableListOf<LoadRequest>()
         val loader = loader(requests) { Result.success(emptyList()) }

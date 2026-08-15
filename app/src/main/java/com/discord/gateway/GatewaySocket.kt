@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit
 interface GatewayEventHandler {
     fun handleConnected(connected: Boolean)
     fun handleConnectionReady(connectionReady: Boolean)
+    fun handleFreshSession()
     fun handleDisconnect(authenticationFailed: Boolean)
     fun handleDispatch(type: String?, data: Any)
 }
@@ -123,6 +124,7 @@ class GatewaySocket(
     private var upcomingQos: HeartbeatQos? = null
     private var lastHeartbeatAck = 0L
     private var heartbeatTask: GatewayCancellable? = null
+    private var activeHeartbeatTimeoutTask: GatewayCancellable? = null
     private var helloTimeoutTask: GatewayCancellable? = null
     private var reconnectTask: GatewayCancellable? = null
     private var failures = 0
@@ -391,6 +393,7 @@ class GatewaySocket(
             return
         }
         state = State.IDENTIFYING
+        eventHandler.handleFreshSession()
         BootLog.record(BootLogEvent.GATEWAY_IDENTIFY)
         logInfo("sending IDENTIFY clientState=${data.clientState}")
         token = data.token
@@ -443,6 +446,8 @@ class GatewaySocket(
             Opcode.HEARTBEAT_ACK -> {
                 heartbeatAcknowledged = true
                 lastHeartbeatAck = scheduler.now()
+                activeHeartbeatTimeoutTask?.cancel()
+                activeHeartbeatTimeoutTask = null
             }
             else -> Unit
         }
@@ -478,16 +483,27 @@ class GatewaySocket(
 
     /** Active is per window, not per moment: it sticks until the window is consumed. */
     fun handleActiveStateChange(qos: HeartbeatQos) {
-        val wasInactive = currentQos?.active != true
-        val current = currentQos ?: qos.also { currentQos = it }
-        if (qos.active) {
-            currentQos = current.copy(
-                active = true,
-                reasons = (current.reasons + qos.reasons).distinct().sorted(),
-            )
-            if (wasInactive && isSessionEstablished()) heartbeat()
+        scheduler.schedule(0) {
+            val wasInactive = (upcomingQos ?: currentQos)?.active != true
+            val current = currentQos ?: qos.also { currentQos = it }
+            if (qos.active) {
+                currentQos = current.copy(
+                    active = true,
+                    reasons = (current.reasons + qos.reasons).distinct().sorted(),
+                )
+                if (wasInactive && isSessionEstablished()) {
+                    heartbeat()
+                    activeHeartbeatTimeoutTask?.cancel()
+                    activeHeartbeatTimeoutTask = scheduler.schedule(ACTIVE_HEARTBEAT_ACK_TIMEOUT_MS) {
+                        activeHeartbeatTimeoutTask = null
+                        if (state == State.CONNECTED && !heartbeatAcknowledged) {
+                            reconnect("Gateway foreground heartbeat ACK timeout", immediate = true)
+                        }
+                    }
+                }
+            }
+            upcomingQos = qos
         }
-        upcomingQos = qos
     }
 
     fun handleUpdateTimeSpentSessionId(
@@ -600,6 +616,8 @@ class GatewaySocket(
         generation++
         heartbeatTask?.cancel()
         heartbeatTask = null
+        activeHeartbeatTimeoutTask?.cancel()
+        activeHeartbeatTimeoutTask = null
         helloTimeoutTask?.cancel()
         helloTimeoutTask = null
         decoder.reset()
@@ -643,6 +661,7 @@ class GatewaySocket(
         private const val MAX_VERBOSE_LOG_BYTES = 256 * 1024
         const val TAG = "ManticordGateway"
         const val HELLO_TIMEOUT_MS = 20_000L
+        const val ACTIVE_HEARTBEAT_ACK_TIMEOUT_MS = 5_000L
         const val RESUME_WINDOW_MS = 180_000L
         const val MIN_BACKOFF_MS = 1_000L
         const val MAX_BACKOFF_MS = 10_000L

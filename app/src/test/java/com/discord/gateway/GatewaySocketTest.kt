@@ -37,6 +37,7 @@ class GatewaySocketTest {
         val handler = object : GatewayEventHandler {
             override fun handleConnected(connected: Boolean) { events += "connected:$connected" }
             override fun handleConnectionReady(connectionReady: Boolean) { events += "ready:$connectionReady" }
+            override fun handleFreshSession() { events += "fresh" }
             override fun handleDisconnect(authenticationFailed: Boolean) { events += "disconnect:$authenticationFailed" }
             override fun handleDispatch(type: String?, data: Any) { events += "dispatch:$type:$data" }
         }
@@ -70,6 +71,26 @@ class GatewaySocketTest {
     }
 
     @Test
+    fun foregroundHeartbeatReconnectsSuspendedSocketWithoutWaitingForNormalInterval() {
+        val harness = Harness()
+        harness.connectReady(sequence = 1, sessionId = "fixture-session", heartbeatInterval = 60_000)
+
+        harness.gateway.handleActiveStateChange(com.discord.gateway.io.HeartbeatQos(true, 1, listOf("foregrounded")))
+        harness.scheduler.runCurrent()
+        harness.socket.serverMessage("{\"op\":11,\"d\":null}")
+        harness.scheduler.runCurrent()
+        harness.gateway.handleActiveStateChange(com.discord.gateway.io.HeartbeatQos(false, 1, emptyList()))
+        harness.scheduler.runCurrent()
+        harness.gateway.handleActiveStateChange(com.discord.gateway.io.HeartbeatQos(true, 1, listOf("foregrounded")))
+        harness.scheduler.runCurrent()
+        assertEquals(1, harness.socket.lastOp())
+        harness.scheduler.advanceBy(4_999)
+        assertEquals(1, harness.factory.sockets.size)
+        harness.scheduler.advanceBy(1)
+        assertEquals(2, harness.factory.sockets.size)
+    }
+
+    @Test
     fun reconnectResumesLatestSequenceAndDispatchesIt() {
         val harness = Harness()
         harness.connectReady(sequence = 7, sessionId = "fixture-session")
@@ -91,6 +112,7 @@ class GatewaySocketTest {
         assertEquals(6, resume["op"].asInt)
         assertEquals("fixture-session", resume["d"].asJsonObject["session_id"].asString)
         assertEquals(42, resume["d"].asJsonObject["seq"].asInt)
+        assertEquals(1, harness.handler.freshSessions)
     }
 
     @Test
@@ -104,6 +126,7 @@ class GatewaySocketTest {
         assertEquals(2, identify["op"].asInt)
         // Dropped: current Discord does not send it.
         assertFalse(identify["d"].asJsonObject.has("large_threshold"))
+        assertEquals(2, harness.handler.freshSessions)
         assertEquals(
             GatewayCapabilities.ENABLED.toInt(),
             identify["d"].asJsonObject["capabilities"].asInt,
@@ -236,9 +259,9 @@ class GatewaySocketTest {
             scheduler.runCurrent()
         }
 
-        fun connectReady(sequence: Int, sessionId: String) {
+        fun connectReady(sequence: Int, sessionId: String, heartbeatInterval: Long = 1_000) {
             connect()
-            socket.serverMessage(hello())
+            socket.serverMessage(hello(heartbeatInterval))
             socket.serverMessage("{\"op\":0,\"s\":$sequence,\"t\":\"READY\",\"d\":{\"session_id\":\"$sessionId\"}}")
             scheduler.runCurrent()
             assertTrue(gateway.isSessionEstablished())
@@ -257,11 +280,13 @@ class GatewaySocketTest {
 
     private class RecordingHandler : GatewayEventHandler {
         val readyStates = mutableListOf<Boolean>()
+        var freshSessions = 0
         val disconnects = mutableListOf<Boolean>()
         val dispatches = mutableListOf<Pair<String?, String>>()
 
         override fun handleConnected(connected: Boolean) = Unit
         override fun handleConnectionReady(connectionReady: Boolean) { readyStates += connectionReady }
+        override fun handleFreshSession() { freshSessions++ }
         override fun handleDisconnect(authenticationFailed: Boolean) { disconnects += authenticationFailed }
         override fun handleDispatch(type: String?, data: Any) {
             dispatches += type to data.toString()
@@ -325,6 +350,7 @@ class GatewaySocketTest {
     }
 
     private companion object {
-        fun hello() = "{\"op\":10,\"d\":{\"heartbeat_interval\":1000,\"_trace\":[\"edge\"]}}"
+        fun hello(interval: Long = 1_000) =
+            "{\"op\":10,\"d\":{\"heartbeat_interval\":$interval,\"_trace\":[\"edge\"]}}"
     }
 }

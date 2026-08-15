@@ -125,6 +125,7 @@ class StoreGatewayConnection(
     // Connection state
     private val connected = behavior(false)
     private val connectionReady = behavior(false)
+    private val freshSession = behavior<Unit>()
 
     // Session
     val ready = behavior<ModelPayload>()
@@ -261,6 +262,7 @@ class StoreGatewayConnection(
     fun getConnected(): Observable<Boolean> = connected.distinctUntilChanged()
 
     fun getConnectionReady(): Observable<Boolean> = connectionReady.distinctUntilChanged()
+    fun getFreshSession(): Observable<Unit> = freshSession
 
     /**
      * Adopts [socket] and ties its lifetime to whether we hold a token.
@@ -469,6 +471,10 @@ class StoreGatewayConnection(
 
     override fun handleConnectionReady(connectionReady: Boolean) {
         this.connectionReady.onNext(connectionReady)
+    }
+
+    override fun handleFreshSession() {
+        freshSession.onNext(Unit)
     }
 
     override fun handleDisconnect(authenticationFailed: Boolean) {

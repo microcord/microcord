@@ -705,7 +705,12 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         .also { theme.resolveAttribute(attributeResId, it, true) }
         .resourceId
 
-    class Main : AppActivity()
+    class Main : AppActivity() {
+        override fun onDestroy() {
+            if (isFinishing && !isChangingConfigurations) StoreStream.disconnectGatewayForTaskRemoval()
+            super.onDestroy()
+        }
+    }
 
     /** Dedicated single-task host for the active fullscreen call surface. */
     class Call : AppActivity() {
