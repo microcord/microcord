@@ -915,6 +915,13 @@ interface RestAPIInterface {
     @DELETE("channels/{channelId}")
     fun deleteChannel(@Path("channelId") channelId: Long): Observable<Channel>
 
+    /** `silent` suppresses the "left the group" system message; group DMs only. */
+    @DELETE("channels/{channelId}")
+    fun deleteChannel(
+        @Path("channelId") channelId: Long,
+        @Query("silent") silent: Boolean,
+    ): Observable<Channel>
+
     @GET("channels/{channelId}/call")
     fun call(@Path("channelId") channelId: Long): Observable<ModelCall.Ringable>
 
@@ -1454,6 +1461,9 @@ interface RestAPIInterface {
 
     @GET("guilds/{guildId}/invites")
     fun getGuildInvites(@Path("guildId") guildId: Long): Observable<List<ModelInvite>>
+
+    @GET("channels/{channelId}/invites")
+    fun getChannelInvites(@Path("channelId") channelId: Long): Observable<List<ModelInvite>>
 
     @DELETE("invites/{inviteCode}")
     fun revokeInvite(@Path("inviteCode") inviteCode: String): Observable<ModelInvite>

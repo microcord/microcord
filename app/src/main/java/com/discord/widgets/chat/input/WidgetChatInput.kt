@@ -31,6 +31,9 @@ import androidx.appcompat.app.AlertDialog
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
+import com.discord.models.commands.BuiltInCommand
+import com.discord.models.commands.BuiltInCommandAction
+import com.discord.widgets.chat.input.models.ApplicationCommandData
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isPendingMessageRequestChannel
@@ -1068,6 +1071,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             }
             val command = commandData.applicationCommand
             if (command.builtIn) {
+                val action = (command as? BuiltInCommand)?.action
+                if (action != null) {
+                    runBuiltInAction(action, loaded.channel, commandData)
+                    drafts.setTextChannelInput(loaded.channelId, null)
+                    return true
+                }
                 content = command.execute?.invoke(commandData.values.associate { it.name to it.value })
                     ?: return false
             } else if (EmbeddedActivityLauncher.isPrimaryEntryPoint(command)) {
@@ -1226,6 +1235,20 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val result = (submission as MessageSendCoordinator.Submission.Rejected).result
         Toast.makeText(requireContext(), validationMessage(result), Toast.LENGTH_SHORT).show()
         return false
+    }
+
+    private fun runBuiltInAction(
+        action: BuiltInCommandAction,
+        channel: Channel,
+        commandData: ApplicationCommandData,
+    ) = when (action) {
+        BuiltInCommandAction.LEAVE_GROUP_DM -> {
+            val silent = commandData.values.firstOrNull { it.name == "silent" }?.value == true
+            RestAPI.api.deleteChannel(channel.id, silent)
+                .restSubscribeOn()
+                .ui(this)
+                .appSubscribe(WidgetChatInput::class.java, context) { }
+        }
     }
 
     private fun offerSendAsFile(content: String, attachments: List<Attachment<*>>) {

@@ -109,6 +109,9 @@ class RemoteApplicationCommand(
     apiCommand = apiCommand,
 )
 
+/** What a built-in command does to the client instead of producing message text. */
+enum class BuiltInCommandAction { LEAVE_GROUP_DM }
+
 /** A command implemented locally by the client; it renders from resources and never hits the API. */
 class BuiltInCommand(
     id: String,
@@ -116,6 +119,8 @@ class BuiltInCommand(
     name: String,
     descriptionRes: Int? = null,
     options: List<ApplicationCommandOption>,
+    val action: BuiltInCommandAction? = null,
+    // Trails the parameter list so callers can keep passing it as a lambda literal.
     execute: ((Map<String, Any?>) -> String)? = null,
 ) : ApplicationCommand(
     id = id,

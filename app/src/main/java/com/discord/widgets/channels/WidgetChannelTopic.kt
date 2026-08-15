@@ -321,17 +321,9 @@ class WidgetChannelTopic : AppFragment(R.layout.widget_channel_topic) {
                 setOnMenuItemClickListener {
                     // Leaving a group cannot be undone without a re-invite, so it is confirmed;
                     // closing a one-to-one DM only hides it and is not.
-                    WidgetNoticeDialog.show(
-                        fragmentManager = parentFragmentManager,
-                        headerText = requireContext().i18nRender(R.string.leave_group_dm_title, "name" to channelTitle),
-                        bodyText = requireContext().i18nRender(R.string.leave_group_dm_body, "name" to channelTitle),
-                        okText = getString(R.string.leave_group_dm),
-                        cancelText = getString(R.string.cancel),
-                        listenerMap = mapOf(
-                            R.id.notice_ok to { view: View -> viewModel.handleClosePrivateChannel(view.context) },
-                        ),
-                        dialogTheme = R.attr.notice_theme_positive_red,
-                    )
+                    GroupDmLeave.confirm(requireContext(), parentFragmentManager, channelTitle ?: "") { silent ->
+                        viewModel.handleClosePrivateChannel(requireContext(), silent)
+                    }
                     true
                 }
             } else {

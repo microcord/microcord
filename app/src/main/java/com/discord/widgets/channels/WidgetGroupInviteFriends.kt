@@ -13,20 +13,25 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isDM
 import com.discord.api.channel.isGroup
 import com.discord.app.AppFragment
+import com.discord.app.AppToast
 import com.discord.chips_view.ChipsView
 import com.discord.databinding.WidgetGroupInviteFriendsBinding
 import com.discord.i18n.i18nFormat
 import com.discord.models.domain.ModelApplicationStream
+import com.discord.models.domain.ModelInvite
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.presence.Presence
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.restapi.RestAPIParams
+import com.discord.models.invite.InviteUtils
+import com.discord.stores.StoreInviteSettings
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserRelationships
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.channel.ChannelSelector
+import com.discord.utilities.intent.IntentUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.rest.RestAPI
@@ -51,6 +56,7 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
     private val addedUsersPublisher = BehaviorSubject.create<Collection<User>>(emptyList())
     private val filterPublisher = BehaviorSubject.create("")
     private var restoredSelectedIds = emptySet<Long>()
+    private var isGeneratingInvite = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,6 +149,52 @@ class WidgetGroupInviteFriends : AppFragment(R.layout.widget_group_invite_friend
         }
         setupFab(data)
         setupToolbar(data)
+        setupInviteShare(data)
+    }
+
+    /**
+     * Sharing a link is the way into a group for someone who is not already a friend, so it sits
+     * alongside the friend picker rather than behind it. A full group has nothing to invite into.
+     */
+    private fun setupInviteShare(data: Model) {
+        val channel = data.channel
+        val isShareable = data.mode == Model.MODE_ADD && channel?.isGroup() == true &&
+            data.totalNumRecipients < data.maxGroupMemberCount
+        binding.groupInviteFriendsShareContainer.isVisible = isShareable
+        if (!isShareable || channel == null) return
+        binding.groupInviteFriendsShareLink.setOnClickListener { shareInvite(channel, copyOnly = false) }
+        binding.groupInviteFriendsCopyLink.setOnClickListener { shareInvite(channel, copyOnly = true) }
+    }
+
+    private fun shareInvite(channel: Channel, copyOnly: Boolean) {
+        if (isGeneratingInvite) return
+        isGeneratingInvite = true
+        StoreStream.getInviteSettings()
+            .generateInviteCached(
+                channel.id,
+                ModelInvite.Settings(maxAge = ModelInvite.Settings.ONE_DAY),
+                StoreInviteSettings.LOCATION_GROUP_DM,
+            )
+            .ui(this)
+            .appSubscribe(
+                javaClass,
+                requireContext(),
+                onTerminated = { isGeneratingInvite = false },
+            ) { invite ->
+                val link = InviteUtils.createLinkFromCode(invite.code ?: return@appSubscribe)
+                if (copyOnly) {
+                    AppToast.copyToClipboard(requireContext(), link, R.string.invite_link_copied)
+                } else {
+                    IntentUtils.performChooserSendIntent(
+                        requireContext(),
+                        requireContext().i18nFormat(
+                            R.string.group_dm_invite_link_share_message,
+                            "username" to StoreStream.getUsers().getMe().username,
+                            "link" to link,
+                        ).toString(),
+                    )
+                }
+            }
     }
 
     private fun selectUser(user: User) {

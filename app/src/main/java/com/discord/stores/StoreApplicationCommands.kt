@@ -8,6 +8,7 @@ import com.discord.api.commands.ApplicationCommandContext
 import com.discord.api.commands.ApplicationCommandIndex
 import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.api.commands.ApplicationIntegrationType
+import com.discord.api.channel.Channel
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.api.permission.Permission
 import com.discord.models.commands.Application
@@ -15,6 +16,7 @@ import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.ApplicationSubCommand
 import com.discord.models.commands.BuiltInCommand
+import com.discord.models.commands.BuiltInCommandAction
 import com.discord.models.commands.RemoteApplicationCommand
 import com.discord.models.commands.flatten
 import com.discord.models.commands.isAvailableIn
@@ -71,6 +73,9 @@ class StoreApplicationCommands(
         Persister(INDEX_CACHE_KEY, PersistedIndexCache(), preload = false),
     private val observationDeck: ObservationDeck = ObservationDeckProvider.get(),
     private val builtInCommandsProvider: BuiltInCommandsProvider = BuiltInCommands(),
+    private val channelType: (Long?) -> Int? = { id ->
+        id?.let { StoreStream.getChannels().getChannel(it)?.type }
+    },
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
     private val retryScheduler: Scheduler = Schedulers.computation(),
 ) : StoreV2() {
@@ -153,7 +158,7 @@ class StoreApplicationCommands(
         if (shouldReturnApplicationCommands(channelPermissions)) {
             discoveryCommands
         } else {
-            DiscoverCommands(builtInCommandsProvider.getBuiltInCommands())
+            DiscoverCommands(builtInCommandsProvider.getBuiltInCommands(channelType(channelId)))
         }
     }
 
@@ -445,7 +450,7 @@ class StoreApplicationCommands(
             listOf(builtInCommandsProvider.getFrecencyApplication(), builtInCommandsProvider.getBuiltInApplication()),
         )
         discoverCommands = DiscoverCommands(
-            commands = builtInCommandsProvider.getBuiltInCommands(),
+            commands = builtInCommandsProvider.getBuiltInCommands(channelType(indexedChannelId)),
             loadState = LoadState.Failed,
         )
         markChanged(DiscoverCommandsUpdate)
@@ -685,7 +690,7 @@ class StoreApplicationCommands(
     @StoreThread
     private fun handleDiscoverCommandsUpdate(commands: List<ApplicationCommand>) {
         discoverCommands = DiscoverCommands(
-            commands = commands + builtInCommandsProvider.getBuiltInCommands(),
+            commands = commands + builtInCommandsProvider.getBuiltInCommands(channelType(indexedChannelId)),
             loadState = LoadState.JustLoadedAll,
         )
         markChanged(DiscoverCommandsUpdate)
@@ -699,7 +704,7 @@ class StoreApplicationCommands(
         queryCommands.addAll(commands.map { indexedById[it.id] ?: it })
         query?.let { prefix ->
             queryCommands.addAll(
-                builtInCommandsProvider.getBuiltInCommands()
+                builtInCommandsProvider.getBuiltInCommands(channelType(indexedChannelId))
                     .filter { it.name.startsWith(prefix, ignoreCase = true) },
             )
         }
@@ -724,7 +729,7 @@ class StoreApplicationCommands(
             .mapNotNull { id ->
                 val numeric = id.toIntOrNull()
                 if (numeric != null && numeric < 0) {
-                    builtInCommandsProvider.getBuiltInCommands()
+                    builtInCommandsProvider.getBuiltInCommands(channelType(indexedChannelId))
                         .firstOrNull { it.id.toIntOrNull() == numeric }
                 } else {
                     flattened.firstOrNull { it.id == id }
@@ -865,7 +870,9 @@ data class CommandOptionAutocompleteQuery(
 /** Supplies the client-side commands that never reach the server. */
 interface BuiltInCommandsProvider {
     fun getBuiltInApplication(): Application
-    fun getBuiltInCommands(): List<ApplicationCommand>
+
+    /** [channelType] admits the commands that only apply to one kind of channel. */
+    fun getBuiltInCommands(channelType: Int? = null): List<ApplicationCommand>
     fun getFrecencyApplication(): Application
 }
 
@@ -885,6 +892,26 @@ class BuiltInCommands : BuiltInCommandsProvider {
         wrappedCommand(-6L, "spoiler", R.string.command_spoiler_description, R.string.command_spoiler_message_description, "||"),
     )
 
+    private val groupDmCommands: List<ApplicationCommand> = listOf(
+        BuiltInCommand(
+            id = "-7",
+            applicationId = BUILT_IN_APP_ID,
+            name = "leave",
+            descriptionRes = R.string.command_leave_description,
+            options = listOf(
+                ApplicationCommandOption(
+                    type = ApplicationCommandType.BOOLEAN,
+                    name = SILENT_OPTION,
+                    descriptionRes = R.string.command_leave_silent_description,
+                    required = false,
+                    default = false,
+                    channelTypes = null,
+                ),
+            ),
+            action = BuiltInCommandAction.LEAVE_GROUP_DM,
+        ),
+    )
+
     private val builtInApplication = Application(
         id = BUILT_IN_APP_ID,
         name = "Built-In",
@@ -895,7 +922,8 @@ class BuiltInCommands : BuiltInCommandsProvider {
 
     override fun getBuiltInApplication(): Application = builtInApplication
 
-    override fun getBuiltInCommands(): List<ApplicationCommand> = builtInCommands
+    override fun getBuiltInCommands(channelType: Int?): List<ApplicationCommand> =
+        if (channelType == Channel.GROUP_DM) builtInCommands + groupDmCommands else builtInCommands
 
     override fun getFrecencyApplication(): Application = Application(
         id = FRECENCY_APP_ID,
@@ -950,6 +978,7 @@ class BuiltInCommands : BuiltInCommandsProvider {
         const val BUILT_IN_APP_ID = -1L
         const val FRECENCY_APP_ID = -2L
         private const val MESSAGE_OPTION = "message"
+        private const val SILENT_OPTION = "silent"
     }
 }
 

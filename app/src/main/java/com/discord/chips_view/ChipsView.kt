@@ -58,6 +58,7 @@ class ChipsView<K, V : ChipsView.a?>(context: Context, attrs: AttributeSet) :
     var chipAddedListener: ((V) -> Unit)? = null
     var chipDeletedListener: ((V) -> Unit)? = null
     var textChangedListener: ((CharSequence) -> Unit)? = null
+    private var isRebuilding = false
 
     init {
         addView(chipsContainer)
@@ -152,7 +153,7 @@ class ChipsView<K, V : ChipsView.a?>(context: Context, attrs: AttributeSet) :
             override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable) {
-                textChangedListener?.invoke(s)
+                if (!isRebuilding) textChangedListener?.invoke(s)
             }
         })
         editText.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
@@ -231,24 +232,36 @@ class ChipsView<K, V : ChipsView.a?>(context: Context, attrs: AttributeSet) :
     }
 
     private fun rebuildChips(moveCursor: Boolean) {
-        val remainingWidth = rootChipsLayout.setChips(chipList.values)
+        val chipsWidth = rootChipsLayout.setChips(chipList.values)
         if (chipList.isEmpty()) {
             if (chipsHintRes != 0) editText.setHint(chipsHintRes)
         } else {
             editText.hint = ""
         }
 
-        if (remainingWidth == null) {
+        if (chipsWidth == null) {
             post { rebuildChips(moveCursor) }
             return
         }
 
         val editable = editText.text
+        // `setText` with the view's own Editable still runs the full replace: it resets the
+        // selection to 0 and re-fires the watcher, so the caret is restored and the republish
+        // suppressed around it.
+        val selectionStart = editText.selectionStart
+        val selectionEnd = editText.selectionEnd
         currentEditTextSpan?.let { editable?.removeSpan(it) }
-        currentEditTextSpan = LeadingMarginSpan.Standard(remainingWidth, 0)
+        currentEditTextSpan = LeadingMarginSpan.Standard(chipsWidth, 0)
         editable?.setSpan(currentEditTextSpan, 0, 0, 17)
+        isRebuilding = true
         editText.setText(editable)
-        if (moveCursor) editText.setSelection(editText.length())
+        isRebuilding = false
+        val length = editText.length()
+        if (moveCursor) {
+            editText.setSelection(length)
+        } else {
+            editText.setSelection(selectionStart.coerceIn(0, length), selectionEnd.coerceIn(0, length))
+        }
     }
 
     private inner class ChipsInputConnection(target: InputConnection) :
@@ -366,12 +379,13 @@ class ChipsView<K, V : ChipsView.a?>(context: Context, attrs: AttributeSet) :
                 row.addView(binding.root)
             }
 
-            var remainingWidth = availableWidth - usedWidth
-            if (remainingWidth < availableWidth * 0.15f) {
+            // The caller indents the input past the chips, so this is the width they occupy on the
+            // last row — zero once too little is left and the input drops to a row of its own.
+            if (availableWidth - usedWidth < availableWidth * 0.15f) {
                 addRow()
-                remainingWidth = 0
+                usedWidth = 0
             }
-            return remainingWidth
+            return usedWidth
         }
 
         private fun addRow() = LinearLayout(context).also {

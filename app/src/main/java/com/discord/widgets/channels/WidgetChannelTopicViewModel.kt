@@ -360,9 +360,10 @@ class WidgetChannelTopicViewModel(
     }
 
     /** Closes the DM or leaves the group DM the strip is currently showing. */
-    fun handleClosePrivateChannel(context: Context) {
+    @JvmOverloads
+    fun handleClosePrivateChannel(context: Context, silent: Boolean = false) {
         val channelId = previousChannelId ?: return
-        RestAPI.api.deleteChannel(channelId)
+        RestAPI.api.deleteChannel(channelId, silent)
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(WidgetChannelTopicViewModel::class.java, context) { }

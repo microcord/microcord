@@ -24,7 +24,27 @@ class StoreInviteSettings : Store() {
     private val pendingInviteCodeSubject = BehaviorSubject.create(null as InviteCode?)
     private val inviteSettingsSubject = BehaviorSubject.create(inviteSettings)
 
+    /** Reusable invites keyed by channel, mirroring the reference's per-channel invite cache. */
+    private val cachedInvites = HashMap<Long, ModelInvite>()
+
     fun clearInviteCode() = pendingInviteCodeSubject.onNext(null)
+
+    /**
+     * [generateInvite], reusing the channel's last invite while it is still valid.
+     *
+     * A share sheet opened repeatedly would otherwise mint a code per tap, and every one of them
+     * stays live until it expires.
+     */
+    @Synchronized
+    fun generateInviteCached(
+        channelId: Long,
+        settings: ModelInvite.Settings = inviteSettings,
+        location: String = LOCATION_INVITE_SHEET,
+    ): Observable<ModelInvite> {
+        cachedInvites[channelId]?.takeUnless { it.isExpired() }?.let { return Observable.just(it) }
+        return generateInvite(channelId, settings, location)
+            .doOnNext { invite -> synchronized(this) { cachedInvites[channelId] = invite } }
+    }
 
     @Synchronized
     @JvmOverloads
@@ -151,5 +171,6 @@ class StoreInviteSettings : Store() {
         /** Reference: the invite action sheet is the only mobile surface that mints an invite. */
         const val LOCATION_INVITE_SHEET = "IOS Instant Invite Action Sheet Mount"
         const val LOCATION_REGENERATE = "IOS Regenerate"
+        const val LOCATION_GROUP_DM = "Group DM Invite Create"
     }
 }

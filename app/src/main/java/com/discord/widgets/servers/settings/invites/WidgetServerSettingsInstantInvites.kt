@@ -32,6 +32,7 @@ import com.discord.widgets.servers.WidgetServerSettingsInstantInvitesActions
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 import rx.Observable
+import rx.subjects.BehaviorSubject
 
 class WidgetServerSettingsInstantInvites :
     AppFragment(R.layout.widget_server_settings_instant_invites) {
@@ -39,6 +40,12 @@ class WidgetServerSettingsInstantInvites :
     private val guildId: Long by lazy {
         mostRecentIntent.getLongExtra(INTENT_EXTRA_GUILD_ID, INVALID_GUILD_ID)
     }
+    private val channelId: Long by lazy { mostRecentIntent.getLongExtra(INTENT_EXTRA_CHANNEL_ID, 0L) }
+
+    /** A group DM's invites are not indexed by guild, so this screen holds them itself. */
+    private val privateInvites: BehaviorSubject<List<ModelInvite>?> =
+        BehaviorSubject.create<List<ModelInvite>?>(null as List<ModelInvite>?)
+    private val isPrivate: Boolean get() = guildId <= 0L
     private val storeInstantInvites: StoreInstantInvites = StoreStream.getInstantInvites()
     private lateinit var viewFlipper: AppViewFlipper
     private lateinit var pauseContainer: View
@@ -54,13 +61,26 @@ class WidgetServerSettingsInstantInvites :
         adapter = MGRecyclerAdapter.configure(
             Adapter(view.findViewById(R.id.server_settings_instant_invites_recycler)),
         )
-        storeInstantInvites.clearInvites(guildId)
-        storeInstantInvites.fetchGuildInvites(guildId)
+        if (isPrivate) fetchPrivateInvites() else {
+            storeInstantInvites.clearInvites(guildId)
+            storeInstantInvites.fetchGuildInvites(guildId)
+        }
+    }
+
+    private fun fetchPrivateInvites() {
+        RestAPI.api.getChannelInvites(channelId)
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                WidgetServerSettingsInstantInvites::class.java,
+                errorHandler = { privateInvites.onNext(emptyList()) },
+            ) { privateInvites.onNext(it) }
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
-        Model.get(guildId, storeInstantInvites = storeInstantInvites)
+        if (isPrivate) fetchPrivateInvites()
+        Model.get(guildId, channelId, privateInvites, storeInstantInvites = storeInstantInvites)
             .ui(this)
             .subscribe(::configureUI)
     }
@@ -87,9 +107,11 @@ class WidgetServerSettingsInstantInvites :
                 onInviteExpiredListener = storeInstantInvites::onInviteRemoved,
             )
         }
-        configurePauseInvites(model.guild)
-        setActionBarTitle(R.string.instant_invites)
-        setActionBarSubtitle(model.guild.name)
+        model.guild?.takeIf { channelId == 0L }?.let(::configurePauseInvites)
+        setActionBarTitle(if (isPrivate) R.string.invite_links else R.string.instant_invites)
+        setActionBarSubtitle(
+            StoreStream.getChannels().getChannel(channelId)?.getDisplayName() ?: model.guild?.name,
+        )
     }
 
     /**
@@ -164,7 +186,7 @@ class WidgetServerSettingsInstantInvites :
     }
 
     data class Model(
-        val guild: Guild,
+        val guild: Guild?,
         val inviteItems: List<InviteItem>?,
     ) {
         data class InviteItem(
@@ -200,10 +222,10 @@ class WidgetServerSettingsInstantInvites :
                 const val TYPE_INVITE = 0
 
                 fun createList(
-                    invites: Map<String, ModelInvite>,
+                    invites: Collection<ModelInvite>,
                     guildId: Long,
                     guildMembers: Map<Long, GuildMember>,
-                ): List<InviteItem> = invites.values.map { invite ->
+                ): List<InviteItem> = invites.map { invite ->
                     InviteItem(
                         invite,
                         guildId,
@@ -214,11 +236,22 @@ class WidgetServerSettingsInstantInvites :
         }
 
         companion object {
+            /** [channelId] of `0` keeps every invite in the guild; otherwise only that channel's. */
             fun get(
                 guildId: Long,
+                channelId: Long = 0L,
+                privateInvites: Observable<List<ModelInvite>?> = Observable.just(null),
                 storeGuilds: StoreGuilds = StoreStream.getGuilds(),
                 storeInstantInvites: StoreInstantInvites = StoreStream.getInstantInvites(),
             ): Observable<Model?> {
+                if (guildId <= 0L) {
+                    return privateInvites
+                        .map { invites ->
+                            Model(null, invites?.let { InviteItem.createList(it, 0L, emptyMap()) })
+                        }
+                        .computationLatest()
+                        .distinctUntilChanged()
+                }
                 val guildState = Observable.combineLatest(
                     storeGuilds.observeGuild(guildId),
                     storeGuilds.observeGuildMembers(guildId),
@@ -228,7 +261,12 @@ class WidgetServerSettingsInstantInvites :
                     guildState,
                     storeInstantInvites.observeInvites(guildId),
                 ) { (guild, members), invites ->
-                    guild?.let { Model(it, InviteItem.createList(invites, guildId, members)) }
+                    val scoped = if (channelId == 0L) {
+                        invites
+                    } else {
+                        invites.filterValues { it.channel?.id == channelId }
+                    }
+                    guild?.let { Model(it, InviteItem.createList(scoped.values, guildId, members)) }
                 }
                 return Observable.concat(loading, loaded).computationLatest().distinctUntilChanged()
             }
@@ -237,6 +275,7 @@ class WidgetServerSettingsInstantInvites :
 
     companion object {
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
+        private const val INTENT_EXTRA_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
         private const val INVALID_GUILD_ID = -1L
         private const val VIEW_INDEX_INVITES_LOADING = 0
         private const val VIEW_INDEX_INVITES_LIST = 1
@@ -256,6 +295,14 @@ class WidgetServerSettingsInstantInvites :
         }
 
         fun launch(context: Context, guildId: Long) = create(context, guildId)
+
+        fun launchForChannel(context: Context, guildId: Long, channelId: Long) = SettingsNavigation.launch(
+            context,
+            WidgetServerSettingsInstantInvites::class.java,
+            Intent()
+                .putExtra(INTENT_EXTRA_GUILD_ID, guildId)
+                .putExtra(INTENT_EXTRA_CHANNEL_ID, channelId),
+        )
     }
 }
 

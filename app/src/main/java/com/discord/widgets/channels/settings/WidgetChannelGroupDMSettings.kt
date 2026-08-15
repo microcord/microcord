@@ -22,7 +22,7 @@ import com.discord.utilities.view.extensions.setSelectionEnd
 import com.discord.utilities.view.extensions.setText
 import com.discord.widgets.channels.settings.ChannelGroupDMSettingsViewModel.Event
 import com.discord.widgets.channels.settings.ChannelGroupDMSettingsViewModel.ViewState
-import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.channels.GroupDmLeave
 import com.discord.widgets.servers.NotificationMuteSettingsView
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.facebook.drawee.view.SimpleDraweeView
@@ -97,7 +97,7 @@ class WidgetChannelGroupDMSettings : AppFragment(R.layout.widget_channel_group_d
                 setActionBarDisplayHomeAsUpEnabled()
                 setActionBarOptionsMenu(R.menu.menu_main_group_settings, onSelected = { menuItem ->
                     if (menuItem.itemId == R.id.menu_leave_group) {
-                        confirmLeave(displayName) { viewModel.leaveGroup() }
+                        confirmLeave(displayName) { silent -> viewModel.leaveGroup(silent) }
                     }
                 })
 
@@ -161,17 +161,8 @@ class WidgetChannelGroupDMSettings : AppFragment(R.layout.widget_channel_group_d
         }
     }
 
-    private fun confirmLeave(groupName: CharSequence, confirmed: () -> Unit) {
-        WidgetNoticeDialog.show(
-            fragmentManager = parentFragmentManager,
-            headerText = requireContext().i18nFormat(R.string.leave_group_dm_title, "name" to groupName),
-            bodyText = requireContext().i18nFormat(R.string.leave_group_dm_body, "name" to groupName),
-            okText = getString(R.string.leave_group_dm),
-            cancelText = getString(R.string.cancel),
-            listenerMap = mapOf(R.id.notice_ok to { _: View -> confirmed() }),
-            dialogTheme = R.attr.notice_theme_positive_red,
-        )
-    }
+    private fun confirmLeave(groupName: CharSequence, confirmed: (Boolean) -> Unit) =
+        GroupDmLeave.confirm(requireContext(), parentFragmentManager, groupName, confirmed)
 
     /**
      * A picked image is uploaded as a `data:` URL embedded in the PATCH body, not as a multipart

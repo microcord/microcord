@@ -143,9 +143,9 @@ class ChannelGroupDMSettingsViewModel(
     }
 
     @MainThread
-    fun leaveGroup() {
+    fun leaveGroup(silent: Boolean = false) {
         val current = viewState as? ViewState.Valid ?: return
-        restApi.deleteChannel(current.channelSettings.channel.id)
+        restApi.deleteChannel(current.channelSettings.channel.id, silent)
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(ChannelGroupDMSettingsViewModel::class.java) {
