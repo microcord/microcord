@@ -18,6 +18,7 @@ import com.discord.models.commands.ApplicationSubCommand
 import com.discord.models.commands.BuiltInCommand
 import com.discord.models.commands.BuiltInCommandAction
 import com.discord.models.commands.RemoteApplicationCommand
+import com.discord.plugins.PluginUiRegistry
 import com.discord.models.commands.flatten
 import com.discord.models.commands.isAvailableIn
 import com.discord.models.commands.toRestParams
@@ -35,6 +36,8 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
 import com.discord.widgets.chat.input.models.ApplicationCommandValue
+import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
+import dev.mantikafasi.manticord.plugins.api.pluginSlashCommandContext
 import java.util.concurrent.TimeUnit
 import retrofit2.Response
 import rx.Observable
@@ -570,6 +573,20 @@ class StoreApplicationCommands(
         markChanged(QueryCommandsUpdate)
     }
 
+    fun handleLocalCommandsChanged() = dispatcher.schedule {
+        handleDiscoverCommandsUpdate(indexedCommands)
+        query?.let { handleQueryCommandsUpdate(indexedCommands.filterForQuery(it)) }
+        applications = applications.map { application ->
+            if (application.id == BuiltInCommands.BUILT_IN_APP_ID) {
+                builtInCommandsProvider.getBuiltInApplication()
+            } else {
+                application
+            }
+        }
+        frecencyCommands.keys.toList().forEach(::handleFrecencyCommandsUpdate)
+        markChanged(GuildApplicationsUpdate)
+    }
+
     fun clearAutocompleteResults() = dispatcher.schedule {
         autocompleteOptionResults.clear()
         markChanged(AutocompleteResultsUpdate)
@@ -727,13 +744,9 @@ class StoreApplicationCommands(
         val flattened = indexedCommands.flattenSubCommands()
         frecencyCommands[guildId] = storeApplicationCommandFrecency.getTopCommandIds(guildId)
             .mapNotNull { id ->
-                val numeric = id.toIntOrNull()
-                if (numeric != null && numeric < 0) {
-                    builtInCommandsProvider.getBuiltInCommands(channelType(indexedChannelId))
-                        .firstOrNull { it.id.toIntOrNull() == numeric }
-                } else {
-                    flattened.firstOrNull { it.id == id }
-                }
+                builtInCommandsProvider.getBuiltInCommands(channelType(indexedChannelId))
+                    .firstOrNull { it.id == id }
+                    ?: flattened.firstOrNull { it.id == id }
             }
         markChanged(FrecencyCommandsUpdate)
     }
@@ -920,10 +933,51 @@ class BuiltInCommands : BuiltInCommandsProvider {
         builtIn = true,
     )
 
-    override fun getBuiltInApplication(): Application = builtInApplication
+    override fun getBuiltInApplication(): Application = builtInApplication.copy(
+        commandCount = builtInCommands.size + PluginUiRegistry.slashCommands().size,
+    )
 
-    override fun getBuiltInCommands(channelType: Int?): List<ApplicationCommand> =
-        if (channelType == Channel.GROUP_DM) builtInCommands + groupDmCommands else builtInCommands
+    override fun getBuiltInCommands(channelType: Int?): List<ApplicationCommand> {
+        val native = if (channelType == Channel.GROUP_DM) builtInCommands + groupDmCommands else builtInCommands
+        return native + pluginCommands(channelType, native.mapTo(HashSet(), ApplicationCommand::name))
+    }
+
+    private fun pluginCommands(channelType: Int?, reservedNames: Set<String>): List<ApplicationCommand> {
+        val channel = runCatching { StoreStream.getChannelsSelected().getSelectedChannel() }.getOrNull()
+        val resolvedType = channelType ?: channel?.type ?: Channel.DM
+        val context = pluginChannelContext(
+            channelId = channel?.id ?: 0L,
+            guildId = channel?.guildId?.takeIf { it > 0L },
+            channelType = resolvedType,
+            isPrivate = resolvedType in setOf(Channel.DM, Channel.GROUP_DM),
+        )
+        return PluginUiRegistry.slashCommands().distinctBy { it.contribution.name }.mapNotNull { owned ->
+            val command = owned.contribution
+            if (command.name in reservedNames) return@mapNotNull null
+            if (!runCatching { command.isVisible(context) }.getOrDefault(false)) return@mapNotNull null
+            BuiltInCommand(
+                id = "plugin:${owned.key}",
+                applicationId = BUILT_IN_APP_ID,
+                name = command.name,
+                description = command.description,
+                options = listOf(
+                    ApplicationCommandOption(
+                        type = ApplicationCommandType.STRING,
+                        name = MESSAGE_OPTION,
+                        description = command.description,
+                        required = false,
+                        default = false,
+                    ),
+                ),
+            ) { options ->
+                runCatching {
+                    command.execute(
+                        pluginSlashCommandContext(context, options[MESSAGE_OPTION]?.toString().orEmpty()),
+                    )
+                }.getOrDefault("")
+            }
+        }
+    }
 
     override fun getFrecencyApplication(): Application = Application(
         id = FRECENCY_APP_ID,

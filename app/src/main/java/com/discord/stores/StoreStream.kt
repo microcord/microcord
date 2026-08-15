@@ -108,6 +108,7 @@ import com.discord.widgets.chat.input.ChatInputGuardActions
 import com.discord.widgets.chat.input.ChatInputStoreBindings
 import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.notice.NoticePopupChannel
+import com.discord.plugins.PluginUiRegistry
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
 import com.discord.widgets.friends.FriendRelationshipUi
@@ -1595,6 +1596,7 @@ class StoreStream private constructor(
             }.getOrDefault(false)
         }
         configureSocialUi()
+        PluginUiRegistry.addSlashCommandListener(applicationCommands::handleLocalCommandsChanged)
         messagesLoader.observeChunks().subscribe { chunk ->
             dispatcher.schedule {
                 applicationInteractions.handleMessagesCreateOrLoad(chunk.messages)

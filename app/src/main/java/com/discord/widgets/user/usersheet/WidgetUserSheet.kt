@@ -17,6 +17,7 @@ import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.ViewCompat
+import androidx.core.view.children
 import androidx.core.widget.ImageViewCompat
 import androidx.core.widget.TextViewCompat
 import androidx.core.widget.doOnTextChanged
@@ -27,6 +28,9 @@ import com.discord.models.domain.ModelUserRelationship
 import com.discord.app.AppActivity
 import com.discord.app.AppBottomSheet
 import com.discord.databinding.WidgetUserSheetBinding
+import com.discord.plugins.OwnedProfileContribution
+import com.discord.plugins.OwnedProfileTabContribution
+import com.discord.plugins.PluginUiRegistry
 import com.discord.dialogs.useractions.UserActionsDialog
 import com.discord.app.AppLog
 import com.discord.app.appViewModels
@@ -40,6 +44,9 @@ import com.google.android.material.R as MaterialR
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserNotes
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.PluginSurfaceCustomization
+import com.discord.utilities.feature.PluginSurfaceCustomization.ProfileElement
+import com.discord.utilities.feature.PluginSurfaceCustomization.Surface
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
@@ -73,6 +80,9 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.tabs.TabLayout
 import rx.subscriptions.CompositeSubscription
+import dev.mantikafasi.manticord.plugins.api.PluginProfileContext
+import dev.mantikafasi.manticord.plugins.api.PluginRegistration
+import dev.mantikafasi.manticord.plugins.api.pluginProfileContext
 
 /**
  * The user sheet: the bottom sheet that opens whenever an avatar or a name is tapped.
@@ -134,6 +144,14 @@ class WidgetUserSheet : AppBottomSheet() {
     private var tabSwipeAnimator: ValueAnimator? = null
     private var selectingTabFromSwipe = false
     private var settlingProfilePage = false
+    private var pluginProfileRegistration: PluginRegistration? = null
+    private var pluginProfileTabRegistration: PluginRegistration? = null
+    private val pluginProfileViews = mutableMapOf<String, View>()
+    private val pluginProfileTabViews = mutableMapOf<String, View>()
+    private var loadedState: WidgetUserSheetViewModel.ViewState.Loaded? = null
+    private var profileTabKeys = emptyList<String>()
+    private var selectedProfileTabKey = MAIN_TAB_KEY
+    private var hasBoard = false
     private val frameAnchorListener = ViewTreeObserver.OnPreDrawListener { anchorProfileFrame() }
 
     private val messageNavigator by lazy(LazyThreadSafetyMode.NONE) {
@@ -185,6 +203,12 @@ class WidgetUserSheet : AppBottomSheet() {
         bindStageActions()
         bindVoiceSettings()
         bindProfileTabs()
+        pluginProfileRegistration = PluginUiRegistry.addProfileListener {
+            view.post { loadedState?.let(::render) }
+        }
+        pluginProfileTabRegistration = PluginUiRegistry.addProfileTabListener {
+            view.post { loadedState?.let(::render) }
+        }
         markAccessibilityHeadings()
     }
 
@@ -226,6 +250,15 @@ class WidgetUserSheet : AppBottomSheet() {
         defaultTextColors = emptyMap()
         defaultNoteTheme = null
         profileThemeColors = null
+        pluginProfileRegistration?.unregister()
+        pluginProfileRegistration = null
+        pluginProfileTabRegistration?.unregister()
+        pluginProfileTabRegistration = null
+        pluginProfileViews.clear()
+        pluginProfileTabViews.clear()
+        loadedState = null
+        profileTabKeys = emptyList()
+        selectedProfileTabKey = MAIN_TAB_KEY
         _binding = null
         super.onDestroyView()
     }
@@ -256,11 +289,13 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetContent.visibility =
             if (loaded == null) View.INVISIBLE else View.VISIBLE
         if (loaded == null) {
+            loadedState = null
             requireNotNull(binding.userSheetProfileEffect).let {
                 it.clear()
             }
             return
         }
+        loadedState = loaded
 
         configureHeader(loaded)
         configureRichPresence(loaded)
@@ -274,6 +309,8 @@ class WidgetUserSheet : AppBottomSheet() {
         configureConnectionsSection(loaded)
         configureNote(loaded)
         configureWidgets(loaded)
+        configurePluginProfile(loaded)
+        configurePluginProfileTabs(loaded)
 
         if (!viewModel.openPopoutLogged && loaded.profileLoaded) {
             val activity = loaded.richPresence?.primaryActivity
@@ -287,6 +324,96 @@ class WidgetUserSheet : AppBottomSheet() {
             viewModel.openPopoutLogged = true
         }
     }
+
+    private fun configurePluginProfile(state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        val context = pluginContext(state)
+        val contributions = PluginUiRegistry.profiles()
+        pluginProfileViews.keys.retainAll(contributions.mapTo(HashSet(), OwnedProfileContribution::key))
+        val builtins = profileBuiltinViews()
+        val pluginByKey = contributions.associateBy {
+            PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id)
+        }
+        val defaultOrder = PluginSurfaceCustomization.defaultOrder(
+            ProfileElement.entries.map { PluginSurfaceCustomization.builtinProfileKey(it) to it.priority } +
+                contributions.map {
+                    PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) to it.contribution.priority
+                },
+        )
+        val order = PluginSurfaceCustomization.get(Surface.PROFILE, defaultOrder)
+        val desired = buildList {
+            order.forEach { entry ->
+                builtins[entry.key]?.let { views ->
+                    if (!entry.visible) views.forEach { it.visibility = View.GONE }
+                    addAll(views)
+                    return@forEach
+                }
+                if (!entry.visible) return@forEach
+                val owned = pluginByKey[entry.key] ?: return@forEach
+                if (!runCatching { owned.contribution.isVisible(context) }.getOrDefault(false)) return@forEach
+                pluginProfileView(owned, context)?.let(::add)
+            }
+        }
+        val parent = binding.userSheetMainTabContent
+        val customizable = (builtins.values.flatten() + pluginProfileViews.values).toSet()
+        val current = parent.children.filter(customizable::contains).toList()
+        if (current != desired) {
+            customizable.forEach { view -> (view.parent as? ViewGroup)?.removeView(view) }
+            desired.forEach(parent::addView)
+        }
+    }
+
+    private fun pluginContext(state: WidgetUserSheetViewModel.ViewState.Loaded): PluginProfileContext {
+        val colors = profileThemeColors
+        return pluginProfileContext(
+            userId = state.user.id,
+            guildId = state.currentGuildId,
+            isCurrentUser = state.isMe,
+            isBot = state.user.isBot,
+            surfaceColor = colors?.sectionOverlay
+                ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary),
+            borderColor = colors?.borderOverlay
+                ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundModifierAccent),
+            primaryTextColor = colors?.textDefault
+                ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorHeaderPrimary),
+            secondaryTextColor = colors?.textMuted
+                ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorTextMuted),
+            interactiveColor = colors?.button
+                ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal),
+        )
+    }
+
+    private fun pluginProfileView(
+        owned: OwnedProfileContribution,
+        context: PluginProfileContext,
+    ): View? {
+        val contribution = owned.contribution
+        val view = pluginProfileViews[owned.key]
+            ?: runCatching { contribution.createView(requireContext()) }.getOrNull()
+                ?.also { pluginProfileViews[owned.key] = it }
+            ?: return null
+        runCatching { contribution.bind(view, context) }
+        if (view.contentDescription.isNullOrBlank()) view.contentDescription = contribution.title
+        return view
+    }
+
+    private fun profileBuiltinViews(): Map<String, List<View>> = mapOf(
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.ABOUT_ME) to
+            listOf(binding.aboutMeHeaderContainer, binding.aboutMeCard),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.MEMBER_SINCE) to
+            listOf(binding.userSheetMemberSinceHeader, binding.userSheetMemberSinceCard),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.FRIENDS_SINCE) to
+            listOf(binding.userSheetFriendsSinceHeader, binding.userSheetFriendsSinceCard),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.VOICE_SETTINGS) to
+            listOf(binding.userSheetProfileVoiceSettingsHeader, binding.voiceSettingsViewCard),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.RICH_PRESENCE) to
+            listOf(binding.richPresenceContainer),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.GUILD) to
+            listOf(binding.userSheetGuildContainer),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.CONNECTIONS) to
+            listOf(binding.userSheetConnectionsHeader, binding.userSheetConnectionsCard),
+        PluginSurfaceCustomization.builtinProfileKey(ProfileElement.NOTE) to
+            listOf(binding.userSheetNoteHeader, binding.userSheetNoteText),
+    )
 
     private fun configureHeader(state: WidgetUserSheetViewModel.ViewState.Loaded) {
         val accessibility = StoreStream.getAccessibility()
@@ -484,15 +611,13 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.root.onHorizontalDrag = ::dragProfilePages
         binding.root.onHorizontalRelease = ::releaseProfilePages
         binding.userSheetProfileTabs.apply {
-            removeAllTabs()
-            addTab(newTab().setText(R.string.profile_tab_main))
-            addTab(newTab().setText(R.string.profile_tab_board))
             addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
                 override fun onTabSelected(tab: TabLayout.Tab) {
                     if (selectingTabFromSwipe) return
                     settlingProfilePage = false
                     tabSwipeAnimator?.cancel()
-                    showingWidgets = tab.position == BOARD_TAB
+                    selectedProfileTabKey = profileTabKeys.getOrNull(tab.position) ?: MAIN_TAB_KEY
+                    showingWidgets = selectedProfileTabKey == BOARD_TAB_KEY
                     tabSwipeOffset = if (showingWidgets) 1f else 0f
                     showSelectedProfileTab()
                 }
@@ -508,13 +633,75 @@ class WidgetUserSheet : AppBottomSheet() {
             widget.data.applicationId != null || widget.data.games.orEmpty().isNotEmpty()
         }
         binding.userSheetWidgetsView.bind(widgets, state.applications, state.applicationIdentities, state.games)
-        val hasBoard = widgets.isNotEmpty()
-        binding.userSheetProfileTabsContainer.visibility = if (hasBoard) View.VISIBLE else View.GONE
+        hasBoard = widgets.isNotEmpty()
         if (!hasBoard && showingWidgets) {
             settlingProfilePage = false
             showingWidgets = false
-            binding.userSheetProfileTabs.getTabAt(MAIN_TAB)?.select()
+            selectedProfileTabKey = MAIN_TAB_KEY
         }
+    }
+
+    private fun configurePluginProfileTabs(state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        val context = pluginContext(state)
+        val allContributions = PluginUiRegistry.profileTabs()
+        val byKey = allContributions.associateBy {
+            PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id)
+        }
+        val defaultOrder = PluginSurfaceCustomization.defaultOrder(
+            listOf(
+                PluginSurfaceCustomization.builtinProfileTabKey("MAIN") to 200,
+                PluginSurfaceCustomization.builtinProfileTabKey("BOARD") to 100,
+            ) + allContributions.map {
+                PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) to it.contribution.priority
+            },
+        )
+        val customization = PluginSurfaceCustomization.get(Surface.PROFILE_TABS, defaultOrder)
+        val contributions = customization.mapNotNull { entry ->
+            if (!entry.visible) return@mapNotNull null
+            byKey[entry.key]?.takeIf {
+                runCatching { it.contribution.isVisible(context) }.getOrDefault(false)
+            }
+        }
+        pluginProfileTabViews.keys.retainAll(contributions.mapTo(HashSet(), OwnedProfileTabContribution::key))
+        val nextKeys = customization.mapNotNull { entry ->
+            when (entry.key) {
+                PluginSurfaceCustomization.builtinProfileTabKey("MAIN") -> MAIN_TAB_KEY
+                PluginSurfaceCustomization.builtinProfileTabKey("BOARD") -> BOARD_TAB_KEY.takeIf { hasBoard && entry.visible }
+                else -> entry.key.takeIf { key -> contributions.any {
+                    PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) == key
+                } }
+            }
+        }
+        if (selectedProfileTabKey !in nextKeys) selectedProfileTabKey = MAIN_TAB_KEY
+        if (profileTabKeys != nextKeys) {
+            profileTabKeys = nextKeys
+            selectingTabFromSwipe = true
+            binding.userSheetProfileTabs.removeAllTabs()
+            val titles = contributions.associate {
+                PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) to it.contribution.title
+            }
+            profileTabKeys.forEach { key ->
+                val title = when (key) {
+                    MAIN_TAB_KEY -> getString(R.string.profile_tab_main)
+                    BOARD_TAB_KEY -> getString(R.string.profile_tab_board)
+                    else -> titles[key].orEmpty()
+                }
+                binding.userSheetProfileTabs.addTab(
+                    binding.userSheetProfileTabs.newTab().setText(title),
+                    key == selectedProfileTabKey,
+                )
+            }
+            selectingTabFromSwipe = false
+        }
+        contributions.forEach { owned ->
+            val view = pluginProfileTabViews[owned.key]
+                ?: runCatching { owned.contribution.createView(requireContext()) }.getOrNull()
+                    ?.also { pluginProfileTabViews[owned.key] = it }
+                ?: return@forEach
+            runCatching { owned.contribution.bind(view, context) }
+            if (view.contentDescription.isNullOrBlank()) view.contentDescription = owned.contribution.title
+        }
+        binding.userSheetProfileTabsContainer.visibility = if (profileTabKeys.size > 1) View.VISIBLE else View.GONE
         if (!settlingProfilePage) showSelectedProfileTab()
     }
 
@@ -523,12 +710,26 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetWidgetsView.animate().cancel()
         binding.userSheetMainTabContent.translationX = 0f
         binding.userSheetWidgetsView.translationX = 0f
-        binding.userSheetMainTabContent.visibility = if (showingWidgets) View.GONE else View.VISIBLE
+        val pluginKey = selectedProfileTabKey.takeIf { it != MAIN_TAB_KEY && it != BOARD_TAB_KEY }
+        binding.userSheetMainTabContent.visibility = if (selectedProfileTabKey == MAIN_TAB_KEY) View.VISIBLE else View.GONE
         binding.userSheetWidgetsView.visibility = if (showingWidgets) View.VISIBLE else View.GONE
+        val pluginView = pluginKey?.let { key ->
+            PluginUiRegistry.profileTabs().firstOrNull {
+                PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) == key
+            }?.let { pluginProfileTabViews[it.key] }
+        }
+        binding.userSheetPluginTabContent.let { container ->
+            if (container.children.toList() != listOfNotNull(pluginView)) {
+                container.removeAllViews()
+                pluginView?.let(container::addView)
+            }
+        }
+        binding.userSheetPluginTabContent.visibility = if (pluginView == null) View.GONE else View.VISIBLE
     }
 
     private fun dragProfilePages(distance: Float) {
         if (binding.userSheetProfileTabsContainer.visibility != View.VISIBLE) return
+        if (!hasBoard || selectedProfileTabKey !in setOf(MAIN_TAB_KEY, BOARD_TAB_KEY)) return
         val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
         val allowed = if (showingWidgets) distance.coerceAtLeast(0f) else distance.coerceAtMost(0f)
         if (allowed == 0f) return
@@ -548,11 +749,13 @@ class WidgetUserSheet : AppBottomSheet() {
 
     private fun releaseProfilePages(distance: Float, commit: Boolean) {
         if (binding.userSheetProfileTabsContainer.visibility != View.VISIBLE) return
+        if (!hasBoard || selectedProfileTabKey !in setOf(MAIN_TAB_KEY, BOARD_TAB_KEY)) return
         val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
         val wasShowingWidgets = showingWidgets
         val validDirection = if (wasShowingWidgets) distance > 0f else distance < 0f
         val targetShowsWidgets = if (commit && validDirection) !wasShowingWidgets else wasShowingWidgets
         showingWidgets = targetShowsWidgets
+        selectedProfileTabKey = if (targetShowsWidgets) BOARD_TAB_KEY else MAIN_TAB_KEY
         settlingProfilePage = true
         val mainTarget = if (targetShowsWidgets) -width else 0f
         val widgetsTarget = if (targetShowsWidgets) 0f else width
@@ -572,7 +775,7 @@ class WidgetUserSheet : AppBottomSheet() {
             // The sheet can be dismissed mid-settle, and the animator still delivers this.
             val settled = _binding ?: return@withEndAction
             selectingTabFromSwipe = true
-            settled.userSheetProfileTabs.getTabAt(if (showingWidgets) BOARD_TAB else MAIN_TAB)?.select()
+            settled.userSheetProfileTabs.getTabAt(profileTabKeys.indexOf(selectedProfileTabKey))?.select()
             selectingTabFromSwipe = false
             showSelectedProfileTab()
         }.start()
@@ -1118,6 +1321,8 @@ class WidgetUserSheet : AppBottomSheet() {
 
         private const val MAIN_TAB = 0
         private const val BOARD_TAB = 1
+        private const val MAIN_TAB_KEY = "main"
+        private const val BOARD_TAB_KEY = "board"
         private const val PAGE_SETTLE_MS = 180L
 
         /**

@@ -17,6 +17,8 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetTabsHostBinding
+import com.discord.plugins.PluginUiRegistry
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelSelector
@@ -49,6 +51,7 @@ import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import rx.Subscription
+import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 
 /**
  * The signed-in shell: one fragment per tab, all kept alive, plus the bottom navigation bar.
@@ -71,11 +74,13 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private val tabToTabSelectionListenerMap = mutableMapOf<NavigationTab, OnTabSelectedListener>()
     private val requestedTabFragments = mutableSetOf<NavigationTab>()
 
-    private lateinit var container: ViewGroup
-    private lateinit var navHost: FrameLayout
-    private lateinit var nonFullscreenNavHost: FrameLayout
-    private lateinit var homeContainer: View
-    private lateinit var bottomNavigation: TabsHostBottomNavigationView
+    private var _binding: WidgetTabsHostBinding? = null
+    private val binding get() = requireNotNull(_binding)
+    private val container get() = binding.widgetTabsHostContainer
+    private val navHost get() = binding.widgetTabsHostNavHost
+    private val nonFullscreenNavHost get() = binding.widgetTabsHostNonFullscreenNavHost
+    private val homeContainer get() = binding.widgetTabsHostHome
+    private val bottomNavigation get() = binding.widgetTabsHostBottomNavigationView
 
     private var bottomNavAnimator: ValueAnimator? = null
     private var previousShowBottomNav: Boolean? = null
@@ -84,19 +89,19 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private var globalStatusVisible = false
     private var viewState: TabsHostViewModel.ViewState? = null
     private var pendingIntentSubscription: Subscription? = null
+    private var pluginBottomTabsRegistration: PluginRegistration? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        container = view.findViewById(R.id.widget_tabs_host_container)
-        navHost = view.findViewById(R.id.widget_tabs_host_nav_host)
-        nonFullscreenNavHost = view.findViewById(R.id.widget_tabs_host_non_fullscreen_nav_host)
-        homeContainer = view.findViewById(R.id.widget_tabs_host_home)
-        bottomNavigation = view.findViewById(R.id.widget_tabs_host_bottom_navigation_view)
+        _binding = WidgetTabsHostBinding.bind(view)
         // `widget_tabs_host_search` is a full-bleed container that the reference never fills —
         // search is a dialog, not a tab — so it is hidden once and left alone. Were it left visible
         // it would sit empty on top of whichever tab is actually selected.
-        view.findViewById<View>(R.id.widget_tabs_host_search).visibility = View.GONE
+        binding.widgetTabsHostSearch.visibility = View.GONE
         bottomNavigation.addHeightChangedListener(BottomNavViewObserver.INSTANCE)
+        pluginBottomTabsRegistration = PluginUiRegistry.addBottomTabListener {
+            view.post { viewState?.let(::updateViews) }
+        }
         setPanelWindowInsetsListeners()
         // Registered before any child fragment is committed so the tabs host keeps the first look at
         // every back press. WidgetHome consumes every press it is offered, so it has to sort after
@@ -133,7 +138,10 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     override fun onDestroyView() {
         bottomNavAnimator?.cancel()
         bottomNavAnimator = null
+        pluginBottomTabsRegistration?.unregister()
+        pluginBottomTabsRegistration = null
         clearCrossScreenNavigation()
+        _binding = null
         super.onDestroyView()
     }
 
@@ -214,12 +222,18 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
 
     private fun navigateToTab(navigationTab: NavigationTab) {
         installTabFragment(navigationTab)
-        TAB_CONTAINER_IDS.forEach { (tab, containerId) ->
-            requireView().findViewById<View>(containerId).visibility =
-                if (navigationTab == tab) View.VISIBLE else View.GONE
+        tabContainers().forEach { (tab, view) ->
+            view.visibility = if (navigationTab == tab) View.VISIBLE else View.GONE
         }
         tabToTabSelectionListenerMap[navigationTab]?.onTabSelected()
     }
+
+    private fun tabContainers(): Map<NavigationTab, View> = mapOf(
+        NavigationTab.HOME to binding.widgetTabsHostHome,
+        NavigationTab.FRIENDS to binding.widgetTabsHostFriends,
+        NavigationTab.MENTIONS to binding.widgetTabsHostMentions,
+        NavigationTab.SETTINGS to binding.widgetTabsHostUserSettings,
+    )
 
     private fun handleEvent(event: TabsHostViewModel.Event) = when (event) {
         TabsHostViewModel.Event.TrackFriendsListShown -> AnalyticsTracker.friendsListViewed()

@@ -114,6 +114,8 @@ import rx.subjects.PublishSubject
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.i18n.i18nRender
 import com.discord.plugins.PluginUiRegistry
+import com.discord.utilities.feature.PluginSurfaceCustomization
+import com.discord.utilities.feature.PluginSurfaceCustomization.Surface
 import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
 import dev.mantikafasi.manticord.plugins.api.pluginComposerContext
 import dev.mantikafasi.manticord.plugins.api.PluginComposerZone
@@ -537,7 +539,13 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun installPluginComposerViews(flex: FlexInputWidgetBinding) {
-        val contributions = PluginUiRegistry.composers()
+        val registered = PluginUiRegistry.composers()
+        val byKey = registered.associateBy {
+            PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id)
+        }
+        val contributions = PluginSurfaceCustomization.get(Surface.COMPOSER, byKey.keys.toList())
+            .filter(PluginSurfaceCustomization.Entry::visible)
+            .mapNotNull { byKey[it.key] }
         val activeKeys = contributions.mapTo(mutableSetOf()) { it.key }
         pluginComposerViews.keys.filter { it !in activeKeys }.forEach { key ->
             val removed = pluginComposerViews.remove(key) ?: return@forEach

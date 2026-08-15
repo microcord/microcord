@@ -20,6 +20,8 @@
                 <com.discord.views.CheckedSetting android:id="@+id/chat_input_customization_expand" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/chat_input_customization_expression" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/chat_input_customization_send" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <TextView android:id="@+id/chat_input_customization_plugins_header" android:visibility="gone" android:text="@string/plugins" style="@style/UiKit.Settings.Item.Header"/>
+                <LinearLayout android:id="@+id/chat_input_customization_plugins" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>

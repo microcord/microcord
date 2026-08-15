@@ -259,7 +259,7 @@ when a check was not run or no device was available.
 
 ## Scope Discipline
 
-- Do not touch files outside this project and the read-only reference.
+- Do not touch files outside this project and the read-only reference. you can access plugin template folder thats at the root of this folder.
 - Do not rewrite unrelated files or revert concurrent work.
 - Do not create speculative modules, interfaces, repositories, or factories.
 - Prefer one implementation until a second concrete use demands abstraction.

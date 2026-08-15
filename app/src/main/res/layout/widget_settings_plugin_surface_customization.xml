@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="@dimen/list_bottom_padding" style="@style/UiKit.ViewGroup.LinearLayout">
+            <com.discord.widgets.settings.ProfileCustomizationPreviewView android:id="@+id/plugin_surface_profile_preview" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginTop="16dp" android:layout_marginEnd="16dp"/>
+            <LinearLayout android:id="@+id/plugin_surface_customization_preview" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" android:padding="8dp" android:background="?attr/colorBackgroundSecondary" style="@style/UiKit.ViewGroup.LinearLayout"/>
+            <TextView android:id="@+id/plugin_surface_customization_description" android:padding="16dp" style="@style/UiKit.TextView.Subtext"/>
+            <LinearLayout android:id="@+id/plugin_surface_customization_items" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup.LinearLayout"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -12,9 +12,16 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
+import com.discord.databinding.TabsHostBottomNavigationViewBinding
+import com.discord.plugins.OwnedBottomTabContribution
+import com.discord.plugins.PluginUiRegistry
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.feature.PluginSurfaceCustomization
+import com.discord.utilities.feature.PluginSurfaceCustomization.Surface
 import com.discord.views.user.UserAvatarPresenceView
 import com.discord.views.user.UserAvatarPresenceViewController
+import dev.mantikafasi.manticord.plugins.api.PluginBottomTabContext
+import dev.mantikafasi.manticord.plugins.api.pluginBottomTabContext
 
 class TabsHostBottomNavigationView @JvmOverloads constructor(
     context: Context,
@@ -23,6 +30,7 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr) {
     fun interface HeightChangedListener { fun onHeightChanged(height: Int) }
 
+    private val binding = TabsHostBottomNavigationViewBinding.inflate(LayoutInflater.from(context), this, true)
     private val tabsContainer: LinearLayout
     private val homeBadge: TextView
     private val friendsBadge: TextView
@@ -31,6 +39,7 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
     private val iconToNavigationTabMap: Map<View, NavigationTab>
     private val tintableIconToNavigationTabMap: Map<ImageView, NavigationTab>
     private val heightChangedListeners = linkedSetOf<HeightChangedListener>()
+    private val pluginViews = mutableMapOf<String, View>()
 
     /**
      * Drives the settings-tab avatar from the stores rather than from a snapshot, so the picture and
@@ -45,20 +54,19 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
 
     init {
         orientation = VERTICAL
-        LayoutInflater.from(context).inflate(R.layout.tabs_host_bottom_navigation_view, this, true)
-        tabsContainer = requireNotNull(findViewById(R.id.tabs_host_bottom_nav_tabs_container))
-        homeBadge = requireNotNull(findViewById(R.id.tabs_host_bottom_nav_home_notifications_badge))
-        friendsBadge = requireNotNull(findViewById(R.id.tabs_host_bottom_nav_friends_notifications_badge))
-        avatar = requireNotNull(findViewById(R.id.tabs_host_bottom_nav_user_avatar_presence_view))
-        val homeIcon = requireNotNull<ImageView>(findViewById(R.id.tabs_host_bottom_nav_home_icon))
-        val friendsIcon = requireNotNull<ImageView>(findViewById(R.id.tabs_host_bottom_nav_friends_icon))
-        val searchIcon = requireNotNull<ImageView>(findViewById(R.id.tabs_host_bottom_nav_search_icon))
-        val mentionsIcon = requireNotNull<ImageView>(findViewById(R.id.tabs_host_bottom_nav_mentions_icon))
-        val homeItem = requireNotNull<View>(findViewById(R.id.tabs_host_bottom_nav_home_item))
-        val friendsItem = requireNotNull<View>(findViewById(R.id.tabs_host_bottom_nav_friends_item))
-        val searchItem = requireNotNull<View>(findViewById(R.id.tabs_host_bottom_nav_search_item))
-        val mentionsItem = requireNotNull<View>(findViewById(R.id.tabs_host_bottom_nav_mentions_item))
-        val settingsItem = requireNotNull<View>(findViewById(R.id.tabs_host_bottom_nav_user_settings_item))
+        tabsContainer = binding.tabsHostBottomNavTabsContainer
+        homeBadge = binding.tabsHostBottomNavHomeNotificationsBadge
+        friendsBadge = binding.tabsHostBottomNavFriendsNotificationsBadge
+        avatar = binding.tabsHostBottomNavUserAvatarPresenceView
+        val homeIcon = binding.tabsHostBottomNavHomeIcon
+        val friendsIcon = binding.tabsHostBottomNavFriendsIcon
+        val searchIcon = binding.tabsHostBottomNavSearchIcon
+        val mentionsIcon = binding.tabsHostBottomNavMentionsIcon
+        val homeItem = binding.tabsHostBottomNavHomeItem
+        val friendsItem = binding.tabsHostBottomNavFriendsItem
+        val searchItem = binding.tabsHostBottomNavSearchItem
+        val mentionsItem = binding.tabsHostBottomNavMentionsItem
+        val settingsItem = binding.tabsHostBottomNavUserSettingsItem
         val displaySize = if (resources.configuration.orientation == 1) {
             resources.displayMetrics.widthPixels
         } else {
@@ -99,13 +107,9 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         this.visibleTabs = visibleTabs.toSet()
         this.homeNotificationsCount = homeNotificationsCount
         this.friendsNotificationsCount = friendsNotificationsCount
-        tabsContainer.weightSum = visibleTabs.size.toFloat()
         applyVisualState()
         // Re-binding on every render would restart the subscription for no reason; only an actual
         // change of user needs one.
-        val previousUserId = userAvatarPresenceViewController.userId
-        userAvatarPresenceViewController.userId = myUserId
-        if (previousUserId != myUserId) userAvatarPresenceViewController.bind()
         updateNotificationBadges(homeNotificationsCount, friendsNotificationsCount)
         val noClick: (View) -> Unit = {}
         navigationTabToViewMap[NavigationTab.HOME]!!.setOnClickListener(
@@ -129,6 +133,63 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         navigationTabToViewMap[NavigationTab.MENTIONS]!!.setOnLongClickListener(
             if (buttonsEnabled) View.OnLongClickListener { onMentionsLongPress(); true } else null,
         )
+        val reordered = bindPluginTabs(pluginBottomTabContext(selectedTab.name, myUserId, buttonsEnabled))
+        val previousUserId = userAvatarPresenceViewController.userId
+        userAvatarPresenceViewController.userId = myUserId
+        if (reordered || previousUserId != myUserId) userAvatarPresenceViewController.bind()
+    }
+
+    private fun bindPluginTabs(pluginContext: PluginBottomTabContext): Boolean {
+        val contributions = PluginUiRegistry.bottomTabs()
+        pluginViews.keys.retainAll(contributions.mapTo(HashSet(), OwnedBottomTabContribution::key))
+        val defaultOrder = PluginSurfaceCustomization.defaultOrder(
+            navigationTabToViewMap.keys.map { tab ->
+                PluginSurfaceCustomization.builtinTabKey(tab.name) to
+                    PluginSurfaceCustomization.builtinTabPriority(tab.name)
+            } + contributions.map { owned ->
+                PluginSurfaceCustomization.pluginKey(owned.owner, owned.contribution.id) to
+                    owned.contribution.priority
+            },
+        )
+        val enabledKeys = PluginSurfaceCustomization.get(Surface.BOTTOM_TABS, defaultOrder)
+            .filter { it.visible || PluginSurfaceCustomization.isRequiredBottomTab(it.key) }
+            .mapTo(LinkedHashSet(), PluginSurfaceCustomization.Entry::key)
+        val builtins = navigationTabToViewMap.mapNotNull { (tab, view) ->
+            val key = PluginSurfaceCustomization.builtinTabKey(tab.name)
+            OrderedTab(key, view).takeIf { tab in visibleTabs && key in enabledKeys }
+        }
+        val plugins = contributions.mapNotNull { owned ->
+            val contribution = owned.contribution
+            val key = PluginSurfaceCustomization.pluginKey(owned.owner, contribution.id)
+            if (key !in enabledKeys || !runCatching { contribution.isVisible(pluginContext) }.getOrDefault(false)) {
+                return@mapNotNull null
+            }
+            val view = pluginViews[owned.key]
+                ?: runCatching { contribution.createView(context) }.getOrNull()
+                    ?.also { pluginViews[owned.key] = it }
+                ?: return@mapNotNull null
+            runCatching { contribution.bind(view, pluginContext) }
+            view.contentDescription = contribution.title
+            view.setOnClickListener(
+                if (pluginContext.buttonsEnabled) View.OnClickListener {
+                    runCatching { contribution.onClick(pluginContext) }
+                } else null,
+            )
+            OrderedTab(key, view)
+        }
+        val byKey = (builtins + plugins).associateBy(OrderedTab::key)
+        val ordered = enabledKeys.mapNotNull(byKey::get)
+        val orderedViews = ordered.map(OrderedTab::view)
+        val reordered = (0 until tabsContainer.childCount).map(tabsContainer::getChildAt) != orderedViews
+        if (reordered) {
+            tabsContainer.removeAllViews()
+            orderedViews.forEach { view ->
+                view.layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+                tabsContainer.addView(view)
+            }
+        }
+        tabsContainer.weightSum = ordered.size.toFloat()
+        return reordered
     }
 
     private fun updateNotificationBadges(homeCount: Int, friendsCount: Int) {
@@ -183,7 +244,6 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
         visibleTabs = NavigationTab.entries.filterTo(linkedSetOf()) { state.visibleTabs and (1 shl it.ordinal) != 0 }
         homeNotificationsCount = state.homeNotificationsCount
         friendsNotificationsCount = state.friendsNotificationsCount
-        tabsContainer.weightSum = visibleTabs.size.toFloat()
         applyVisualState()
         updateNotificationBadges(homeNotificationsCount, friendsNotificationsCount)
     }
@@ -215,4 +275,7 @@ class TabsHostBottomNavigationView @JvmOverloads constructor(
             override fun newArray(size: Int) = arrayOfNulls<SavedState>(size)
         }
     }
+
+    private data class OrderedTab(val key: String, val view: View)
+
 }

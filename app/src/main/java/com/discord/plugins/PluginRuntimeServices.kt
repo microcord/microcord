@@ -2,7 +2,12 @@ package com.discord.plugins
 
 import android.content.Context
 import dev.mantikafasi.manticord.plugins.api.PluginComposerContribution
+import dev.mantikafasi.manticord.plugins.api.PluginBottomTabContribution
+import dev.mantikafasi.manticord.plugins.api.PluginContribution
 import dev.mantikafasi.manticord.plugins.api.PluginHeaderContribution
+import dev.mantikafasi.manticord.plugins.api.PluginProfileContribution
+import dev.mantikafasi.manticord.plugins.api.PluginProfileTabContribution
+import dev.mantikafasi.manticord.plugins.api.PluginSlashCommand
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import dev.mantikafasi.manticord.plugins.api.PluginResources
 import dev.mantikafasi.manticord.plugins.api.PluginScope
@@ -25,105 +30,117 @@ import com.discord.app.AppActivity
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.widgets.notice.WidgetNoticeDialog
 
-internal data class OwnedHeaderContribution(
+internal data class OwnedContribution<T : PluginContribution>(
     val owner: String,
-    val contribution: PluginHeaderContribution,
+    val contribution: T,
 ) {
     val key: String = "$owner:${contribution.id}"
 }
 
-internal data class OwnedComposerContribution(
-    val owner: String,
-    val contribution: PluginComposerContribution,
-) {
-    val key: String = "$owner:${contribution.id}"
-}
+internal typealias OwnedHeaderContribution = OwnedContribution<PluginHeaderContribution>
+internal typealias OwnedComposerContribution = OwnedContribution<PluginComposerContribution>
+internal typealias OwnedBottomTabContribution = OwnedContribution<PluginBottomTabContribution>
+internal typealias OwnedProfileContribution = OwnedContribution<PluginProfileContribution>
+internal typealias OwnedProfileTabContribution = OwnedContribution<PluginProfileTabContribution>
+internal typealias OwnedSlashCommand = OwnedContribution<PluginSlashCommand>
 
-internal object PluginUiRegistry {
+private class ContributionRegistry<T : PluginContribution>(private val label: String) {
     private val lock = Any()
-    private val headerEntries = mutableListOf<OwnedHeaderContribution>()
-    private val composerEntries = mutableListOf<OwnedComposerContribution>()
-    private val headerListeners = CopyOnWriteArraySet<() -> Unit>()
-    private val composerListeners = CopyOnWriteArraySet<() -> Unit>()
-    @Volatile private var headerSnapshot: List<OwnedHeaderContribution> = emptyList()
-    @Volatile private var composerSnapshot: List<OwnedComposerContribution> = emptyList()
+    private val entries = mutableListOf<OwnedContribution<T>>()
+    private val listeners = CopyOnWriteArraySet<() -> Unit>()
+    @Volatile private var snapshot: List<OwnedContribution<T>> = emptyList()
 
-    fun headers(): List<OwnedHeaderContribution> = headerSnapshot
+    fun snapshot() = snapshot
 
-    fun composers(): List<OwnedComposerContribution> = composerSnapshot
-
-    fun addHeaderListener(listener: () -> Unit): PluginRegistration = listenerRegistration(headerListeners, listener)
-
-    fun addComposerListener(listener: () -> Unit): PluginRegistration = listenerRegistration(composerListeners, listener)
-
-    fun notifyHeaderChanged() {
-        headerListeners.forEach { it() }
+    fun addListener(listener: () -> Unit): PluginRegistration {
+        listeners += listener
+        return registration { listeners -= listener }
     }
 
-    fun registerHeader(owner: String, contribution: PluginHeaderContribution): PluginRegistration {
-        require(contribution.id.isNotBlank()) { "header contribution ID must not be blank" }
-        val owned = OwnedHeaderContribution(owner, contribution)
-        synchronized(lock) {
-            require(headerEntries.none { it.key == owned.key }) { "duplicate header contribution ${owned.key}" }
-            headerEntries += owned
-            headerSnapshot = headerEntries.sortedWith(HEADER_ORDER)
-        }
-        notifyHeaderChanged()
-        return registration {
-            synchronized(lock) {
-                headerEntries -= owned
-                headerSnapshot = headerEntries.sortedWith(HEADER_ORDER)
-            }
-            notifyHeaderChanged()
-        }
-    }
+    fun notifyChanged() = listeners.forEach { it() }
 
-    fun registerComposer(owner: String, contribution: PluginComposerContribution): PluginRegistration {
-        require(contribution.id.isNotBlank()) { "composer contribution ID must not be blank" }
-        val owned = OwnedComposerContribution(owner, contribution)
+    fun register(owner: String, contribution: T): PluginRegistration {
+        require(contribution.id.isNotBlank()) { "$label contribution ID must not be blank" }
+        val owned = OwnedContribution(owner, contribution)
         synchronized(lock) {
-            require(composerEntries.none { it.key == owned.key }) { "duplicate composer contribution ${owned.key}" }
-            composerEntries += owned
-            composerSnapshot = composerEntries.sortedWith(COMPOSER_ORDER)
+            require(entries.none { it.key == owned.key }) { "duplicate $label contribution ${owned.key}" }
+            entries += owned
+            publish()
         }
-        composerListeners.forEach { it() }
+        notifyChanged()
         return registration {
             synchronized(lock) {
-                composerEntries -= owned
-                composerSnapshot = composerEntries.sortedWith(COMPOSER_ORDER)
+                entries -= owned
+                publish()
             }
-            composerListeners.forEach { it() }
+            notifyChanged()
         }
     }
 
     fun removeOwner(owner: String) {
         synchronized(lock) {
-            headerEntries.removeAll { it.owner == owner }
-            composerEntries.removeAll { it.owner == owner }
-            headerSnapshot = headerEntries.sortedWith(HEADER_ORDER)
-            composerSnapshot = composerEntries.sortedWith(COMPOSER_ORDER)
+            entries.removeAll { it.owner == owner }
+            publish()
         }
-        notifyHeaderChanged()
-        composerListeners.forEach { it() }
+        notifyChanged()
     }
 
-    private fun registration(remove: () -> Unit): PluginRegistration {
-        val registered = AtomicBoolean(true)
-        return PluginRegistration { if (registered.compareAndSet(true, false)) remove() }
+    private fun publish() {
+        snapshot = entries.sortedWith(
+            compareByDescending<OwnedContribution<T>> { it.contribution.priority }
+                .thenBy(OwnedContribution<T>::key),
+        )
     }
+}
 
-    private fun listenerRegistration(
-        listeners: MutableSet<() -> Unit>,
-        listener: () -> Unit,
-    ): PluginRegistration {
-        listeners += listener
-        return registration { listeners -= listener }
+internal object PluginUiRegistry {
+    private val headers = ContributionRegistry<PluginHeaderContribution>("header")
+    private val composers = ContributionRegistry<PluginComposerContribution>("composer")
+    private val bottomTabs = ContributionRegistry<PluginBottomTabContribution>("bottom tab")
+    private val profiles = ContributionRegistry<PluginProfileContribution>("profile")
+    private val profileTabs = ContributionRegistry<PluginProfileTabContribution>("profile tab")
+    private val slashCommands = ContributionRegistry<PluginSlashCommand>("slash command")
+
+    fun headers() = headers.snapshot()
+    fun composers() = composers.snapshot()
+    fun bottomTabs() = bottomTabs.snapshot()
+    fun profiles() = profiles.snapshot()
+    fun profileTabs() = profileTabs.snapshot()
+    fun slashCommands() = slashCommands.snapshot()
+
+    fun addHeaderListener(listener: () -> Unit) = headers.addListener(listener)
+    fun addComposerListener(listener: () -> Unit) = composers.addListener(listener)
+    fun addBottomTabListener(listener: () -> Unit) = bottomTabs.addListener(listener)
+    fun addProfileListener(listener: () -> Unit) = profiles.addListener(listener)
+    fun addProfileTabListener(listener: () -> Unit) = profileTabs.addListener(listener)
+    fun addSlashCommandListener(listener: () -> Unit) = slashCommands.addListener(listener)
+
+    fun notifyHeaderChanged() = headers.notifyChanged()
+    fun notifyComposersChanged() = composers.notifyChanged()
+    fun notifyBottomTabsChanged() = bottomTabs.notifyChanged()
+    fun notifyProfilesChanged() = profiles.notifyChanged()
+    fun notifyProfileTabsChanged() = profileTabs.notifyChanged()
+
+    fun registerHeader(owner: String, contribution: PluginHeaderContribution) = headers.register(owner, contribution)
+    fun registerComposer(owner: String, contribution: PluginComposerContribution) = composers.register(owner, contribution)
+    fun registerBottomTab(owner: String, contribution: PluginBottomTabContribution) = bottomTabs.register(owner, contribution)
+    fun registerProfile(owner: String, contribution: PluginProfileContribution) = profiles.register(owner, contribution)
+    fun registerProfileTab(owner: String, contribution: PluginProfileTabContribution) = profileTabs.register(owner, contribution)
+    fun registerSlashCommand(owner: String, command: PluginSlashCommand) = slashCommands.register(owner, command)
+
+    fun removeOwner(owner: String) {
+        headers.removeOwner(owner)
+        composers.removeOwner(owner)
+        bottomTabs.removeOwner(owner)
+        profiles.removeOwner(owner)
+        profileTabs.removeOwner(owner)
+        slashCommands.removeOwner(owner)
     }
+}
 
-    private val HEADER_ORDER = compareByDescending<OwnedHeaderContribution> { it.contribution.priority }
-        .thenBy(OwnedHeaderContribution::key)
-    private val COMPOSER_ORDER = compareByDescending<OwnedComposerContribution> { it.contribution.priority }
-        .thenBy(OwnedComposerContribution::key)
+private fun registration(remove: () -> Unit): PluginRegistration {
+    val registered = AtomicBoolean(true)
+    return PluginRegistration { if (registered.compareAndSet(true, false)) remove() }
 }
 
 internal class PluginSettingsImpl(
@@ -177,6 +194,26 @@ internal class PluginScopeImpl(
         override fun registerComposer(contribution: PluginComposerContribution): PluginRegistration {
             check(!closed.get()) { "plugin scope is closed" }
             return track(PluginUiRegistry.registerComposer(pluginId, contribution))
+        }
+
+        override fun registerBottomTab(contribution: PluginBottomTabContribution): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerBottomTab(pluginId, contribution))
+        }
+
+        override fun registerProfile(contribution: PluginProfileContribution): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerProfile(pluginId, contribution))
+        }
+
+        override fun registerProfileTab(contribution: PluginProfileTabContribution): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerProfileTab(pluginId, contribution))
+        }
+
+        override fun registerSlashCommand(command: PluginSlashCommand): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerSlashCommand(pluginId, command))
         }
     }
     override val storage: PluginStorage = object : PluginStorage {

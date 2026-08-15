@@ -1,5 +1,7 @@
 package com.discord.plugins
 
+import com.discord.api.channel.Channel
+import com.discord.stores.BuiltInCommands
 import dev.mantikafasi.manticord.plugins.api.PluginLoadMode
 import dev.mantikafasi.manticord.plugins.api.PluginManifest
 import dev.mantikafasi.manticord.plugins.api.PluginRequirement
@@ -9,7 +11,11 @@ import dev.mantikafasi.manticord.plugins.api.PluginHeaderContribution
 import dev.mantikafasi.manticord.plugins.api.PluginSettingsSchema
 import dev.mantikafasi.manticord.plugins.api.PluginSetting
 import dev.mantikafasi.manticord.plugins.api.pluginComposerContribution
+import dev.mantikafasi.manticord.plugins.api.pluginBottomTabContribution
 import dev.mantikafasi.manticord.plugins.api.pluginHeaderContribution
+import dev.mantikafasi.manticord.plugins.api.pluginProfileContribution
+import dev.mantikafasi.manticord.plugins.api.pluginProfileTabContribution
+import dev.mantikafasi.manticord.plugins.api.pluginSlashCommand
 import dev.mantikafasi.manticord.plugins.api.pluginManifest
 import dev.mantikafasi.manticord.plugins.api.pluginRequirement
 import dev.mantikafasi.manticord.plugins.api.pluginSettings
@@ -55,9 +61,35 @@ class PluginDependencyResolverTest {
                 { error("not rendered") },
             ),
         )
+        PluginUiRegistry.registerBottomTab(
+            "first",
+            pluginBottomTabContribution("bottom-low", "Bottom Low", { error("not rendered") }) { priority = 1 },
+        )
+        PluginUiRegistry.registerBottomTab(
+            "second",
+            pluginBottomTabContribution("bottom-high", "Bottom High", { error("not rendered") }) { priority = 10 },
+        )
+        PluginUiRegistry.registerProfile(
+            "first",
+            pluginProfileContribution("profile", "Profile", { error("not rendered") }),
+        )
+        PluginUiRegistry.registerProfileTab(
+            "second",
+            pluginProfileTabContribution("profile-tab", "Profile Tab", { error("not rendered") }),
+        )
+        PluginUiRegistry.registerSlashCommand(
+            "first",
+            pluginSlashCommand("echo", "echo", "Echo text", { it.arguments }) { priority = 5 },
+        )
 
         assertEquals(listOf("high", "low"), PluginUiRegistry.headers().map { it.contribution.id })
         assertEquals(listOf("composer"), PluginUiRegistry.composers().map { it.contribution.id })
+        assertEquals(listOf("bottom-high", "bottom-low"), PluginUiRegistry.bottomTabs().map { it.contribution.id })
+        assertEquals(listOf("profile"), PluginUiRegistry.profiles().map { it.contribution.id })
+        assertEquals(listOf("profile-tab"), PluginUiRegistry.profileTabs().map { it.contribution.id })
+        assertEquals(listOf("echo"), PluginUiRegistry.slashCommands().map { it.contribution.id })
+        val slash = BuiltInCommands().getBuiltInCommands(Channel.DM).first { it.name == "echo" }
+        assertEquals("hello", slash.execute?.invoke(mapOf("message" to "hello")))
         assertSame(PluginUiRegistry.headers(), PluginUiRegistry.headers())
         assertSame(PluginUiRegistry.composers(), PluginUiRegistry.composers())
 
@@ -65,6 +97,10 @@ class PluginDependencyResolverTest {
         PluginUiRegistry.removeOwner("second")
         assertTrue(PluginUiRegistry.headers().isEmpty())
         assertTrue(PluginUiRegistry.composers().isEmpty())
+        assertTrue(PluginUiRegistry.bottomTabs().isEmpty())
+        assertTrue(PluginUiRegistry.profiles().isEmpty())
+        assertTrue(PluginUiRegistry.profileTabs().isEmpty())
+        assertTrue(PluginUiRegistry.slashCommands().isEmpty())
     }
 
     @Test(expected = IllegalArgumentException::class)

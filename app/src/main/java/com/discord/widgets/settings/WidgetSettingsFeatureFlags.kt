@@ -8,6 +8,7 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.databinding.WidgetSettingsFeatureFlagsBinding
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.PluginSurfaceCustomization.Surface
 import com.google.android.material.snackbar.Snackbar
 
 class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_flags) {
@@ -75,6 +76,15 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         }
         binding.settingsFeatureCustomizeHeader.setOnClickListener {
             WidgetSettingsHeaderCustomization.launch(requireContext())
+        }
+        binding.settingsFeatureCustomizeBottomTabs.setOnClickListener {
+            WidgetSettingsPluginSurfaceCustomization.launch(requireContext(), Surface.BOTTOM_TABS)
+        }
+        binding.settingsFeatureCustomizeProfilePopouts.setOnClickListener {
+            WidgetSettingsPluginSurfaceCustomization.launch(requireContext(), Surface.PROFILE)
+        }
+        binding.settingsFeatureCustomizeProfileTabs.setOnClickListener {
+            WidgetSettingsPluginSurfaceCustomization.launch(requireContext(), Surface.PROFILE_TABS)
         }
         binding.settingsFeatureMessageCustomizations.apply {
             isChecked = FeatureFlags.messageCustomizationsEnabled()

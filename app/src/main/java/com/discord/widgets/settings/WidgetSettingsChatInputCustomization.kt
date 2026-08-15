@@ -4,25 +4,34 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.view.DragEvent
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.widget.ImageViewCompat
 import com.discord.R
+import com.discord.api.channel.isPrivate
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.databinding.WidgetSettingsChatInputCustomizationBinding
 import com.discord.stores.StoreStream
+import com.discord.plugins.PluginUiRegistry
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.feature.ChatInputCustomization
 import com.discord.utilities.feature.ChatInputCustomization.Button
 import com.discord.utilities.feature.ChatInputCustomization.Entry
 import com.discord.utilities.feature.ChatInputCustomization.Zone
+import com.discord.utilities.feature.PluginSurfaceCustomization
+import com.discord.utilities.feature.PluginSurfaceCustomization.Surface
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.view.SimpleDraweeView
 import com.google.android.material.snackbar.Snackbar
+import com.discord.views.CheckedSetting
+import dev.mantikafasi.manticord.plugins.api.PluginComposerZone
+import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
+import dev.mantikafasi.manticord.plugins.api.pluginComposerContext
 import kotlin.math.abs
 
 class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_settings_chat_input_customization) {
@@ -33,6 +42,11 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
         setActionBarTitle(R.string.chat_input_customization_title)
         setActionBarDisplayHomeAsUpEnabled()
         val binding = WidgetSettingsChatInputCustomizationBinding.bind(view)
+        val composerContributions = PluginUiRegistry.composers()
+        val composerByKey = composerContributions.associateBy {
+            PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id)
+        }
+        val pluginEntries = PluginSurfaceCustomization.get(Surface.COMPOSER, composerByKey.keys.toList()).toMutableList()
         val restartNotice = Snackbar.make(
             binding.root,
             R.string.user_settings_restart_app_mobile,
@@ -78,8 +92,34 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
         changed = {
             ChatInputCustomization.save(entries)
             bindToggles()
-            renderPreview(binding)
+            renderPreview(binding, pluginEntries, composerByKey)
             restartNotice.show()
+        }
+        binding.chatInputCustomizationPluginsHeader.visibility =
+            if (composerContributions.isEmpty()) View.GONE else View.VISIBLE
+        binding.chatInputCustomizationPlugins.removeAllViews()
+        pluginEntries.forEach { entry ->
+            val owned = composerByKey[entry.key] ?: return@forEach
+            val row = LayoutInflater.from(requireContext()).inflate(
+                R.layout.widget_settings_plugin_toggle,
+                binding.chatInputCustomizationPlugins,
+                false,
+            ) as CheckedSetting
+            row.apply {
+                setText(owned.contribution.title)
+                setSubtext("${owned.owner} - ${owned.contribution.zone.name.lowercase()}")
+                setChecked(entry.visible, false)
+                fun update(visible: Boolean) {
+                    pluginEntries[pluginEntries.indexOfFirst { it.key == entry.key }] = entry.copy(visible = visible)
+                    PluginSurfaceCustomization.save(Surface.COMPOSER, pluginEntries)
+                    setChecked(visible, false)
+                    renderPreview(binding, pluginEntries, composerByKey)
+                    PluginUiRegistry.notifyComposersChanged()
+                }
+                setOnCheckedListener(::update)
+                setContainerClickListener(View.OnClickListener { update(!isChecked) })
+            }
+            binding.chatInputCustomizationPlugins.addView(row)
         }
         bindToggles()
         installDropTarget(binding.chatInputCustomizationLeft, { Zone.LEFT }, changed)
@@ -91,10 +131,14 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
             }
         }, changed)
         installDropTarget(binding.chatInputCustomizationRight, { Zone.RIGHT }, changed)
-        renderPreview(binding)
+        renderPreview(binding, pluginEntries, composerByKey)
     }
 
-    private fun renderPreview(binding: WidgetSettingsChatInputCustomizationBinding) {
+    private fun renderPreview(
+        binding: WidgetSettingsChatInputCustomizationBinding,
+        pluginEntries: List<PluginSurfaceCustomization.Entry>,
+        pluginByKey: Map<String, com.discord.plugins.OwnedComposerContribution>,
+    ) {
         val zones = mapOf(
             Zone.LEFT to binding.chatInputCustomizationLeft,
             Zone.INSIDE to binding.chatInputCustomizationInside,
@@ -112,6 +156,29 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
                 target.addView(button, target.indexOfChild(binding.chatInputCustomizationHint).coerceAtLeast(0))
             } else {
                 target.addView(button)
+            }
+        }
+        val selected = StoreStream.getChannelsSelected().getSelectedChannel()
+        val channel = pluginChannelContext(
+            selected?.id ?: 0L,
+            selected?.guildId?.takeIf { it > 0L },
+            selected?.type ?: com.discord.api.channel.Channel.DM,
+            selected?.isPrivate() ?: true,
+        )
+        val context = pluginComposerContext(channel, false, true, "")
+        pluginEntries.filter(PluginSurfaceCustomization.Entry::visible).forEach { entry ->
+            val contribution = pluginByKey[entry.key]?.contribution ?: return@forEach
+            if (!runCatching { contribution.isVisible(context) }.getOrDefault(false)) return@forEach
+            val pluginView = runCatching { contribution.createView(requireContext()) }.getOrNull() ?: return@forEach
+            runCatching { contribution.bind(pluginView, context) }
+            when (contribution.zone) {
+                PluginComposerZone.LEFT -> binding.chatInputCustomizationLeft.addView(pluginView)
+                PluginComposerZone.INSIDE_START -> binding.chatInputCustomizationInside.addView(
+                    pluginView,
+                    binding.chatInputCustomizationInside.indexOfChild(binding.chatInputCustomizationHint).coerceAtLeast(0),
+                )
+                PluginComposerZone.INSIDE_END -> binding.chatInputCustomizationInside.addView(pluginView)
+                PluginComposerZone.RIGHT -> binding.chatInputCustomizationRight.addView(pluginView)
             }
         }
     }

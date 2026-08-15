@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <TextView android:id="@+id/profile_customization_section_header" style="@style/UserProfile.Section.Header"/>
+    <androidx.cardview.widget.CardView android:id="@+id/profile_customization_section_card" style="@style/UserProfile.Section.Card">
+        <LinearLayout android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="12dp">
+            <ImageView android:id="@+id/profile_customization_section_icon" android:visibility="gone" android:layout_width="20dp" android:layout_height="20dp" android:layout_marginEnd="8dp" android:importantForAccessibility="no"/>
+            <TextView android:id="@+id/profile_customization_section_text" android:textSize="@dimen/uikit_textsize_medium" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" style="@style/UiKit.TextView"/>
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+</LinearLayout>

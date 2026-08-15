@@ -4,16 +4,16 @@
 
 This document records the agreed architecture for bundled and externally installed Manticord
 plugins. The `:plugin-api` manifest/lifecycle contract, global loading policy, dependency resolver,
-priority ordering, blocking-chain promotion, external APK loader, lifecycle execution, header and
-composer hosts, schema/custom settings, settings cards, signer approval, namespaced storage, and
+priority ordering, blocking-chain promotion, external APK loader, lifecycle execution, header,
+composer, bottom-tab, and profile-popout hosts, schema/custom settings, settings cards, signer approval, namespaced storage, and
 sample plugin are implemented. `PLAN.md` remains the project roadmap and links here for the detailed
 design.
 
 ## Goals
 
 - Support bundled plugins and externally installed plugin APKs through one API.
-- Let plugins add lifecycle-aware components to typed UI surfaces, initially the chat header and
-  message composer.
+- Let plugins add lifecycle-aware components to typed UI surfaces: chat headers, message composers,
+  bottom tabs, and profile popouts.
 - Give every plugin a consistent settings entry while permitting an XML-backed custom settings
   page when the schema API is insufficient.
 - Resolve plugin requirements and deterministic priority without delaying hot UI paths.
@@ -269,8 +269,7 @@ removed automatically when the scope stops. Registries publish pre-sorted immuta
 when registrations change;
 rendering does not acquire a registry lock, read preferences, query packages, or sort dependencies.
 
-The first supported hosts are the chat header and message composer. New hosts use typed contracts
-rather than exposing arbitrary internal `ViewGroup`s.
+Hosts use typed contracts rather than exposing arbitrary internal `ViewGroup`s.
 
 ### Header
 
@@ -305,6 +304,50 @@ Plugin views are installed after built-in `ChatInputCustomization` placement. Th
 removed independently, so refreshing plugin contributions cannot detach built-in composer controls.
 Views are created once per host view lifecycle and rebound rather than recreated for every store
 emission.
+
+### Bottom Tabs
+
+Bottom-tab contributions declare a stable ID, user-facing title, priority, synchronous view factory,
+bind callback, click callback, and visibility predicate. The immutable bind context contains the
+selected built-in tab name, current user ID, and whether navigation is enabled.
+
+Built-ins occupy priorities `500`, `400`, `300`, `200`, and `100` for Home through Settings. A plugin
+priority places its view relative to those built-ins; equal priorities use stable `owner:id` order.
+The Bottom Tabs customization screen persists visibility and user order for built-ins and plugin
+elements together. Newly installed contributions append in priority order without discarding the
+saved order of existing entries. Home and Settings remain visible so navigation and the customization
+screen cannot become unreachable; both remain reorderable.
+
+The host gives every visible item equal width and the full navigation-bar height. Factories run once
+per host view lifecycle; ordinary state changes only rebind cached views.
+
+### Profile Popouts
+
+Profile contributions declare a stable ID, title, priority, synchronous view factory, bind callback,
+and visibility predicate. They share one ordered element list with native About Me, Member Since,
+Friends Since, Voice Settings, Activity, Guild/Roles, Connections, and Note sections. Priority supplies
+the first default position; the Profile Popouts customization screen then persists visibility and user order.
+
+The immutable profile context contains user/guild identity, current-user and bot flags, plus resolved
+surface, border, primary text, secondary text, and interactive colors. Plugins must apply those
+palette values to every dynamic child so custom guild/user profile themes remain coherent. Views are
+cached for the sheet lifecycle and rebound on profile/palette updates.
+
+Profile-tab contributions use `registerProfileTab(...)` and the same palette-aware profile context.
+Main, the optional Board, and visible plugin tabs share the Profile Tabs customization order; Main is
+always visible. Plugin views are created once per sheet lifecycle, rebound with profile changes, and
+hosted by the existing profile tab/page controller; native Main/Board swipe behavior remains unchanged.
+
+### Slash Commands
+
+`registerSlashCommand(...)` adds a local command to the existing application-command store. Commands
+declare a stable ID, lowercase command name, description, priority, visibility predicate, and a
+synchronous executor. They receive the current typed channel context plus one optional text argument
+and return the message text to submit.
+
+Plugin commands participate in command discovery, query filtering, execution, built-in application
+counts, and frecency. They never create a second parser or send path. Higher priority wins duplicate
+plugin names; native command names remain reserved. Exceptions are contained and produce no message.
 
 ## Plugin View And Resource Context
 

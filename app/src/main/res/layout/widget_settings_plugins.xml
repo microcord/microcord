@@ -4,6 +4,10 @@
     android:orientation="vertical"
     style="@style/UiKit.ViewGroup.Page">
 
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar" />
+    </com.google.android.material.appbar.AppBarLayout>
+
     <com.discord.views.CheckedSetting
         android:id="@+id/plugins_master"
         app:cs_text="@string/plugins_load"
