@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input
 import com.discord.app.AppViewModel
 import rx.Observable
 import rx.subjects.PublishSubject
+import rx.subjects.BehaviorSubject
 
 /**
  * The shared handle on the composer that the expression tray and its child pickers use to drive the
@@ -24,6 +25,11 @@ import rx.subjects.PublishSubject
 class AppFlexInputViewModel : AppViewModel<AppFlexInputViewModel.ViewState>(ViewState()) {
 
     data class ViewState(val expressionTrayShown: Boolean = false)
+    data class MessageLimitCounter(
+        val text: String = "",
+        val visible: Boolean = false,
+        val overLimit: Boolean = false,
+    )
 
     /** Things only the view holding the `EditText` can carry out. */
     sealed class Event {
@@ -32,8 +38,14 @@ class AppFlexInputViewModel : AppViewModel<AppFlexInputViewModel.ViewState>(View
     }
 
     private val eventSubject = PublishSubject.create<Event>()
+    private val messageLimitCounter = BehaviorSubject.create(MessageLimitCounter())
 
     fun observeEvents(): Observable<Event> = eventSubject
+    fun observeMessageLimitCounter(): Observable<MessageLimitCounter> = messageLimitCounter.distinctUntilChanged()
+
+    fun updateMessageLimitCounter(counter: MessageLimitCounter) {
+        messageLimitCounter.onNext(counter)
+    }
 
     fun showExpressionTray(): Boolean {
         if (requireViewState().expressionTrayShown) return false

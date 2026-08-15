@@ -6,6 +6,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.Lifecycle
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.app.appActivityViewModels
 import com.discord.databinding.WidgetChatOverlayBinding
 import com.discord.models.guild.UserGuildMember
 import com.discord.stores.StoreStream
@@ -20,6 +21,8 @@ import rx.subscriptions.CompositeSubscription
 import java.util.concurrent.TimeUnit
 import com.discord.i18n.FormatUtils
 import com.discord.i18n.I18nSpans
+import com.discord.utilities.color.ColorCompat
+import com.discord.widgets.chat.input.AppFlexInputViewModel
 
 class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     data class State(
@@ -58,6 +61,7 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     private var _binding: WidgetChatOverlayBinding? = null
     private val binding get() = requireNotNull(_binding)
     private var subscriptions = CompositeSubscription()
+    private val flexInputViewModel: AppFlexInputViewModel by appActivityViewModels { AppFlexInputViewModel() }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -73,8 +77,13 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             OldMessageModel.get().distinctUntilChanged().subscribe { model ->
                 postIfStarted { showOldMessages(model) }
             },
-            ChatTypingModel.get().distinctUntilChanged().subscribe { model ->
-                postIfStarted { showTyping(model) }
+            Observable.combineLatest(
+                ChatTypingModel.get().distinctUntilChanged(),
+                flexInputViewModel.observeMessageLimitCounter(),
+            ) { typing, counter -> typing to counter }
+                .distinctUntilChanged()
+                .subscribe { (typing, counter) ->
+                    postIfStarted { renderTypingBar(typing, counter) }
             },
         )
     }
@@ -103,15 +112,18 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             if (model.isViewingOldMessages) View.VISIBLE else View.GONE
     }
 
-    private fun showTyping(model: ChatTypingModel) {
-        val typing = model as? ChatTypingModel.Typing
-        if (typing == null || !model.showsBar) {
+    private fun renderTypingBar(
+        typingModel: ChatTypingModel,
+        messageLimitCounter: AppFlexInputViewModel.MessageLimitCounter,
+    ) {
+        val typing = typingModel as? ChatTypingModel.Typing
+        if (!shouldShowStatusBar(typingModel.showsBar, messageLimitCounter.visible)) {
             binding.chatOverlayTypingDots.stop()
             binding.chatOverlayTyping.visibility = View.GONE
             return
         }
 
-        val users = typing.typingUsers
+        val users = typing?.typingUsers.orEmpty()
         val hasTyping = users.isNotEmpty()
         binding.chatOverlayTyping.visibility = View.VISIBLE
         binding.chatOverlayTypingDots.apply {
@@ -119,12 +131,14 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             if (hasTyping) start() else stop()
         }
         binding.chatTypingUsersTyping.apply {
-            setDraweeSpanStringBuilder(typingText(users))
-            visibility = if (hasTyping) View.VISIBLE else View.GONE
+            if (hasTyping) setDraweeSpanStringBuilder(typingText(users))
+            visibility = if (hasTyping) View.VISIBLE else View.INVISIBLE
         }
         val slowmodeText = when {
-            typing.cooldownSecs > 0 -> TimeUtils.toFriendlyStringSimple(typing.cooldownSecs * 1000L)
-            typing.channelRateLimit > 0 && !hasTyping -> getString(R.string.channel_slowmode_desc_short)
+            typing != null && typing.cooldownSecs > 0 ->
+                TimeUtils.toFriendlyStringSimple(typing.cooldownSecs * 1000L)
+            typing != null && typing.channelRateLimit > 0 && !hasTyping ->
+                getString(R.string.channel_slowmode_desc_short)
             else -> ""
         }
         binding.chatTypingUsersSlowmode.apply {
@@ -132,7 +146,18 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             visibility = if (slowmodeText.isNotEmpty()) View.VISIBLE else View.GONE
         }
         binding.chatTypingUsersSlowmodeIcon.visibility =
-            if (typing.channelRateLimit > 0) View.VISIBLE else View.GONE
+            if ((typing?.channelRateLimit ?: 0) > 0) View.VISIBLE else View.GONE
+        binding.chatTypingMessageLimitCounter.apply {
+            text = messageLimitCounter.text
+            visibility = if (messageLimitCounter.visible) View.VISIBLE else View.GONE
+            setTextColor(
+                if (messageLimitCounter.overLimit) {
+                    ColorCompat.getColor(context, R.color.status_red_500)
+                } else {
+                    ColorCompat.getThemedColor(context, R.attr.colorTextMuted)
+                },
+            )
+        }
     }
 
     private fun typingText(users: List<UserGuildMember>): DraweeSpanStringBuilder {
@@ -201,5 +226,8 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
                     "c" to users.getOrNull(2)?.toString().orEmpty(),
                 ),
             )
+
+        internal fun shouldShowStatusBar(typingVisible: Boolean, counterVisible: Boolean): Boolean =
+            typingVisible || counterVisible
     }
 }

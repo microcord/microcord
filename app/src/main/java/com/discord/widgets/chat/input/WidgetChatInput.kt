@@ -377,6 +377,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onDestroyView() {
+        flexInputViewModel.updateMessageLimitCounter(AppFlexInputViewModel.MessageLimitCounter())
         view?.removeCallbacks(pluginComposerBinder)
         input?.removeTextChangedListener(watcher)
         autocomplete?.onDestroyView()
@@ -983,22 +984,16 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun updateMessageLimitCounter(value: CharSequence? = input?.text) {
-        val counter = flexInputBinding?.messageLimitCounter ?: return
         val length = value?.length ?: 0
         val limit = state?.me?.premiumTier?.let(MessageSendCoordinator::characterLimit)
             ?: MessageSendCoordinator.DEFAULT_CHARACTER_LIMIT
-        counter.visibility = if (FeatureFlags.messageLimitCounterEnabled() && length > 0) {
-            View.VISIBLE
-        } else {
-            View.GONE
-        }
-        counter.text = messageLimitText(length, limit)
-        counter.setTextColor(
-            if (length > limit) {
-                ColorCompat.getColor(requireContext(), R.color.status_red_500)
-            } else {
-                ColorCompat.getThemedColor(requireContext(), R.attr.colorTextMuted)
-            },
+        flexInputViewModel.updateMessageLimitCounter(
+            AppFlexInputViewModel.MessageLimitCounter(
+                text = messageLimitText(length, limit),
+                visible = FeatureFlags.messageLimitCounterEnabled() &&
+                    state?.isInputShowing == true && length > 0,
+                overLimit = length > limit,
+            ),
         )
     }
 
