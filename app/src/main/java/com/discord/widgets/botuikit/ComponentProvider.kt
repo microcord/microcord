@@ -1,6 +1,5 @@
 package com.discord.widgets.botuikit
 
-import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import com.discord.models.botuikit.*
@@ -11,7 +10,7 @@ import com.discord.widgets.botuikit.views.ComponentView
 import com.discord.widgets.botuikit.views.select.SelectComponentView
 import com.discord.widgets.botuikit.views.v2.*
 
-class ComponentProvider(val context: Context) {
+class ComponentProvider {
     fun getConfiguredComponentView(
         listener: ComponentActionListener,
         component: MessageComponent,
@@ -22,7 +21,7 @@ class ComponentProvider(val context: Context) {
         val view = if (reusable?.type() == component.type) {
             reusable
         } else {
-            ComponentInflater.from(context).inflateComponent(component.type, root)
+            ComponentInflater.from(root.context).inflateComponent(component.type, root)
         }
         configure(view, component, listener)
         return view

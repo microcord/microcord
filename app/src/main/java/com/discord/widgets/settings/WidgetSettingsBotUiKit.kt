@@ -73,7 +73,7 @@ class WidgetSettingsBotUiKit : AppFragment(R.layout.widget_settings_bot_ui_kit) 
             binding.botUiKitSelectToggle.text = "Toggle Multi Select (${if (multi) "on" else "off"})"
             binding.botUiKitSelectComponent.root.configure(
                 SelectMessageComponent(type, type.type, ActionInteractionComponentState.Enabled, customId, "Choose...", 0, if (multi) 9 else 1, options, selected.toList(), false),
-                ComponentProvider(requireContext()),
+                ComponentProvider(),
                 object : ComponentActionListener {
                     override fun onButtonComponentClick(componentIndex: Int, customId: String) = Unit
                     override fun onSelectComponentClick(

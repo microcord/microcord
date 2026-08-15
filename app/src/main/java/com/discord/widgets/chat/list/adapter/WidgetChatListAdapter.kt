@@ -59,7 +59,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     val clock: Clock = ClockFactory.get(),
 ) : MGRecyclerAdapterSimple<ChatListEntry>(recycler) {
 
-    val botUiComponentProvider = ComponentProvider(recycler.context)
+    val botUiComponentProvider = ComponentProvider()
 
     /**
      * The whole state the rows render from. Assigning it also pushes the row list through the
