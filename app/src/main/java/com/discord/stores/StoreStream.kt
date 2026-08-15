@@ -240,6 +240,7 @@ class StoreStream private constructor(
     // Every store here resolves its REST client through `RestAPI.apiOrNull` and no-ops while it is
     // null, so construction order against `createRestApi` does not matter.
     private val bans = StoreBans(dispatcher, observationDeck)
+    private val channelFollowerStats = StoreChannelFollowerStats(dispatcher, observationDeck, clock)
     /** Deliberately NOT a `StoreV2` — the reference implements it as a plain subject store. */
     private val guildIntegrations = StoreGuildIntegrations(dispatcher)
     private val guildJoinRequests = StoreGuildJoinRequest(
@@ -1323,6 +1324,7 @@ class StoreStream private constructor(
         userSettings.bindApi(api)
         guildSettings.bindApi(api)
         guildProfiles.bindApi(api)
+        channelFollowerStats.bindApi(api)
         guildWelcomeScreens.bindApi(api)
         lurking.bindApi(api)
         userSettingsSystem.init(context)

@@ -1296,11 +1296,21 @@ object RestAPIParams {
         val userLimit: Int?,
         val bitrate: Int?,
         val rtcRegion: String?,
+        val videoQualityMode: Int? = null,
     )
 
     data class CreateChannel(val recipients: List<Long>) {
         constructor(recipientId: Long) : this(listOf(recipientId))
     }
+
+    data class CreateWebhook(val name: String)
+
+    /** [avatar] is a data URL; omitting it leaves the current one rather than clearing it. */
+    data class UpdateWebhook(
+        val name: String,
+        val channelId: Long,
+        val avatar: String? = null,
+    )
 
     data class ApplicationTicket(val testMode: Boolean = false)
 

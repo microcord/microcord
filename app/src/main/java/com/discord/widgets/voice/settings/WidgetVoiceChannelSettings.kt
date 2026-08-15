@@ -35,6 +35,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
+import com.discord.widgets.integrations.WidgetChannelSettingsIntegrations
 import com.discord.widgets.settings.SettingsStrings
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -54,6 +55,8 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
     private lateinit var save: FloatingActionButton
     private var model: Model? = null
     private var selectedRegion: String? = null
+    private var savedVideoQuality = VIDEO_QUALITY_AUTO
+    private var draftVideoQuality = VIDEO_QUALITY_AUTO
     private var bindingState = false
 
     override fun onViewBound(view: View) {
@@ -79,7 +82,25 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
             userLimitDisplay.text = if (progress == 0) getString(R.string.no_user_limit) else progress.toString()
         })
         nsfw.setOnCheckedListener { updateSaveVisibility() }
+        view.findViewById<CheckedSetting>(R.id.channel_settings_video_quality_auto)
+            .setContainerClickListener { selectVideoQuality(VIDEO_QUALITY_AUTO) }
+        view.findViewById<CheckedSetting>(R.id.channel_settings_video_quality_full)
+            .setContainerClickListener { selectVideoQuality(VIDEO_QUALITY_FULL) }
         save.setOnClickListener { saveChanges() }
+    }
+
+    private fun selectVideoQuality(mode: Int) {
+        draftVideoQuality = mode
+        renderVideoQualityRadios()
+        updateSaveVisibility()
+    }
+
+    private fun renderVideoQualityRadios() {
+        val root = view ?: return
+        root.findViewById<CheckedSetting>(R.id.channel_settings_video_quality_auto).isChecked =
+            draftVideoQuality == VIDEO_QUALITY_AUTO
+        root.findViewById<CheckedSetting>(R.id.channel_settings_video_quality_full).isChecked =
+            draftVideoQuality == VIDEO_QUALITY_FULL
     }
 
     override fun onViewBoundOrOnResume() {
@@ -108,6 +129,7 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
         bitrate.max = (next.maxBitrateKbps - MIN_BITRATE_KBPS).coerceAtLeast(0)
         bitrate.progress = (next.channel.bitrate / 1_000 - MIN_BITRATE_KBPS).coerceIn(0, bitrate.max)
         bitrateDisplay.text = "${MIN_BITRATE_KBPS + bitrate.progress} Kbps"
+        userLimit.max = if (next.channel.isStageVoiceChannel()) MAX_STAGE_USER_LIMIT else MAX_VOICE_USER_LIMIT
         userLimit.progress = next.channel.userLimit.coerceIn(0, userLimit.max)
         userLimitDisplay.text = if (userLimit.progress == 0) getString(R.string.no_user_limit) else userLimit.progress.toString()
         selectedRegion = next.channel.rtcRegion
@@ -115,31 +137,41 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
         nsfw.setOnCheckedListener(null)
         nsfw.isChecked = next.channel.nsfw
         nsfw.setOnCheckedListener { updateSaveVisibility() }
+        savedVideoQuality = next.channel.videoQualityMode ?: VIDEO_QUALITY_AUTO
+        draftVideoQuality = savedVideoQuality
+        renderVideoQualityRadios()
         bindingState = false
 
-        root.findViewById<TextView>(R.id.settings_bitrate_help).text = SettingsStrings.render(
-            requireContext(), R.string.form_help_bitrate, "bitrate" to DEFAULT_BITRATE_KBPS,
-        )
         val ordinaryVoice = !next.channel.isStageVoiceChannel()
-        root.findViewById<View>(R.id.user_limit_divider).isVisible = ordinaryVoice
-        root.findViewById<TextView>(R.id.user_limit_title).isVisible = ordinaryVoice
-        root.findViewById<LinearLayout>(R.id.settings_user_limit).isVisible = ordinaryVoice
-        root.findViewById<TextView>(R.id.settings_user_limit_help).isVisible = ordinaryVoice
+        root.findViewById<TextView>(R.id.settings_user_limit_help).text = SettingsStrings.render(
+            requireContext(),
+            if (ordinaryVoice) R.string.form_help_user_limit else R.string.form_help_user_limit_stage,
+        ).trim()
 
         val canEdit = next.canManageChannel
         name.isVisible = canEdit
-        root.findViewById<View>(R.id.region_override_divider).isVisible = canEdit
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_video_quality).isVisible = canEdit
+        val showRegion = canEdit && ordinaryVoice
+        root.findViewById<View>(R.id.region_override_divider).isVisible = showRegion
         root.findViewById<LinearLayout>(R.id.channel_settings_region_override_container).apply {
-            isVisible = canEdit
+            isVisible = showRegion
             setOnClickListener { showRegionDialog(next.regions) }
         }
         root.findViewById<TextView>(R.id.channel_settings_region_override_help).apply {
-            isVisible = canEdit
+            isVisible = showRegion
             setText(R.string.form_help_region_override)
         }
+        root.findViewById<TextView>(R.id.settings_bitrate_help).text = SettingsStrings.render(
+            requireContext(), R.string.form_help_bitrate, "bitrate" to DEFAULT_BITRATE_KBPS,
+        )
         root.findViewById<LinearLayout>(R.id.channel_settings_section_user_management).isVisible = next.canManagePermissions
         root.findViewById<TextView>(R.id.channel_settings_permissions).setOnClickListener {
             WidgetChannelSettingsPermissionsOverview.launch(requireContext(), next.channel.id)
+        }
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_integrations).isVisible =
+            next.canManageWebhooks
+        root.findViewById<TextView>(R.id.channel_settings_integrations).setOnClickListener {
+            WidgetChannelSettingsIntegrations.launch(requireContext(), next.channel.id)
         }
         root.findViewById<LinearLayout>(R.id.channel_settings_section_privacy_safety).isVisible =
             canEdit && ordinaryVoice
@@ -172,6 +204,7 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
                 userLimit = userLimit.progress,
                 bitrate = (MIN_BITRATE_KBPS + bitrate.progress) * 1_000,
                 rtcRegion = selectedRegion,
+                videoQualityMode = draftVideoQuality,
             ),
         ).restSubscribeOn().ui(this).appSubscribe(WidgetVoiceChannelSettings::class.java, context = context) {
             AppToast.show(context, R.string.saved_settings)
@@ -206,7 +239,7 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
             name.editText?.text?.toString().orEmpty() != channel.name.orEmpty() ||
                 (MIN_BITRATE_KBPS + bitrate.progress) * 1_000 != channel.bitrate ||
                 userLimit.progress != channel.userLimit || selectedRegion != channel.rtcRegion ||
-                nsfw.isChecked != channel.nsfw
+                nsfw.isChecked != channel.nsfw || draftVideoQuality != savedVideoQuality
             )
     }
 
@@ -219,6 +252,7 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
         val channel: Channel,
         val canManageChannel: Boolean,
         val canManagePermissions: Boolean,
+        val canManageWebhooks: Boolean,
         val maxBitrateKbps: Int,
         val regions: List<ModelVoiceRegion>,
     ) {
@@ -238,6 +272,7 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
                                 channel,
                                 PermissionUtils.canAndIsElevated(Permission.MANAGE_CHANNELS, permissions, me.mfaEnabled, it.mfaLevel),
                                 PermissionUtils.canAndIsElevated(Permission.MANAGE_ROLES, permissions, me.mfaEnabled, it.mfaLevel),
+                                PermissionUtils.canAndIsElevated(Permission.MANAGE_WEBHOOKS, permissions, me.mfaEnabled, it.mfaLevel),
                                 maxBitrateKbps(it, channel),
                                 regions.filterNot { region -> region.isDeprecated || region.isHidden }
                                     .sortedBy { region -> region.name },
@@ -252,6 +287,10 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
         private const val ARG_CHANNEL_ID = "INTENT_EXTRA_CHANNEL_ID"
         const val MIN_BITRATE_KBPS = 8
         const val DEFAULT_BITRATE_KBPS = 64
+        private const val MAX_VOICE_USER_LIMIT = 99
+        private const val MAX_STAGE_USER_LIMIT = 10_000
+        private const val VIDEO_QUALITY_AUTO = 1
+        private const val VIDEO_QUALITY_FULL = 2
 
         @JvmStatic
         fun launch(channelId: Long, context: Context) = AppScreenRouter.launch(

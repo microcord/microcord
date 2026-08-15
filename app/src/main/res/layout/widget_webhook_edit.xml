@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="@dimen/padding_bottom_fab_screen" style="@style/UiKit.ViewGroup.LinearLayout">
+            <LinearLayout android:id="@+id/webhook_edit_avatar_container" android:gravity="center_horizontal" android:paddingTop="24dp" android:paddingBottom="8dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/webhook_edit_avatar" android:layout_width="80dp" android:layout_height="80dp" android:background="?attr/selectableItemBackgroundBorderless" app:roundAsCircle="true" app:placeholderImage="?attr/colorBackgroundSecondary"/>
+                <TextView android:id="@+id/webhook_edit_avatar_help" android:gravity="center" android:paddingTop="8dp" android:text="@string/webhook_modal_icon_description" style="@style/UiKit.Settings.Item.SubText"/>
+            </LinearLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/webhook_edit_name" android:layout_margin="16dp" android:hint="@string/webhook_form_name" style="@style/UiKit.TextInputLayout.Primary">
+                <com.google.android.material.textfield.TextInputEditText android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:text="@string/channel" style="@style/UiKit.Settings.Item.Header"/>
+            <TextView android:id="@+id/webhook_edit_channel" app:drawableTint="?attr/colorInteractiveNormal" style="@style/UiKit.Settings.Item.Chevron"/>
+            <LinearLayout android:id="@+id/webhook_edit_url_container" style="@style/UiKit.ViewGroup.LinearLayout">
+                <View style="@style/UiKit.Settings.Divider"/>
+                <TextView android:text="@string/webhook_form_url" style="@style/UiKit.Settings.Item.Header"/>
+                <TextView android:id="@+id/webhook_edit_url" android:textIsSelectable="false" style="@style/UiKit.Settings.Item.SubText"/>
+                <TextView android:id="@+id/webhook_edit_copy_url" android:text="@string/integrations_webhook_copy_url" android:textColor="?attr/colorTextLink" style="@style/UiKit.Settings.Item"/>
+            </LinearLayout>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/webhook_edit_delete" android:textColor="?attr/colorTextDanger" style="@style/UiKit.Settings.Item"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/webhook_edit_save" android:contentDescription="@string/save_changes" style="@style/Settings.FloatingActionButton.Save"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

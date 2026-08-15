@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <com.discord.app.AppViewFlipper android:id="@+id/webhooks_flipper" android:layout_width="match_parent" android:layout_height="match_parent" style="@style/UiKit.ViewGroup.AppViewFlipper.InCoordinatorLayout">
+        <FrameLayout style="@style/UiKit.ViewGroup">
+            <ProgressBar android:layout_gravity="center" android:layout_width="wrap_content" android:layout_height="wrap_content" android:indeterminate="true"/>
+        </FrameLayout>
+        <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent">
+            <LinearLayout android:paddingBottom="24dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:id="@+id/webhooks_description" android:paddingTop="16dp" style="@style/UiKit.Settings.Item.SubText"/>
+                <TextView android:id="@+id/webhooks_create" android:text="@string/integrations_webhooks_create" android:textColor="?attr/colorTextLink" app:drawableStartCompat="@drawable/ic_add_24dp" app:drawableTint="?attr/colorTextLink" style="@style/UiKit.Settings.Item.Chevron"/>
+                <LinearLayout android:id="@+id/webhooks_list" style="@style/UiKit.ViewGroup.LinearLayout"/>
+                <LinearLayout android:id="@+id/webhooks_empty" android:gravity="center" android:paddingTop="48dp" android:visibility="gone" style="@style/UiKit.ViewGroup.LinearLayout">
+                    <TextView android:id="@+id/webhooks_empty_title" app:drawableTopCompat="?attr/ic_empty_integrations" style="@style/UiKit.TextView.NoResults"/>
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+    </com.discord.app.AppViewFlipper>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

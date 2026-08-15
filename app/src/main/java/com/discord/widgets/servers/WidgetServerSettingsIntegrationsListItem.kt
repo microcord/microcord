@@ -38,8 +38,8 @@ import rx.functions.Action1
  *   the syncing state, because the gateway's integration update lags the REST call.
  */
 class WidgetServerSettingsIntegrationsListItem(
-    adapter: WidgetServerSettingsIntegrations.Adapter,
-) : MGRecyclerViewHolder<WidgetServerSettingsIntegrations.Adapter, WidgetServerSettingsIntegrations.Model.IntegrationItem>(
+    adapter: WidgetServerSettingsIntegrationPlatform.Adapter,
+) : MGRecyclerViewHolder<WidgetServerSettingsIntegrationPlatform.Adapter, WidgetServerSettingsIntegrationPlatform.IntegrationItem>(
     R.layout.widget_server_settings_integration_list_item,
     adapter,
 ) {
@@ -56,7 +56,7 @@ class WidgetServerSettingsIntegrationsListItem(
 
     override fun onConfigure(
         position: Int,
-        data: WidgetServerSettingsIntegrations.Model.IntegrationItem,
+        data: WidgetServerSettingsIntegrationPlatform.IntegrationItem,
     ) {
         super.onConfigure(position, data)
         val integration = data.integration

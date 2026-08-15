@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/selectableItemBackground" android:gravity="center_vertical" android:orientation="horizontal" android:paddingLeft="16dp" android:paddingTop="12dp" android:paddingRight="16dp" android:paddingBottom="12dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/webhook_item_avatar" android:layout_width="40dp" android:layout_height="40dp" app:roundAsCircle="true" app:placeholderImage="?attr/colorBackgroundSecondary"/>
+    <LinearLayout android:layout_marginStart="16dp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" style="@style/UiKit.ViewGroup.LinearLayout">
+        <TextView android:id="@+id/webhook_item_name" android:singleLine="true" android:ellipsize="end" style="@style/UiKit.TextView.H2"/>
+        <TextView android:id="@+id/webhook_item_subtitle" android:textColor="?attr/primary_300" android:textSize="@dimen/uikit_textsize_medium" android:singleLine="true" android:ellipsize="end" style="@style/UiKit.TextView"/>
+    </LinearLayout>
+    <ImageView android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/icon_carrot" android:importantForAccessibility="no"/>
+</LinearLayout>

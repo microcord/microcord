@@ -131,6 +131,7 @@ import com.discord.models.domain.ModelUserNote
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.ModelVoiceRegion
+import com.discord.models.domain.ModelWebhook
 import com.discord.models.domain.PatchPaymentSourceRaw
 import com.discord.models.domain.PaymentSourceRaw
 import com.discord.models.domain.auth.ModelLoginResult
@@ -1433,6 +1434,27 @@ interface RestAPIInterface {
     fun getGuildIntegrations(
         @Path("guildId") guildId: Long,
     ): Observable<List<ModelGuildIntegration>>
+
+    @GET("channels/{channelId}/webhooks")
+    fun getChannelWebhooks(@Path("channelId") channelId: Long): Observable<List<ModelWebhook>>
+
+    @GET("guilds/{guildId}/webhooks")
+    fun getGuildWebhooks(@Path("guildId") guildId: Long): Observable<List<ModelWebhook>>
+
+    @POST("channels/{channelId}/webhooks")
+    fun createWebhook(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.CreateWebhook,
+    ): Observable<ModelWebhook>
+
+    @PATCH("webhooks/{webhookId}")
+    fun updateWebhook(
+        @Path("webhookId") webhookId: Long,
+        @Body body: RestAPIParams.UpdateWebhook,
+    ): Observable<ModelWebhook>
+
+    @DELETE("webhooks/{webhookId}")
+    fun deleteWebhook(@Path("webhookId") webhookId: Long): Observable<Void>
 
     @POST("guilds/{guildId}/integrations/{integrationId}/sync")
     fun syncIntegration(

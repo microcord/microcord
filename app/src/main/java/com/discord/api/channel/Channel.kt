@@ -51,6 +51,7 @@ data class Channel(
     /** Copied into each new post as its own `rateLimitPerUser`; existing posts keep theirs. */
     val defaultThreadRateLimitPerUser: Int? = null,
     val lastPinTimestamp: UtcDateTime? = null,
+    val videoQualityMode: Int? = null,
 ) {
     @Transient var version: Long = 0
 
@@ -72,6 +73,7 @@ data class Channel(
         const val FLAGS_NONE = 0L
         const val FLAG_PINNED = 2L
         const val FLAG_REQUIRE_TAG = 16L
+        const val FLAG_HIDE_MEDIA_DOWNLOAD_OPTIONS = 32768L
         const val FLAG_IS_SPOILER_CHANNEL = 2097152L
     }
 }

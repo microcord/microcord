@@ -18,6 +18,7 @@ import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isAnnouncementChannel
 import com.discord.api.channel.isCategory
 import com.discord.api.channel.isGuildForumChannel
+import com.discord.api.channel.isGuildMediaChannel
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isThread
@@ -28,6 +29,7 @@ import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.dialogs.SelectorDialog
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
@@ -44,6 +46,7 @@ import com.discord.utilities.rx.ui
 import com.discord.views.CheckedSetting
 import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
+import com.discord.widgets.integrations.WidgetChannelSettingsIntegrations
 import com.discord.widgets.forums.ForumLayout
 import com.discord.widgets.forums.ForumPostTagView
 import com.discord.widgets.forums.ForumSortOrder
@@ -51,6 +54,8 @@ import com.discord.widgets.forums.ForumTagSetting
 import com.discord.widgets.forums.PostTagData
 import com.discord.widgets.forums.WidgetForumTagEdit
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.servers.community.WidgetServerSettingsCommunityOverview
+import com.discord.widgets.servers.settings.invites.WidgetServerSettingsInstantInvites
 import com.discord.widgets.settings.SettingsStrings
 import com.google.android.flexbox.FlexboxLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -87,6 +92,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     private var draftSortOrder = ForumSortOrder.LATEST_ACTIVITY
     private var savedTagSetting = ForumTagSetting.MATCH_SOME
     private var draftTagSetting = ForumTagSetting.MATCH_SOME
+    private var savedParentId = 0L
+    private var draftParentId = 0L
+    private var savedHideMediaDownloads = false
+    private var draftHideMediaDownloads = false
     private var bindingState = false
 
     override fun onViewBound(view: View) {
@@ -185,6 +194,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         draftSortOrder = savedSortOrder
         savedTagSetting = ForumTagSetting.fromApiValue(channel.defaultTagSetting)
         draftTagSetting = savedTagSetting
+        savedParentId = channel.parentId
+        draftParentId = savedParentId
+        savedHideMediaDownloads =
+            (channel.flags ?: Channel.FLAGS_NONE) and Channel.FLAG_HIDE_MEDIA_DOWNLOAD_OPTIONS != 0L
+        draftHideMediaDownloads = savedHideMediaDownloads
         bindingState = false
 
         val isThreadOnly = channel.isThreadOnlyChannel()
@@ -212,6 +226,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
         root.findViewById<LinearLayout>(R.id.channel_settings_section_user_management).isVisible =
             next.canManageChannel || next.canManagePermissions
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_integrations).isVisible =
+            next.canManageWebhooks && !category
+        root.findViewById<TextView>(R.id.channel_settings_integrations).setOnClickListener {
+            WidgetChannelSettingsIntegrations.launch(requireContext(), channel.id)
+        }
 
         root.findViewById<CheckedSetting>(R.id.channel_settings_announcement).apply {
             isVisible = next.canToggleAnnouncement
@@ -250,6 +269,24 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
 
         configureForumTags(root, next)
         configureForumDefaults(root, next)
+        configureCategory(root, next)
+
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_invites).isVisible =
+            next.canManageChannel && !category
+        root.findViewById<TextView>(R.id.channel_settings_invites).setOnClickListener {
+            WidgetServerSettingsInstantInvites.launchForChannel(requireContext(), channel.guildId, channel.id)
+        }
+
+        root.findViewById<LinearLayout>(R.id.channel_settings_section_media_download).isVisible =
+            next.canManageChannel && channel.isGuildMediaChannel()
+        root.findViewById<CheckedSetting>(R.id.channel_settings_media_download).apply {
+            setOnCheckedListener(null)
+            isChecked = !draftHideMediaDownloads
+            setOnCheckedListener { checked ->
+                draftHideMediaDownloads = !checked
+                updateSaveVisibility()
+            }
+        }
 
         val archiveSection = root.findViewById<LinearLayout>(R.id.channel_settings_section_default_auto_archive_duration)
         archiveSection.isVisible = next.canManageChannel && channel.isThreaded()
@@ -306,6 +343,32 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             isEnabled = model.canManageChannel && !(tags.isNotEmpty() && tags.all { it.moderated })
             setOnCheckedListener { checked ->
                 draftRequireTag = checked
+                updateSaveVisibility()
+            }
+        }
+    }
+
+    private fun configureCategory(root: View, model: Model) {
+        val channel = model.channel
+        val categories = model.categories
+        val section = root.findViewById<LinearLayout>(R.id.channel_settings_section_category)
+        section.isVisible = !channel.isCategory() && !channel.isThread() &&
+            model.canManageChannel && categories.isNotEmpty()
+        if (!section.isVisible) return
+
+        val labels = listOf(getString(R.string.uncategorized)) +
+            categories.map { it.getDisplayNameOrDefault(requireContext()) }
+        val ids = listOf(0L) + categories.map { it.id }
+        root.findViewById<TextView>(R.id.channel_settings_category_value).text =
+            labels[ids.indexOf(draftParentId).coerceAtLeast(0)]
+        root.findViewById<LinearLayout>(R.id.channel_settings_category).setOnClickListener {
+            SelectorDialog.show(
+                childFragmentManager,
+                getString(R.string.category),
+                labels.toTypedArray(),
+            ) { position ->
+                draftParentId = ids[position]
+                root.findViewById<TextView>(R.id.channel_settings_category_value).text = labels[position]
                 updateSaveVisibility()
             }
         }
@@ -424,21 +487,61 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             AppToast.show(context, if (it.isCategory()) R.string.category_settings else R.string.channel_settings)
             hideKeyboard()
         }
+        if (draftParentId != savedParentId) moveToCategory(channel)
     }
 
-    /** The spoiler bit and the require-tag bit share one field, so both drafts fold in together. */
+    /** `parent_id` only accepts an explicit null through the reorder route, so a move goes there. */
+    private fun moveToCategory(channel: Channel) {
+        RestAPI.api.reorderChannels(
+            channel.guildId,
+            listOf(
+                RestAPIParams.ChannelPosition(
+                    id = channel.id,
+                    position = channel.position,
+                    parentId = draftParentId.takeIf { it != 0L } ?: RestAPIParams.ChannelPosition.PARENT_ID_NONE,
+                ),
+            ),
+        ).restSubscribeOn().ui(this).appSubscribe(WidgetTextChannelSettings::class.java, context = context) {
+            savedParentId = draftParentId
+        }
+    }
+
+    /** Spoiler, require-tag and media downloads share one field, so every draft folds in together. */
     private fun draftFlags(channel: Channel): Long {
-        val base = draftVisibility.flags(channel.flags ?: Channel.FLAGS_NONE)
-        return if (draftRequireTag) {
-            base or Channel.FLAG_REQUIRE_TAG
+        var flags = draftVisibility.flags(channel.flags ?: Channel.FLAGS_NONE)
+        flags = if (draftRequireTag) {
+            flags or Channel.FLAG_REQUIRE_TAG
         } else {
-            base and Channel.FLAG_REQUIRE_TAG.inv()
+            flags and Channel.FLAG_REQUIRE_TAG.inv()
+        }
+        return if (draftHideMediaDownloads) {
+            flags or Channel.FLAG_HIDE_MEDIA_DOWNLOAD_OPTIONS
+        } else {
+            flags and Channel.FLAG_HIDE_MEDIA_DOWNLOAD_OPTIONS.inv()
         }
     }
 
     private fun deleteChannel(model: Model) {
         if (model.isProtectedCommunityChannel) {
-            AppToast.show(context, R.string.cannot_delete_channel)
+            val isRules = model.guild.rulesChannelId == model.channel.id
+            WidgetNoticeDialog.show(
+                fragmentManager = parentFragmentManager,
+                headerText = getString(R.string.cannot_delete_channel),
+                bodyText = SpannableStringBuilder(
+                    getString(
+                        if (isRules) R.string.delete_rules_channel_body else R.string.delete_updates_channel_body,
+                    ),
+                )
+                    .append("\n\n")
+                    .append(
+                        SettingsStrings.render(
+                            requireContext(),
+                            R.string.mobile_designate_other_channel,
+                            onLink = { WidgetServerSettingsCommunityOverview.launch(requireContext(), model.guild.id) },
+                        ),
+                    ),
+                okText = getString(R.string.okay),
+            )
             return
         }
         WidgetNoticeDialog.show(
@@ -479,7 +582,9 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             draftRequireTag != savedRequireTag ||
             draftForumLayout != savedForumLayout ||
             draftSortOrder != savedSortOrder ||
-            draftTagSetting != savedTagSetting
+            draftTagSetting != savedTagSetting ||
+            draftParentId != savedParentId ||
+            draftHideMediaDownloads != savedHideMediaDownloads
     }
 
     private fun channelId() = mostRecentIntent.getLongExtra(ARG_CHANNEL_ID, -1L)
@@ -489,8 +594,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         val channel: Channel,
         val canManageChannel: Boolean,
         val canManagePermissions: Boolean,
+        val canManageWebhooks: Boolean,
         val isPinsEnabled: Boolean,
         val isProtectedCommunityChannel: Boolean,
+        val categories: List<Channel>,
     ) {
         /** Only a plain text channel can become an announcement channel, and only back again. */
         val canToggleAnnouncement: Boolean = canManageChannel && guild.hasFeature(GuildFeature.NEWS) &&
@@ -507,7 +614,8 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                             StoreStream.getGuilds().observeGuild(channel.guildId),
                             StoreStream.getUsers().observeMe(),
                             StoreStream.getPermissions().observePermissionsForChannel(channel.id),
-                        ) { guild, me, permissions ->
+                            StoreStream.getChannels().observeChannelsForGuild(channel.guildId, Channel.CATEGORY),
+                        ) { guild, me, permissions, categories ->
                             guild?.let {
                                 val protected = it.hasFeature(GuildFeature.COMMUNITY) &&
                                     (it.rulesChannelId == channel.id || it.publicUpdatesChannelId == channel.id)
@@ -516,8 +624,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                                     channel,
                                     PermissionUtils.canAndIsElevated(Permission.MANAGE_CHANNELS, permissions, me.mfaEnabled, it.mfaLevel),
                                     PermissionUtils.canAndIsElevated(Permission.MANAGE_ROLES, permissions, me.mfaEnabled, it.mfaLevel),
+                                    PermissionUtils.canAndIsElevated(Permission.MANAGE_WEBHOOKS, permissions, me.mfaEnabled, it.mfaLevel),
                                     !ChannelGating.isChannelContentGated(channel, me),
                                     protected,
+                                    categories.values.sortedBy { category -> category.position },
                                 )
                             }
                         }
