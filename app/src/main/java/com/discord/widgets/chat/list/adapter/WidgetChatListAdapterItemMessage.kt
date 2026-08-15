@@ -24,6 +24,11 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.constraintlayout.widget.Guideline
 import com.discord.R
+import com.discord.databinding.WidgetChatListAdapterItemFailedBinding
+import com.discord.databinding.WidgetChatListAdapterItemMinimalBinding
+import com.discord.databinding.WidgetChatListAdapterItemTextBinding
+import com.discord.plugins.PluginMessageHost
+import dev.mantikafasi.manticord.plugins.api.pluginMessageContext
 import com.discord.api.permission.Permission
 import com.discord.i18n.Hook
 import com.discord.i18n.I18nHooks
@@ -91,6 +96,29 @@ class WidgetChatListAdapterItemMessage(
     layout: Int,
     adapter: WidgetChatListAdapter,
 ) : WidgetChatListItem(layout, adapter) {
+
+    private data class PluginContainers(
+        val header: ViewGroup?,
+        val content: ViewGroup,
+        val standalone: ViewGroup,
+    )
+
+    private val pluginContainers = when (layout) {
+        R.layout.widget_chat_list_adapter_item_text ->
+            WidgetChatListAdapterItemTextBinding.bind(itemView).let {
+                PluginContainers(it.pluginMessageHeader, it.pluginMessageContent, it.pluginMessageStandalone)
+            }
+        R.layout.widget_chat_list_adapter_item_minimal ->
+            WidgetChatListAdapterItemMinimalBinding.bind(itemView).let {
+                PluginContainers(null, it.pluginMessageContent, it.pluginMessageStandalone)
+            }
+        R.layout.widget_chat_list_adapter_item_failed ->
+            WidgetChatListAdapterItemFailedBinding.bind(itemView).let {
+                PluginContainers(it.pluginMessageHeader, it.pluginMessageContent, it.pluginMessageStandalone)
+            }
+        else -> error("Unsupported message layout $layout")
+    }
+    private val pluginMessageHost = PluginMessageHost()
 
     private val itemText: SimpleDraweeSpanTextView =
         itemView.findViewById(R.id.chat_list_adapter_item_text)
@@ -205,6 +233,19 @@ class WidgetChatListAdapterItemMessage(
         configureAlertText(message)
         configureThreadSpine(message, isThreadStarterMessage)
         configureCommunicationDisabled(entry.author, entry.permissionsForChannel)
+        pluginMessageHost.bind(
+            pluginContainers.header,
+            pluginContainers.content,
+            pluginContainers.standalone,
+            pluginMessageContext(
+                messageId = message.id,
+                channelId = message.channelId,
+                guildId = message.guildId,
+                authorId = message.author?.id,
+                content = message.content.orEmpty(),
+                isAuthorBot = message.author?.bot == true,
+            ),
+        )
         applyMessageCustomization()
     }
 

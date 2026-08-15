@@ -28,6 +28,7 @@ import com.discord.utilities.feature.MessageCustomization
 import com.discord.utilities.feature.MessageCustomization.CoreElement
 import com.discord.utilities.feature.MessageCustomization.Entry
 import com.discord.utilities.feature.MessageCustomization.Section
+import com.discord.utilities.feature.PluginSurfaceCustomization
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.views.ReactionView
@@ -42,6 +43,15 @@ class WidgetSettingsMessageCustomization : AppFragment(R.layout.widget_settings_
         setActionBarTitle(R.string.message_customization_title)
         setActionBarDisplayHomeAsUpEnabled()
         val binding = WidgetSettingsMessageCustomizationBinding.bind(view)
+        mapOf(
+            binding.messageCustomizationPluginHeader to PluginSurfaceCustomization.Surface.MESSAGE_HEADER,
+            binding.messageCustomizationPluginContent to PluginSurfaceCustomization.Surface.MESSAGE_CONTENT,
+            binding.messageCustomizationPluginStandalone to PluginSurfaceCustomization.Surface.MESSAGE_STANDALONE,
+        ).forEach { (row, surface) ->
+            row.setOnClickListener {
+                WidgetSettingsPluginSurfaceCustomization.launch(requireContext(), surface)
+            }
+        }
         val restartNotice = Snackbar.make(
             binding.root,
             R.string.user_settings_restart_app_mobile,

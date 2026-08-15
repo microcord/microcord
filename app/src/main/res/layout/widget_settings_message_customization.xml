@@ -30,6 +30,10 @@
                 <com.discord.views.CheckedSetting android:id="@+id/message_customization_timestamp" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/message_customization_reply" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
                 <com.discord.views.CheckedSetting android:id="@+id/message_customization_content" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                <TextView android:text="@string/message_plugin_components" style="@style/UiKit.Settings.Item.Header"/>
+                <TextView android:id="@+id/message_customization_plugin_header" android:text="@string/message_plugin_header_components" style="@style/UiKit.Settings.Item.Icon"/>
+                <TextView android:id="@+id/message_customization_plugin_content" android:text="@string/message_plugin_content_components" style="@style/UiKit.Settings.Item.Icon"/>
+                <TextView android:id="@+id/message_customization_plugin_standalone" android:text="@string/message_plugin_standalone_components" style="@style/UiKit.Settings.Item.Icon"/>
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>

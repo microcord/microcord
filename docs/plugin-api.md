@@ -338,12 +338,38 @@ Main, the optional Board, and visible plugin tabs share the Profile Tabs customi
 always visible. Plugin views are created once per sheet lifecycle, rebound with profile changes, and
 hosted by the existing profile tab/page controller; native Main/Board swipe behavior remains unchanged.
 
+### Message Components
+
+`registerMessage(...)` contributes a cached view at one of three typed placements:
+
+- `HEADER`: on the native author/timestamp line; grouped continuation rows omit it because they have no header.
+- `CONTENT`: immediately after the rendered message body and before native accessories.
+- `STANDALONE`: after attachments, embeds, stickers, components, and other native accessories.
+
+The immutable bind context exposes message, channel, guild, and author IDs, raw content, and the bot
+flag. It does not expose the row holder or its binding. Factories run once per recycled holder and
+views are rebound as that holder displays different messages. Priority orders plugin views within a
+placement; equal priorities use stable `owner:id` order. Visibility and bind failures are contained.
+
+```kotlin
+scope.ui.registerMessage(
+    pluginMessageContribution(
+        "example_card",
+        "Example Card",
+        PluginMessagePlacement.STANDALONE,
+        { context -> createCard(context) },
+    ) {
+        bind = { view, message -> bindCard(view, message.messageId) }
+    },
+)
+```
+
 ### Slash Commands
 
 `registerSlashCommand(...)` adds a local command to the existing application-command store. Commands
-declare a stable ID, lowercase command name, description, priority, visibility predicate, and a
-synchronous executor. They receive the current typed channel context plus one optional text argument
-and return the message text to submit.
+declare a stable ID, lowercase command name, description, priority, visibility predicate, typed
+string/integer/boolean options, and a synchronous executor. They receive the current typed channel
+context plus parsed arguments and return the message text to submit.
 
 Plugin commands participate in command discovery, query filtering, execution, built-in application
 counts, and frecency. They never create a second parser or send path. Higher priority wins duplicate

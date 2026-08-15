@@ -30,6 +30,7 @@ import com.discord.views.user.UserAvatarPresenceViewController
 import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.user.profile.UserProfileHeaderViewModel
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
+import dev.mantikafasi.manticord.plugins.api.PluginMessagePlacement
 import dev.mantikafasi.manticord.plugins.api.pluginBottomTabContext
 
 class WidgetSettingsPluginSurfaceCustomization :
@@ -55,6 +56,9 @@ class WidgetSettingsPluginSurfaceCustomization :
                 Surface.PROFILE -> R.string.profile_popout_customization_title
                 Surface.PROFILE_TABS -> R.string.profile_tabs_customization_title
                 Surface.COMPOSER -> error("Composer customization has its own screen")
+                Surface.MESSAGE_HEADER -> R.string.message_plugin_header_components
+                Surface.MESSAGE_CONTENT -> R.string.message_plugin_content_components
+                Surface.MESSAGE_STANDALONE -> R.string.message_plugin_standalone_components
             },
         )
         setActionBarDisplayHomeAsUpEnabled()
@@ -64,6 +68,8 @@ class WidgetSettingsPluginSurfaceCustomization :
             Surface.PROFILE -> PluginUiRegistry.addProfileListener { view.post(::reload) }
             Surface.PROFILE_TABS -> PluginUiRegistry.addProfileTabListener { view.post(::reload) }
             Surface.COMPOSER -> error("Composer customization has its own screen")
+            Surface.MESSAGE_HEADER, Surface.MESSAGE_CONTENT, Surface.MESSAGE_STANDALONE ->
+                PluginUiRegistry.addMessageListener { view.post(::reload) }
         }
         binding.pluginSurfaceCustomizationItems.setOnDragListener { target, event ->
             when (event.action) {
@@ -120,6 +126,8 @@ class WidgetSettingsPluginSurfaceCustomization :
             Surface.PROFILE -> PluginUiRegistry.notifyProfilesChanged()
             Surface.PROFILE_TABS -> PluginUiRegistry.notifyProfileTabsChanged()
             Surface.COMPOSER -> Unit
+            Surface.MESSAGE_HEADER, Surface.MESSAGE_CONTENT, Surface.MESSAGE_STANDALONE ->
+                PluginUiRegistry.notifyMessagesChanged()
         }
     }
 
@@ -182,6 +190,11 @@ class WidgetSettingsPluginSurfaceCustomization :
     private fun renderPreview(items: Map<String, Item>) {
         val preview = binding.pluginSurfaceCustomizationPreview
         preview.removeAllViews()
+        if (surface in MESSAGE_SURFACES) {
+            preview.visibility = View.GONE
+            binding.pluginSurfaceProfilePreview.visibility = View.GONE
+            return
+        }
         preview.visibility = if (surface == Surface.BOTTOM_TABS) View.VISIBLE else View.GONE
         binding.pluginSurfaceProfilePreview.visibility =
             if (surface == Surface.BOTTOM_TABS) View.GONE else View.VISIBLE
@@ -396,6 +409,26 @@ class WidgetSettingsPluginSurfaceCustomization :
                 .mapNotNull(byKey::get)
         }
         Surface.COMPOSER -> emptyList()
+        Surface.MESSAGE_HEADER, Surface.MESSAGE_CONTENT, Surface.MESSAGE_STANDALONE -> {
+            val placement = when (surface) {
+                Surface.MESSAGE_HEADER -> PluginMessagePlacement.HEADER
+                Surface.MESSAGE_CONTENT -> PluginMessagePlacement.CONTENT
+                Surface.MESSAGE_STANDALONE -> PluginMessagePlacement.STANDALONE
+                else -> error("Not a message surface")
+            }
+            val plugins = PluginUiRegistry.messages()
+                .filter { it.contribution.placement == placement }
+                .map { owned ->
+                    Item(
+                        PluginSurfaceCustomization.pluginKey(owned.owner, owned.contribution.id),
+                        owned.contribution.title,
+                        owned.owner,
+                        owned.contribution.priority,
+                    )
+                }
+            val byKey = plugins.associateBy(Item::key)
+            PluginSurfaceCustomization.defaultOrder(plugins.map { it.key to it.priority }).mapNotNull(byKey::get)
+        }
     }
 
     private data class Item(
@@ -414,11 +447,17 @@ class WidgetSettingsPluginSurfaceCustomization :
         Surface.PROFILE_TABS -> PluginSurfaceCustomization.isRequiredProfileTab(key)
         Surface.PROFILE -> false
         Surface.COMPOSER -> false
+        Surface.MESSAGE_HEADER, Surface.MESSAGE_CONTENT, Surface.MESSAGE_STANDALONE -> false
     }
 
     companion object {
         private const val ARG_SURFACE = "surface"
         private const val PLUGIN_PREFIX = "plugin:"
+        private val MESSAGE_SURFACES = setOf(
+            Surface.MESSAGE_HEADER,
+            Surface.MESSAGE_CONTENT,
+            Surface.MESSAGE_STANDALONE,
+        )
         private val BUILTIN_TABS = listOf(
             BuiltinTab(NavigationTab.HOME.name, R.string.home, R.drawable.ic_tab_home),
             BuiltinTab(NavigationTab.FRIENDS.name, R.string.friends, R.drawable.ic_tab_friends),

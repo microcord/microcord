@@ -433,6 +433,57 @@ interface PluginContextMenuItem : PluginContribution {
     val isVisible: (PluginContextMenuContext) -> Boolean
 }
 
+enum class PluginMessagePlacement { HEADER, CONTENT, STANDALONE }
+
+interface PluginMessageContext {
+    val messageId: Long
+    val channelId: Long
+    val guildId: Long?
+    val authorId: Long?
+    val content: String
+    val isAuthorBot: Boolean
+}
+
+fun pluginMessageContext(
+    messageId: Long,
+    channelId: Long,
+    guildId: Long?,
+    authorId: Long?,
+    content: String,
+    isAuthorBot: Boolean,
+): PluginMessageContext = PluginMessageContextValue(
+    messageId, channelId, guildId, authorId, content, isAuthorBot,
+)
+
+interface PluginMessageContribution : PluginContribution {
+    val title: String
+    val placement: PluginMessagePlacement
+    val createView: (Context) -> View
+    val bind: (View, PluginMessageContext) -> Unit
+    val isVisible: (PluginMessageContext) -> Boolean
+}
+
+class PluginMessageBuilder internal constructor() {
+    var priority: Int = 0
+    var bind: (View, PluginMessageContext) -> Unit = { _, _ -> }
+    var isVisible: (PluginMessageContext) -> Boolean = { true }
+}
+
+fun pluginMessageContribution(
+    id: String,
+    title: String,
+    placement: PluginMessagePlacement,
+    createView: (Context) -> View,
+    configure: PluginMessageBuilder.() -> Unit = {},
+): PluginMessageContribution {
+    require(id.isNotBlank()) { "message contribution ID must not be blank" }
+    require(title.isNotBlank()) { "message contribution title must not be blank" }
+    val builder = PluginMessageBuilder().apply(configure)
+    return PluginMessageContributionValue(
+        id, title, placement, builder.priority, createView, builder.bind, builder.isVisible,
+    )
+}
+
 class PluginContextMenuItemBuilder internal constructor() {
     var priority: Int = 0
     var destructive: Boolean = false
@@ -490,6 +541,7 @@ interface PluginUi {
     fun registerProfileTab(contribution: PluginProfileTabContribution): PluginRegistration
     fun registerSlashCommand(command: PluginSlashCommand): PluginRegistration
     fun registerContextMenuItem(item: PluginContextMenuItem): PluginRegistration
+    fun registerMessage(contribution: PluginMessageContribution): PluginRegistration
 }
 
 fun interface PluginSettingsPage {
@@ -660,3 +712,22 @@ private data class PluginContextMenuItemValue(
     override val onClick: (PluginContextMenuContext) -> Unit,
     override val isVisible: (PluginContextMenuContext) -> Boolean,
 ) : PluginContextMenuItem
+
+private data class PluginMessageContextValue(
+    override val messageId: Long,
+    override val channelId: Long,
+    override val guildId: Long?,
+    override val authorId: Long?,
+    override val content: String,
+    override val isAuthorBot: Boolean,
+) : PluginMessageContext
+
+private data class PluginMessageContributionValue(
+    override val id: String,
+    override val title: String,
+    override val placement: PluginMessagePlacement,
+    override val priority: Int,
+    override val createView: (Context) -> View,
+    override val bind: (View, PluginMessageContext) -> Unit,
+    override val isVisible: (PluginMessageContext) -> Boolean,
+) : PluginMessageContribution

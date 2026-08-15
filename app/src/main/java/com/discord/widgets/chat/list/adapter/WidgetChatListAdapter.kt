@@ -23,6 +23,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppPermissionsRequests
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
+import com.discord.plugins.PluginUiRegistry
 import com.discord.stores.StoreChat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
@@ -35,6 +36,7 @@ import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
 import com.discord.widgets.chat.list.model.WidgetChatListModel
+import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import java.lang.ref.WeakReference
 
 /**
@@ -85,6 +87,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
 
     private var isTouchedSinceLastJump: Boolean = false
     private var scrollToWithHighlight: ScrollToWithHighlight? = null
+    private var pluginMessageRegistration: PluginRegistration? = null
 
     val layoutManager: LinearLayoutManager?
         get() = recycler.layoutManager as? LinearLayoutManager
@@ -162,6 +165,11 @@ class WidgetChatListAdapter @JvmOverloads constructor(
      * the handlers publish into a store and must not keep doing so while the screen is away.
      */
     fun setHandlers() {
+        if (pluginMessageRegistration == null) {
+            pluginMessageRegistration = PluginUiRegistry.addMessageListener {
+                recycler.post(::notifyDataSetChanged)
+            }
+        }
         setOnUpdated { _, _ ->
             recycler.removeCallbacks(handlerOfUpdates)
             recycler.post(handlerOfUpdates)
@@ -177,6 +185,8 @@ class WidgetChatListAdapter @JvmOverloads constructor(
      * the difference between the loader idling and the loader paginating into a dead screen.
      */
     fun disposeHandlers() {
+        pluginMessageRegistration?.unregister()
+        pluginMessageRegistration = null
         setOnUpdated { _, _ -> }
         recycler.removeCallbacks(handlerOfUpdates)
         recycler.setOnTouchListener(null)

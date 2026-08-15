@@ -14,6 +14,9 @@ object PluginSurfaceCustomization {
         PROFILE("plugin_surface_profile"),
         PROFILE_TABS("plugin_surface_profile_tabs"),
         COMPOSER("plugin_surface_composer"),
+        MESSAGE_HEADER("plugin_surface_message_header"),
+        MESSAGE_CONTENT("plugin_surface_message_content"),
+        MESSAGE_STANDALONE("plugin_surface_message_standalone"),
     }
 
     data class Entry(val key: String, val visible: Boolean = true)

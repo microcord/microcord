@@ -9,6 +9,7 @@ import dev.mantikafasi.manticord.plugins.api.PluginProfileContribution
 import dev.mantikafasi.manticord.plugins.api.PluginProfileTabContribution
 import dev.mantikafasi.manticord.plugins.api.PluginSlashCommand
 import dev.mantikafasi.manticord.plugins.api.PluginContextMenuItem
+import dev.mantikafasi.manticord.plugins.api.PluginMessageContribution
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import dev.mantikafasi.manticord.plugins.api.PluginResources
 import dev.mantikafasi.manticord.plugins.api.PluginScope
@@ -50,6 +51,7 @@ internal typealias OwnedProfileContribution = OwnedContribution<PluginProfileCon
 internal typealias OwnedProfileTabContribution = OwnedContribution<PluginProfileTabContribution>
 internal typealias OwnedSlashCommand = OwnedContribution<PluginSlashCommand>
 internal typealias OwnedContextMenuItem = OwnedContribution<PluginContextMenuItem>
+internal typealias OwnedMessageContribution = OwnedContribution<PluginMessageContribution>
 
 internal data class PluginContentInfo(
     val type: String,
@@ -114,6 +116,7 @@ internal object PluginUiRegistry {
     private val profileTabs = ContributionRegistry<PluginProfileTabContribution>("profile tab")
     private val slashCommands = ContributionRegistry<PluginSlashCommand>("slash command")
     private val contextMenuItems = ContributionRegistry<PluginContextMenuItem>("context menu item")
+    private val messages = ContributionRegistry<PluginMessageContribution>("message")
 
     fun headers() = headers.snapshot()
     fun composers() = composers.snapshot()
@@ -122,6 +125,7 @@ internal object PluginUiRegistry {
     fun profileTabs() = profileTabs.snapshot()
     fun slashCommands() = slashCommands.snapshot()
     fun contextMenuItems() = contextMenuItems.snapshot()
+    fun messages() = messages.snapshot()
 
     fun content(owner: String): List<PluginContentInfo> = buildList {
         headers().filter { it.owner == owner }.forEach {
@@ -147,6 +151,9 @@ internal object PluginUiRegistry {
             val surfaces = it.contribution.surfaces.joinToString { surface -> surface.name.lowercase() }
             add(PluginContentInfo("Context menu", it.contribution.title, surfaces))
         }
+        messages().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Message ${it.contribution.placement.name.lowercase()}", it.contribution.title))
+        }
     }
 
     fun addHeaderListener(listener: () -> Unit) = headers.addListener(listener)
@@ -155,12 +162,14 @@ internal object PluginUiRegistry {
     fun addProfileListener(listener: () -> Unit) = profiles.addListener(listener)
     fun addProfileTabListener(listener: () -> Unit) = profileTabs.addListener(listener)
     fun addSlashCommandListener(listener: () -> Unit) = slashCommands.addListener(listener)
+    fun addMessageListener(listener: () -> Unit) = messages.addListener(listener)
 
     fun notifyHeaderChanged() = headers.notifyChanged()
     fun notifyComposersChanged() = composers.notifyChanged()
     fun notifyBottomTabsChanged() = bottomTabs.notifyChanged()
     fun notifyProfilesChanged() = profiles.notifyChanged()
     fun notifyProfileTabsChanged() = profileTabs.notifyChanged()
+    fun notifyMessagesChanged() = messages.notifyChanged()
 
     fun registerHeader(owner: String, contribution: PluginHeaderContribution) = headers.register(owner, contribution)
     fun registerComposer(owner: String, contribution: PluginComposerContribution) = composers.register(owner, contribution)
@@ -169,6 +178,8 @@ internal object PluginUiRegistry {
     fun registerProfileTab(owner: String, contribution: PluginProfileTabContribution) = profileTabs.register(owner, contribution)
     fun registerSlashCommand(owner: String, command: PluginSlashCommand) = slashCommands.register(owner, command)
     fun registerContextMenuItem(owner: String, item: PluginContextMenuItem) = contextMenuItems.register(owner, item)
+    fun registerMessage(owner: String, contribution: PluginMessageContribution) =
+        messages.register(owner, contribution)
 
     fun removeOwner(owner: String) {
         headers.removeOwner(owner)
@@ -178,6 +189,7 @@ internal object PluginUiRegistry {
         profileTabs.removeOwner(owner)
         slashCommands.removeOwner(owner)
         contextMenuItems.removeOwner(owner)
+        messages.removeOwner(owner)
     }
 }
 
@@ -269,6 +281,11 @@ internal class PluginScopeImpl(
         override fun registerContextMenuItem(item: PluginContextMenuItem): PluginRegistration {
             check(!closed.get()) { "plugin scope is closed" }
             return track(PluginUiRegistry.registerContextMenuItem(pluginId, item))
+        }
+
+        override fun registerMessage(contribution: PluginMessageContribution): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerMessage(pluginId, contribution))
         }
     }
     override val storage: PluginStorage = object : PluginStorage {
