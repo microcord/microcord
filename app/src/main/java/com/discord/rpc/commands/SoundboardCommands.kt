@@ -14,7 +14,11 @@ import com.discord.rpc.RpcString
 import com.discord.rpc.rpcSchema
 import com.discord.rpc.transformUser
 import com.discord.stores.StoreStream
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.soundboard.SoundboardConstants.DEFAULT_SOUND_GUILD_ID
+import com.discord.utilities.soundboard.SoundboardUtils
+import com.discord.utilities.user.UserUtils.isPremiumTier2
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -33,8 +37,9 @@ val soundboardCommands: Map<String, RpcCommand> = mapOf(
     RpcCommands.GET_SOUNDBOARD_SOUNDS to rpcCommand(
         scope = RpcScopeConfig.Any(listOf(OAuth2Scopes.RPC, RpcScopes.LOCAL)),
     ) {
-        RestAPI.api.getDefaultSoundboardSounds()
-            .map { sounds -> JSONArray().apply { sounds.forEach { put(transformSound(it)) } } as Any? }
+        StoreStream.getSoundboard().fetchSounds().map { sounds ->
+            JSONArray().apply { sounds.values.flatten().forEach { put(transformSound(it)) } } as Any?
+        }
     },
 
     RpcCommands.PLAY_SOUNDBOARD_SOUND to rpcCommand(
@@ -45,15 +50,30 @@ val soundboardCommands: Map<String, RpcCommand> = mapOf(
         },
     ) { context ->
         val channelId = StoreStream.getVoiceChannelSelected().getSelectedVoiceChannelId()
-        if (channelId == 0L) throw RpcError.error(RpcErrors.INVALID_CHANNEL, "Invalid Channel.")
+        val channel = StoreStream.getChannels().getChannel(channelId)
+        if (channelId == 0L || channel == null) throw RpcError.error(RpcErrors.INVALID_CHANNEL, "Invalid Channel.")
         val soundId = (context.args.opt("sound_id") as? String)?.toLongOrNull()
             ?: throw RpcError.error(RpcErrors.INVALID_SOUND, "Invalid Sound.")
-        RestAPI.api.sendSoundboardSound(
-            channelId,
-            RestAPIParams.SendSoundboardSound(
-                soundId,
-                (context.args.opt("guild_id") as? String)?.toLongOrNull(),
-            ),
-        ).map { null as Any? }
+        val soundGuildId = (context.args.opt("guild_id") as? String)?.toLongOrNull()
+            ?: DEFAULT_SOUND_GUILD_ID
+        val permissions = StoreStream.getPermissions().getPermissionsByChannel()[channelId]
+        val soundboard = StoreStream.getSoundboard()
+        soundboard.fetchSounds().flatMap {
+            val sound = soundboard.getSound(soundGuildId, soundId)
+            val canUseSound = sound != null && SoundboardUtils.canUseSoundboardSound(
+                sound,
+                StoreStream.getUsers().getMe().isPremiumTier2,
+                channel,
+                permissions,
+            )
+            if (!canUseSound) throw RpcError.error(RpcErrors.INVALID_SOUND, "Invalid Sound.")
+            if (!PermissionUtils.canUseSoundboard(channel, permissions)) {
+                throw RpcError.error(RpcErrors.INVALID_PERMISSIONS, "Invalid Permissions.")
+            }
+            RestAPI.api.sendSoundboardSound(
+                channelId,
+                RestAPIParams.SendSoundboardSound(soundId, SoundboardUtils.sourceGuildId(soundGuildId)),
+            ).map { null as Any? }
+        }
     },
 )

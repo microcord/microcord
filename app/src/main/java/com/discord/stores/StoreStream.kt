@@ -968,6 +968,12 @@ class StoreStream private constructor(
             (guilds.getGuildsInternal()[guildId]?.maxVideoChannelUsers as? GuildMaxVideoChannelUsers.Limited)?.limit
         },
     )
+    private val soundboard = StoreSoundboard(
+        dispatcher,
+        observationDeck,
+        guildIds = { guilds.getGuildsInternal().keys },
+        requestGuildSounds = gatewayConnection::requestSoundboardSounds,
+    )
     private val stageChannels: StoreStageChannels = StoreStageChannels(
         users, guilds, channels, voiceStates, permissions, stageInstances, observationDeck,
     )
@@ -1166,6 +1172,7 @@ class StoreStream private constructor(
         stageChannels,
         requestedStageChannels,
         stageChannelSelfPresence,
+        soundboard,
     )
     private val storeV2DispatchHandler = StoreV2DispatchHandler(storesV2, observationDeck)
     private val initialized = BehaviorSubject.create(false)
@@ -1785,6 +1792,7 @@ class StoreStream private constructor(
                     mediaSettings.handleVoiceChannelSelected(voiceChannelId)
                     stageChannelSelfPresence.handleVoiceChannelSelected()
                     lurking.handleVoiceChannelSelected(voiceChannelId)
+                    soundboard.handleVoiceChannelSelected()
                     messages.handleVoiceChannelSelected(voiceChannelId)
                     messagesLoader.handleVoiceChannelJoined(voiceChannelId)
                 }
@@ -2018,6 +2026,24 @@ class StoreStream private constructor(
             clientDataState.handleStickersUpdate(update)
             guildStickers.handleStickerUpdate(update)
         }
+
+        // Soundboard
+        dispatchSubscribe(events.soundboardSounds, "streamSoundboardSounds", soundboard::handleSoundboardSounds)
+        dispatchSubscribe(
+            events.guildSoundboardSoundsUpdate,
+            "streamGuildSoundboardSoundsUpdate",
+            soundboard::handleSoundboardSounds,
+        )
+        dispatchSubscribe(
+            events.guildSoundboardSoundCreateOrUpdate,
+            "streamGuildSoundboardSoundCreateOrUpdate",
+            soundboard::handleSoundCreateOrUpdate,
+        )
+        dispatchSubscribe(
+            events.guildSoundboardSoundDelete,
+            "streamGuildSoundboardSoundDelete",
+            soundboard::handleSoundDelete,
+        )
 
         // Guild roles
         dispatchSubscribe(events.guildRoleCreate, "streamGuildRoleAdd") { event ->
@@ -3209,6 +3235,7 @@ class StoreStream private constructor(
         emojiGuild.reset()
         stickers.handlePreLogout()
         guildStickers.reset()
+        soundboard.reset()
         nux.clearNux()
         guildOnboarding.reset()
         // `bans`, `guildIntegrations` and `stageChannels` have no `reset()`; their connection-open
@@ -3616,6 +3643,7 @@ class StoreStream private constructor(
         guildScheduledEvents.handleGuildRemove(guild.id)
         emojiCustom.handleGuildRemove(guild)
         guildStickers.handleGuildRemove(guild)
+        soundboard.handleGuildRemove(guild.id)
         stageChannels.handleGuildRemove(guild)
         voiceStates.handleGuildRemove(guild)
         voiceChannelSelected.handleGuildRemove()
@@ -3995,6 +4023,7 @@ class StoreStream private constructor(
         @JvmStatic fun getGuildEmojis() = requireInstance().emojiGuild
         @JvmStatic fun getStickers() = requireInstance().stickers
         @JvmStatic fun getGuildStickers() = requireInstance().guildStickers
+        @JvmStatic fun getSoundboard() = requireInstance().soundboard
         @JvmStatic fun getNotices() = requireInstance().notices
         @JvmStatic fun getNux() = requireInstance().nux
         @JvmStatic fun getGuildOnboarding() = requireInstance().guildOnboarding

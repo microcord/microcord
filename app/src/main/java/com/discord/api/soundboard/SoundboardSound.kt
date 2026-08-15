@@ -14,7 +14,13 @@ data class SoundboardSound(
     val userId: Long? = null,
 )
 
+/** `SOUNDBOARD_SOUNDS` and `GUILD_SOUNDBOARD_SOUNDS_UPDATE`, which share a shape. */
 data class SoundboardSounds(
     val guildId: Long,
     val soundboardSounds: List<SoundboardSound> = emptyList(),
+)
+
+data class SoundboardSoundDelete(
+    val guildId: Long,
+    val soundId: Long,
 )

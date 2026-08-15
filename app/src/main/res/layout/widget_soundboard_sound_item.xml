@@ -34,4 +34,15 @@
             android:maxLines="1"
             style="@style/UiKit.TextView.Semibold" />
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/soundboard_sound_lock"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="10dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_channel_lock_16dp"
+        android:visibility="gone"
+        app:tint="?attr/colorTextMuted" />
 </com.google.android.material.card.MaterialCardView>
