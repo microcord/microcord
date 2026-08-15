@@ -1,6 +1,12 @@
 package com.discord.rpc.commands
 
+import com.discord.api.activity.ActivityFlags
+import com.discord.api.application.canLaunchFrame
 import com.discord.rpc.OAuth2Scopes
+import com.discord.rpc.RpcActivities
+import com.discord.rpc.RpcActivityAssets
+import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
 import com.discord.rpc.RpcArray
 import com.discord.rpc.RpcBoolean
 import com.discord.rpc.RpcCommand
@@ -16,6 +22,7 @@ import com.discord.rpc.RpcTransportTypes
 import com.discord.rpc.rpcSchema
 import org.json.JSONArray
 import org.json.JSONObject
+import rx.Observable
 
 private val activitySchema = RpcObject(
     nullable = true,
@@ -74,7 +81,7 @@ private val activitySchema = RpcObject(
 )
 
 val setActivityCommand: Map<String, RpcCommand> = mapOf(
-    RpcCommands.SET_ACTIVITY to syncRpcCommand(
+    RpcCommands.SET_ACTIVITY to rpcCommand(
         scope = RpcScopeConfig.Any(
             listOf(OAuth2Scopes.RPC, OAuth2Scopes.RPC_ACTIVITIES_WRITE, RpcScopes.LOCAL),
         ),
@@ -93,16 +100,27 @@ val setActivityCommand: Map<String, RpcCommand> = mapOf(
         if (!context.args.has("pid") && transport == RpcTransportTypes.IPC) {
             throw RpcError.error(RpcErrors.INVALID_COMMAND, "nonzero pid required")
         }
-        val activity = context.args.optJSONObject("activity") ?: return@syncRpcCommand null
-        validateSecrets(activity, context.socket.application.id)
-        normalizeActivity(activity, context.socket.application.name, context.socket.application.id, transport)
+        val applicationId = context.socket.application.id
+        val activity = context.args.optJSONObject("activity")
+        if (activity == null) {
+            // Absent and null both mean "retire mine", not "do nothing".
+            RpcActivities.set(context.socket.id, null)
+            Observable.just(null)
+        } else {
+            validateSecrets(activity, applicationId)
+            normalizeActivity(activity, context.socket.application.name, applicationId, transport)
+            RpcActivityAssets.resolve(activity, applicationId).map { resolved ->
+                // Resolution is a round trip; the socket may have left before it lands.
+                if (context.isSocketConnected()) {
+                    RpcActivities.parse(resolved)?.let { RpcActivities.set(context.socket.id, it) }
+                }
+                resolved
+            }
+        }
     },
 )
 
-/**
- * Applies the mutations the reference makes before echoing the activity back: the payload the
- * caller receives is its own object rewritten, not a freshly built one.
- */
+/** Rewrites the caller's own object in place; the reply echoes that same object. */
 private fun normalizeActivity(
     activity: JSONObject,
     applicationName: String?,
@@ -114,6 +132,8 @@ private fun normalizeActivity(
     }
     activity.put("application_id", applicationId?.toString() ?: JSONObject.NULL)
     activity.put("platform", if (transport == RpcTransportTypes.POST_MESSAGE) "embedded" else "desktop")
+    val flags = computeFlags(activity, applicationId, transport)
+    if (flags > 0) activity.put("flags", flags)
     activity.remove("instance")
     activity.optJSONObject("party")?.remove("privacy")
     if (activity.opt("type") !is Number) activity.put("type", 0)
@@ -144,6 +164,37 @@ private fun normalizeActivity(
     activity.put("metadata", metadata)
     return activity
 }
+
+/** `instance` and `party.privacy` survive only as flags, which is why they are dropped afterwards. */
+private fun computeFlags(activity: JSONObject, applicationId: Long?, transport: String): Int {
+    val embedded = transport == RpcTransportTypes.POST_MESSAGE
+    var flags = 0
+    if (activity.optBoolean("instance")) flags = flags or ActivityFlags.INSTANCE
+    if (activity.optJSONObject("secrets")?.opt("join") is String) flags = flags or ActivityFlags.JOIN
+    if (embedded && StoreStream.getApplication().getApplication(applicationId ?: 0L).canLaunchFrame()) {
+        flags = flags or ActivityFlags.CONTEXTLESS
+    }
+    if (embedded) return withPartyPrivacy(flags or ActivityFlags.EMBEDDED)
+    val isPublicParty = (activity.optJSONObject("party")?.opt("privacy") as? Number)?.toInt() == PARTY_PRIVACY_PUBLIC
+    return if (isPublicParty) withPartyPrivacy(flags) else flags
+}
+
+private fun withPartyPrivacy(flags: Int): Int {
+    var result = flags
+    result = if (UserSettings.allowActivityPartyPrivacyFriends.get()) {
+        result or ActivityFlags.PARTY_PRIVACY_FRIENDS
+    } else {
+        result and ActivityFlags.PARTY_PRIVACY_FRIENDS.inv()
+    }
+    result = if (UserSettings.allowActivityPartyPrivacyVoiceChannel.get()) {
+        result or ActivityFlags.PARTY_PRIVACY_VOICE_CHANNEL
+    } else {
+        result and ActivityFlags.PARTY_PRIVACY_VOICE_CHANNEL.inv()
+    }
+    return result
+}
+
+private const val PARTY_PRIVACY_PUBLIC = 1
 
 private fun looksLikeSeconds(value: Long) =
     System.currentTimeMillis().toString().length - value.toString().length > 2
