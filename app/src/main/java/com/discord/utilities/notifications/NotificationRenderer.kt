@@ -42,7 +42,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         val private = data.kind != NotificationKind.GENERAL
         val authSession = NotificationActionSession.fromToken(settings.token)
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notifications_white_24dp)
+            .setSmallIcon(notificationIcon(data.kind))
             .setContentTitle(data.title)
             .setContentText(data.body)
             .setWhen(data.timestamp)
@@ -69,7 +69,7 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
 
         if (private) builder.setPublicVersion(
             NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(R.drawable.ic_notifications_white_24dp)
+                .setSmallIcon(notificationIcon(data.kind))
                 .setContentTitle(context.getString(R.string.manticord_app_name))
                 // `new_messages` is the unread divider's template ("{count} since {timestamp}"),
                 // not a standalone label.
@@ -300,6 +300,12 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         builder: NotificationCompat.Builder,
     ) {
         runCatching { NotificationManagerCompat.from(context).notify(notificationId, builder.build()) }
+    }
+
+    private fun notificationIcon(kind: NotificationKind) = when (kind) {
+        NotificationKind.MESSAGE, NotificationKind.DIRECT_MESSAGE -> R.drawable.ic_notification_message_24dp
+        NotificationKind.SOCIAL -> R.drawable.ic_notification_friends_24dp
+        NotificationKind.GENERAL -> R.drawable.ic_notification_24dp
     }
 
     private fun contentIntent(context: Context, data: NotificationData): PendingIntent {
