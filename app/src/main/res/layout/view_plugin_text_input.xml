@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.lytefast.flexinput.widget.FlexEditText xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/plugin_text_input_edit_text"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_gravity="center_vertical"
+    android:background="@android:color/transparent"
+    android:imeOptions="actionSend"
+    android:inputType="textMultiLine"
+    android:maxLines="4"
+    android:minHeight="40dp"
+    android:gravity="center_vertical"
+    android:paddingStart="12dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="4dp" />

@@ -21,6 +21,7 @@ import dev.mantikafasi.manticord.plugins.api.PluginUi
 import dev.mantikafasi.manticord.plugins.api.PluginStorage
 import dev.mantikafasi.manticord.plugins.api.PluginDialogs
 import dev.mantikafasi.manticord.plugins.api.PluginText
+import dev.mantikafasi.manticord.plugins.api.PluginOAuth
 import dev.mantikafasi.manticord.plugins.api.PluginManifest
 import rx.Observable
 import rx.subjects.PublishSubject
@@ -37,6 +38,7 @@ import com.discord.app.AppActivity
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.PluginPageHost
+import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageRenderContext
@@ -342,6 +344,18 @@ internal class PluginScopeImpl(
             }
         }
 
+        override fun confirm(title: String, message: String, confirmLabel: String, onConfirm: () -> Unit) {
+            Handler(Looper.getMainLooper()).post {
+                val activity = ActivityProvider.getActivity() as? AppActivity ?: return@post
+                WidgetNoticeDialog.Builder(activity)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setNegativeButton(activity.getString(R.string.cancel))
+                    .setPositiveButton(confirmLabel) { onConfirm() }
+                    .show(activity.supportFragmentManager)
+            }
+        }
+
         override fun page(title: String, subtitle: String, createView: (Context) -> android.view.View) {
             Handler(Looper.getMainLooper()).post {
                 val activity = ActivityProvider.getActivity() as? AppActivity ?: return@post
@@ -349,6 +363,14 @@ internal class PluginScopeImpl(
             }
         }
 
+    }
+    override val oauth: PluginOAuth = object : PluginOAuth {
+        override fun authorize(requestUrl: String, onRedirect: (String) -> Unit) {
+            Handler(Looper.getMainLooper()).post {
+                val activity = ActivityProvider.getActivity() as? AppActivity ?: return@post
+                runCatching { WidgetOauth2Authorize.launchForPlugin(activity, android.net.Uri.parse(requestUrl), onRedirect) }
+            }
+        }
     }
     override val text: PluginText = object : PluginText {
         override fun renderCodeBlock(content: String, language: String?): CharSequence {

@@ -40,6 +40,7 @@ import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.discord.views.OAuthPermissionViews
 import com.google.android.material.button.MaterialButton
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 import rx.Observable
 
@@ -200,6 +201,11 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
                 when (val completion = classifyCompletion(oauth2ViewModel.oauthAuthorize, response.location)) {
                     CompletionRoute.Internal -> complete(CompletionResult.SUCCESS)
                     is CompletionRoute.External -> {
+                        pluginRedirects.remove(oauth2ViewModel.oauthAuthorize.clientId)?.let { redirect ->
+                            runCatching { redirect(completion.location) }
+                            complete(CompletionResult.SUCCESS)
+                            return@appSubscribe
+                        }
                         var handled = true
                         UriHandler.handle(
                             requireContext(),
@@ -437,6 +443,7 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
     }
 
     companion object {
+        private val pluginRedirects = ConcurrentHashMap<Long, (String) -> Unit>()
         const val INTENT_PARAM_URI = "REQ_URI"
         const val RESULT_COMPLETION = "OAUTH_COMPLETION"
 
@@ -579,6 +586,22 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
                 return
             }
             context.startActivity(createLaunchIntent(context, requestUri, request))
+        }
+
+        fun launchForPlugin(context: Context, requestUri: Uri, onRedirect: (String) -> Unit) {
+            val internalRequestUri = requestUri.buildUpon()
+                .appendQueryParameter(QUERY_INTERNAL_REFERRER, true.toString())
+                .build()
+            val request = try {
+                parse(internalRequestUri)
+            } catch (invalid: Exception) {
+                handleError(context, invalid)
+                return
+            }
+            require(pluginRedirects.putIfAbsent(request.clientId, onRedirect) == null) {
+                "OAuth is already pending for client ${request.clientId}"
+            }
+            context.startActivity(createLaunchIntent(context, internalRequestUri, request))
         }
 
         fun launch(

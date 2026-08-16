@@ -1,8 +1,8 @@
 package com.discord.widgets.user.usersheet
 
 import android.content.Context
+import android.util.Log
 import android.content.Intent
-import android.animation.ValueAnimator
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
@@ -139,9 +139,6 @@ class WidgetUserSheet : AppBottomSheet() {
     private var profileFrames: Map<Long, ProfileFrameItem> = emptyMap()
     private var equippedFrameSkuId: Long? = null
     private var frameViews: FrameViews? = null
-    private var showingWidgets = false
-    private var tabSwipeOffset = 0f
-    private var tabSwipeAnimator: ValueAnimator? = null
     private var selectingTabFromSwipe = false
     private var settlingProfilePage = false
     private var pluginProfileRegistration: PluginRegistration? = null
@@ -242,8 +239,6 @@ class WidgetUserSheet : AppBottomSheet() {
             }
         }
         frameViews = null
-        tabSwipeAnimator?.cancel()
-        tabSwipeAnimator = null
         _binding?.userSheetProfileEffect?.clear()
         defaultButtonBackgroundTints = emptyMap()
         defaultButtonTextColors = emptyMap()
@@ -615,10 +610,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 override fun onTabSelected(tab: TabLayout.Tab) {
                     if (selectingTabFromSwipe) return
                     settlingProfilePage = false
-                    tabSwipeAnimator?.cancel()
                     selectedProfileTabKey = profileTabKeys.getOrNull(tab.position) ?: MAIN_TAB_KEY
-                    showingWidgets = selectedProfileTabKey == BOARD_TAB_KEY
-                    tabSwipeOffset = if (showingWidgets) 1f else 0f
                     showSelectedProfileTab()
                 }
 
@@ -634,9 +626,8 @@ class WidgetUserSheet : AppBottomSheet() {
         }
         binding.userSheetWidgetsView.bind(widgets, state.applications, state.applicationIdentities, state.games)
         hasBoard = widgets.isNotEmpty()
-        if (!hasBoard && showingWidgets) {
+        if (!hasBoard && selectedProfileTabKey == BOARD_TAB_KEY) {
             settlingProfilePage = false
-            showingWidgets = false
             selectedProfileTabKey = MAIN_TAB_KEY
         }
     }
@@ -656,6 +647,13 @@ class WidgetUserSheet : AppBottomSheet() {
             },
         )
         val customization = PluginSurfaceCustomization.get(Surface.PROFILE_TABS, defaultOrder)
+            .sortedBy {
+                when (it.key) {
+                    PluginSurfaceCustomization.builtinProfileTabKey("MAIN") -> 0
+                    PluginSurfaceCustomization.builtinProfileTabKey("BOARD") -> 1
+                    else -> 2
+                }
+            }
         val contributions = customization.mapNotNull { entry ->
             if (!entry.visible) return@mapNotNull null
             byKey[entry.key]?.takeIf {
@@ -695,10 +693,13 @@ class WidgetUserSheet : AppBottomSheet() {
         }
         contributions.forEach { owned ->
             val view = pluginProfileTabViews[owned.key]
-                ?: runCatching { owned.contribution.createView(requireContext()) }.getOrNull()
+                ?: runCatching { owned.contribution.createView(requireContext()) }
+                    .onFailure { error -> Log.e("PluginProfileTab", "Failed to create ${owned.key}", error) }
+                    .getOrNull()
                     ?.also { pluginProfileTabViews[owned.key] = it }
                 ?: return@forEach
             runCatching { owned.contribution.bind(view, context) }
+                .onFailure { error -> Log.e("PluginProfileTab", "Failed to bind ${owned.key}", error) }
             if (view.contentDescription.isNullOrBlank()) view.contentDescription = owned.contribution.title
         }
         binding.userSheetProfileTabsContainer.visibility = if (profileTabKeys.size > 1) View.VISIBLE else View.GONE
@@ -708,11 +709,13 @@ class WidgetUserSheet : AppBottomSheet() {
     private fun showSelectedProfileTab() {
         binding.userSheetMainTabContent.animate().cancel()
         binding.userSheetWidgetsView.animate().cancel()
+        binding.userSheetPluginTabContent.animate().cancel()
         binding.userSheetMainTabContent.translationX = 0f
         binding.userSheetWidgetsView.translationX = 0f
+        binding.userSheetPluginTabContent.translationX = 0f
         val pluginKey = selectedProfileTabKey.takeIf { it != MAIN_TAB_KEY && it != BOARD_TAB_KEY }
         binding.userSheetMainTabContent.visibility = if (selectedProfileTabKey == MAIN_TAB_KEY) View.VISIBLE else View.GONE
-        binding.userSheetWidgetsView.visibility = if (showingWidgets) View.VISIBLE else View.GONE
+        binding.userSheetWidgetsView.visibility = if (selectedProfileTabKey == BOARD_TAB_KEY) View.VISIBLE else View.GONE
         val pluginView = pluginKey?.let { key ->
             PluginUiRegistry.profileTabs().firstOrNull {
                 PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) == key
@@ -729,64 +732,71 @@ class WidgetUserSheet : AppBottomSheet() {
 
     private fun dragProfilePages(distance: Float) {
         if (binding.userSheetProfileTabsContainer.visibility != View.VISIBLE) return
-        if (!hasBoard || selectedProfileTabKey !in setOf(MAIN_TAB_KEY, BOARD_TAB_KEY)) return
+        val currentIndex = profileTabKeys.indexOf(selectedProfileTabKey)
+        val targetIndex = currentIndex + if (distance < 0f) 1 else -1
+        val targetKey = profileTabKeys.getOrNull(targetIndex) ?: return
         val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
-        val allowed = if (showingWidgets) distance.coerceAtLeast(0f) else distance.coerceAtMost(0f)
-        if (allowed == 0f) return
-        binding.userSheetMainTabContent.visibility = View.VISIBLE
-        binding.userSheetWidgetsView.visibility = View.VISIBLE
-        if (showingWidgets) {
-            binding.userSheetMainTabContent.translationX = -width + allowed
-            binding.userSheetWidgetsView.translationX = allowed
-            tabSwipeOffset = (1f - allowed / width).coerceIn(0f, 1f)
-        } else {
-            binding.userSheetMainTabContent.translationX = allowed
-            binding.userSheetWidgetsView.translationX = width + allowed
-            tabSwipeOffset = (-allowed / width).coerceIn(0f, 1f)
-        }
-        updateTabIndicator(tabSwipeOffset)
+        val allowed = if (targetIndex > currentIndex) distance.coerceAtMost(0f) else distance.coerceAtLeast(0f)
+        val currentView = profilePageView(selectedProfileTabKey) ?: return
+        val targetView = profilePageView(targetKey) ?: return
+        currentView.visibility = View.VISIBLE
+        targetView.visibility = View.VISIBLE
+        currentView.translationX = allowed
+        targetView.translationX = if (targetIndex > currentIndex) width + allowed else -width + allowed
+        updateTabIndicator(currentIndex, targetIndex, (kotlin.math.abs(allowed) / width).coerceIn(0f, 1f))
     }
 
     private fun releaseProfilePages(distance: Float, commit: Boolean) {
         if (binding.userSheetProfileTabsContainer.visibility != View.VISIBLE) return
-        if (!hasBoard || selectedProfileTabKey !in setOf(MAIN_TAB_KEY, BOARD_TAB_KEY)) return
+        val currentIndex = profileTabKeys.indexOf(selectedProfileTabKey)
+        val targetIndex = currentIndex + if (distance < 0f) 1 else -1
+        val targetKey = profileTabKeys.getOrNull(targetIndex) ?: return
         val width = binding.userSheetProfilePages.width.toFloat().takeIf { it > 0f } ?: return
-        val wasShowingWidgets = showingWidgets
-        val validDirection = if (wasShowingWidgets) distance > 0f else distance < 0f
-        val targetShowsWidgets = if (commit && validDirection) !wasShowingWidgets else wasShowingWidgets
-        showingWidgets = targetShowsWidgets
-        selectedProfileTabKey = if (targetShowsWidgets) BOARD_TAB_KEY else MAIN_TAB_KEY
+        val currentView = profilePageView(selectedProfileTabKey) ?: return
+        val targetView = profilePageView(targetKey) ?: return
+        val targetSelected = commit && kotlin.math.abs(distance) >= width * 0.2f
+        val selectedIndex = if (targetSelected) targetIndex else currentIndex
+        val selectedKey = if (targetSelected) targetKey else selectedProfileTabKey
+        val direction = if (targetIndex > currentIndex) 1 else -1
         settlingProfilePage = true
-        val mainTarget = if (targetShowsWidgets) -width else 0f
-        val widgetsTarget = if (targetShowsWidgets) 0f else width
-        val targetOffset = if (targetShowsWidgets) 1f else 0f
-        tabSwipeAnimator?.cancel()
-        tabSwipeAnimator = ValueAnimator.ofFloat(tabSwipeOffset, targetOffset).apply {
-            duration = PAGE_SETTLE_MS
-            addUpdateListener { animator ->
-                tabSwipeOffset = animator.animatedValue as Float
-                updateTabIndicator(tabSwipeOffset)
-            }
-            start()
-        }
-        binding.userSheetMainTabContent.animate().translationX(mainTarget).setDuration(PAGE_SETTLE_MS).start()
-        binding.userSheetWidgetsView.animate().translationX(widgetsTarget).setDuration(PAGE_SETTLE_MS).withEndAction {
+        currentView.animate()
+            .translationX(if (targetSelected) -direction * width else 0f)
+            .setDuration(PAGE_SETTLE_MS)
+            .start()
+        targetView.animate()
+            .translationX(if (targetSelected) 0f else direction * width)
+            .setDuration(PAGE_SETTLE_MS)
+            .withEndAction {
             settlingProfilePage = false
-            // The sheet can be dismissed mid-settle, and the animator still delivers this.
-            val settled = _binding ?: return@withEndAction
+            if (_binding == null) return@withEndAction
+            selectedProfileTabKey = selectedKey
             selectingTabFromSwipe = true
-            settled.userSheetProfileTabs.getTabAt(profileTabKeys.indexOf(selectedProfileTabKey))?.select()
+            binding.userSheetProfileTabs.getTabAt(selectedIndex)?.select()
             selectingTabFromSwipe = false
             showSelectedProfileTab()
         }.start()
     }
 
-    private fun updateTabIndicator(offset: Float) {
-        if (offset >= 1f) {
-            binding.userSheetProfileTabs.setScrollPosition(BOARD_TAB, 0f, false)
-        } else {
-            binding.userSheetProfileTabs.setScrollPosition(MAIN_TAB, offset.coerceAtLeast(0f), false)
+    private fun profilePageView(key: String): View? = when (key) {
+        MAIN_TAB_KEY -> binding.userSheetMainTabContent
+        BOARD_TAB_KEY -> binding.userSheetWidgetsView
+        else -> {
+            val pluginView = PluginUiRegistry.profileTabs().firstOrNull {
+                PluginSurfaceCustomization.pluginKey(it.owner, it.contribution.id) == key
+            }?.let { pluginProfileTabViews[it.key] } ?: return null
+            val container = binding.userSheetPluginTabContent
+            if (container.children.toList() != listOf(pluginView)) {
+                container.removeAllViews()
+                container.addView(pluginView)
+            }
+            container
         }
+    }
+
+    private fun updateTabIndicator(currentIndex: Int, targetIndex: Int, progress: Float) {
+        val start = minOf(currentIndex, targetIndex)
+        val offset = if (targetIndex > currentIndex) progress else 1f - progress
+        binding.userSheetProfileTabs.setScrollPosition(start, offset, false)
     }
 
     private fun sectionHeaders(): List<TextView> = listOf(

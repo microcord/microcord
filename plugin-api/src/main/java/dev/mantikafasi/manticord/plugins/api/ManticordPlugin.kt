@@ -104,6 +104,7 @@ interface PluginScope {
     val ui: PluginUi
     val storage: PluginStorage
     val dialogs: PluginDialogs
+    val oauth: PluginOAuth
     val text: PluginText
 
     fun runOnMainThread(action: (Context) -> Unit)

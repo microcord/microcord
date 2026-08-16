@@ -122,7 +122,13 @@ interface PluginStorage {
 
 interface PluginDialogs {
     fun alert(title: String, message: String)
+    fun confirm(title: String, message: String, confirmLabel: String, onConfirm: () -> Unit)
     fun page(title: String, subtitle: String = "", createView: (Context) -> View)
+}
+
+interface PluginOAuth {
+    /** Opens Manticord's OAuth consent screen and receives the approved external redirect. */
+    fun authorize(requestUrl: String, onRedirect: (String) -> Unit)
 }
 
 interface PluginText {

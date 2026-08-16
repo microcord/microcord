@@ -3,6 +3,7 @@ package com.discord.widgets.settings
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import com.discord.R
 import com.discord.app.AppDialog
@@ -218,6 +219,15 @@ class WidgetSettingsPlugin : AppFragment(R.layout.widget_settings_plugin) {
 }
 
 class PluginTextSettingDialog : AppDialog(R.layout.dialog_plugin_text_setting) {
+    override fun onStart() {
+        super.onStart()
+        val margin = (resources.displayMetrics.density * 16).toInt()
+        dialog?.window?.setLayout(
+            resources.displayMetrics.widthPixels - margin * 2,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+    }
+
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val binding = DialogPluginTextSettingBinding.bind(view)
