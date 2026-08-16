@@ -273,6 +273,17 @@ class GatewaySocket(
         scheduler.schedule(0) { reconnect("", immediate = true) }
     }
 
+    fun disconnectForResumeTesting() {
+        scheduler.schedule(0) {
+            if (sessionId == null) return@schedule
+            cleanup(4000, "")
+            eventHandler.handleConnected(false)
+            eventHandler.handleConnectionReady(false)
+            eventHandler.handleDisconnect(false)
+            state = State.DISCONNECTED
+        }
+    }
+
     /** Re-identifies rather than resuming, so the server sends a complete `READY`. */
     fun reconnectWithNewSession(reason: String) {
         scheduler.schedule(0) {
@@ -574,7 +585,7 @@ class GatewaySocket(
             terminalDisconnect(true, code, reason)
             return
         }
-        if (code != 4000) clearSession()
+        if (code in NON_RESUMABLE_CLOSE_CODES) clearSession()
         scheduleReconnect("Gateway closed $code: $reason")
     }
 
@@ -653,6 +664,11 @@ class GatewaySocket(
     private fun logError(message: String, error: Throwable) { runCatching { Log.e(TAG, message, error) } }
 
     private companion object {
+        val NON_RESUMABLE_CLOSE_CODES = setOf(
+            1000, 1001,
+            4003, 4004, 4005, 4007, 4009,
+            4010, 4011, 4012, 4013, 4014, 4015, 4016,
+        )
 
         /**
          * Identify capabilities. `NON_CHANNEL_READ_STATES` (1 shl 7) is what makes READY

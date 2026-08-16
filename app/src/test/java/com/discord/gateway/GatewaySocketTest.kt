@@ -116,6 +116,22 @@ class GatewaySocketTest {
     }
 
     @Test
+    fun resumableTransportCloseRetainsTheSession() {
+        val harness = Harness()
+        harness.connectReady(sequence = 42, sessionId = "fixture-session")
+
+        harness.socket.serverClosed(1006, "transport lost")
+        harness.scheduler.runCurrent()
+        harness.scheduler.advanceBy(3_000)
+        harness.socket.open()
+        harness.socket.serverMessage(hello())
+        harness.scheduler.runCurrent()
+
+        assertEquals(6, harness.socket.lastOp())
+        assertEquals("fixture-session", harness.socket.lastPayload()["d"].asJsonObject["session_id"].asString)
+    }
+
+    @Test
     fun nonResumableInvalidSessionIdentifiesAgain() {
         val harness = Harness()
         harness.connectReady(sequence = 9, sessionId = "fixture-session")
@@ -150,6 +166,23 @@ class GatewaySocketTest {
         harness.scheduler.runCurrent()
         assertEquals(6, harness.socket.lastOp())
         assertEquals(listOf(false), harness.handler.disconnects)
+    }
+
+    @Test
+    fun resumableDeveloperDisconnectSendsResumeWithoutAReason() {
+        val harness = Harness()
+        harness.connectReady(sequence = 12, sessionId = "fixture-session")
+
+        harness.gateway.disconnectForResumeTesting()
+        harness.scheduler.runCurrent()
+        harness.gateway.connect()
+        harness.scheduler.runCurrent()
+        harness.socket.open()
+        harness.socket.serverMessage(hello())
+        harness.scheduler.runCurrent()
+
+        assertEquals(6, harness.socket.lastOp())
+        assertEquals("fixture-session", harness.socket.lastPayload()["d"].asJsonObject["session_id"].asString)
     }
 
     @Test
@@ -312,6 +345,7 @@ class GatewaySocketTest {
         override fun close(code: Int, reason: String?): Boolean { closed = true; return true }
         fun open() = listener.onOpen()
         fun fail() = listener.onFailure(IllegalStateException("fixture failure"))
+        fun serverClosed(code: Int, reason: String) = listener.onClosed(code, reason)
         fun serverMessage(json: String) = listener.onBinaryMessage(json.toByteArray(Charsets.UTF_8))
         fun lastPayload() = JsonParser.parseString(sent.last()).asJsonObject
         fun lastOp(): Int = lastPayload()["op"].asInt

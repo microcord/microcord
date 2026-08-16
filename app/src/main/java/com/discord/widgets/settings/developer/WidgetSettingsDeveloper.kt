@@ -110,6 +110,12 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
         binding.developerSettingsSimulateGatewayReconnect.setOnClickListener {
             StoreStream.getGatewayConnection().simulateReconnectForTesting()
         }
+        binding.developerSettingsDisconnectGatewayResumable.setOnClickListener {
+            StoreStream.getGatewayConnection().disconnectForResumeTesting()
+        }
+        binding.developerSettingsResumeGateway.setOnClickListener {
+            StoreStream.getGatewayConnection().resumeForTesting()
+        }
         binding.developerSettingsDisconnectGateway.setOnClickListener {
             StoreStream.getGatewayConnection().disconnectForTesting()
         }

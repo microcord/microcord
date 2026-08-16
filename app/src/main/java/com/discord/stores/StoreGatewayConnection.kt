@@ -455,6 +455,14 @@ class StoreGatewayConnection(
         socket?.reconnectWithNewSession("")
     }
 
+    fun disconnectForResumeTesting() {
+        socket?.disconnectForResumeTesting()
+    }
+
+    fun resumeForTesting() {
+        socket?.connect()
+    }
+
     fun reconnectWithNewSession(reason: String) {
         socket?.reconnectWithNewSession(reason)
     }
