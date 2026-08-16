@@ -270,7 +270,7 @@ class GatewaySocket(
     }
 
     fun simulateReconnectForTesting() {
-        scheduler.schedule(0) { reconnect("Simulated reconnect", immediate = true) }
+        scheduler.schedule(0) { reconnect("", immediate = true) }
     }
 
     /** Re-identifies rather than resuming, so the server sends a complete `READY`. */

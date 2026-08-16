@@ -25,6 +25,8 @@ class AppGatewaySocketLogger(
 
     companion object {
         const val PREF_LOG_GATEWAY_EVENTS = "developer_log_gateway_events"
+        private const val PREF_LOG_GATEWAY_LIFECYCLE = "developer_log_gateway_lifecycle"
+        private const val PREF_LOG_GATEWAY_VOICE_STATES = "developer_log_gateway_voice_states"
         private const val TAG = "GatewayEvents"
         val INSTANCE = AppGatewaySocketLogger()
 
@@ -36,6 +38,24 @@ class AppGatewaySocketLogger(
         fun setEnabled(enabled: Boolean) {
             SharedPreferencesProvider.getPrefsSessionDurable().edit()
                 .putBoolean(PREF_LOG_GATEWAY_EVENTS, enabled).apply()
+        }
+
+        fun isLifecycleEnabled() = runCatching {
+            SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(PREF_LOG_GATEWAY_LIFECYCLE, false)
+        }.getOrDefault(false)
+
+        fun setLifecycleEnabled(enabled: Boolean) {
+            SharedPreferencesProvider.getPrefsSessionDurable().edit()
+                .putBoolean(PREF_LOG_GATEWAY_LIFECYCLE, enabled).apply()
+        }
+
+        fun isVoiceStateLoggingEnabled() = runCatching {
+            SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(PREF_LOG_GATEWAY_VOICE_STATES, false)
+        }.getOrDefault(false)
+
+        fun setVoiceStateLoggingEnabled(enabled: Boolean) {
+            SharedPreferencesProvider.getPrefsSessionDurable().edit()
+                .putBoolean(PREF_LOG_GATEWAY_VOICE_STATES, enabled).apply()
         }
     }
 }

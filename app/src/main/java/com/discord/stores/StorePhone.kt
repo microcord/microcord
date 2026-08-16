@@ -52,9 +52,11 @@ class StorePhone(
 
     override fun init(context: Context) {
         super.init(context)
-        countryCodes = loadCountryCodesFromDisk(context)
-        selectedCountryCode = selectedCountryCodeCache.get()
-        markChanged()
+        dispatcher.schedule {
+            countryCodes = loadCountryCodesFromDisk(context)
+            selectedCountryCode = selectedCountryCodeCache.get()
+            markChanged()
+        }
     }
 
     override fun snapshotData() {

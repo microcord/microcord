@@ -9,7 +9,9 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.inputmethod.InputMethodManager
 import android.widget.ScrollView
 import androidx.activity.OnBackPressedCallback
@@ -17,11 +19,15 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.Insets
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
@@ -69,10 +75,12 @@ import com.discord.widgets.auth.WidgetAuthRequiredAction
 import com.discord.widgets.auth.WidgetAuthResetPassword
 import com.discord.widgets.auth.WidgetAuthUndeleteAccount
 import com.discord.widgets.safetyhub.WidgetSuspendedUser
+import com.discord.widgets.settings.developer.WidgetSettingsDeveloper
 import com.discord.widgets.tabs.WidgetTabsHost
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.call.WidgetVoiceCallIncoming
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import rx.Subscription
 import rx.subjects.PublishSubject
@@ -200,6 +208,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         try {
             binding = ActivityAppBinding.inflate(layoutInflater)
             setContentView(binding.root)
+            configureDeveloperShortcut()
             onBackPressedDispatcher.addCallback(backPressedCallback)
             pendingLaunchIntent = savedInstanceState?.pendingIntent() ?: intent
             mostRecentIntent = intent ?: Intent()
@@ -261,6 +270,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     override fun onResume() {
         super.onResume()
         if (fatalCrashShown) return
+        updateDeveloperShortcut()
         // An intent tagged as a settings restart must not immediately restart again.
         if (mostRecentIntent.getBooleanExtra(AppScreenRouter.EXTRA_RECREATE, false)) {
             mostRecentIntent.removeExtra(AppScreenRouter.EXTRA_RECREATE)
@@ -292,6 +302,91 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
                 }
             }
         tryShowPendingNotice()
+    }
+
+    private fun configureDeveloperShortcut() {
+        val shortcut = binding.appDeveloperShortcut
+        var downRawX = 0f
+        var downRawY = 0f
+        var downTranslationX = 0f
+        var downTranslationY = 0f
+        var dragging = false
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+
+        shortcut.setOnClickListener { WidgetSettingsDeveloper.launch(this) }
+        shortcut.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    downTranslationX = view.translationX
+                    downTranslationY = view.translationY
+                    dragging = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!dragging && (abs(dx) > touchSlop || abs(dy) > touchSlop)) dragging = true
+                    if (dragging) moveDeveloperShortcut(view, downTranslationX + dx, downTranslationY + dy)
+                }
+                MotionEvent.ACTION_UP -> if (dragging) saveDeveloperShortcutPosition(view) else view.performClick()
+                MotionEvent.ACTION_CANCEL -> if (dragging) saveDeveloperShortcutPosition(view)
+            }
+            true
+        }
+        updateDeveloperShortcut()
+    }
+
+    private fun updateDeveloperShortcut() {
+        val shortcut = binding.appDeveloperShortcut
+        shortcut.visibility = if (DeveloperSettings.isFloatingShortcutEnabled()) View.VISIBLE else View.GONE
+        if (shortcut.visibility == View.VISIBLE) shortcut.post { restoreDeveloperShortcutPosition(shortcut) }
+    }
+
+    private data class DeveloperShortcutBounds(
+        val left: Float,
+        val top: Float,
+        val maxX: Float,
+        val maxY: Float,
+    )
+
+    private fun restoreDeveloperShortcutPosition(shortcut: FloatingActionButton) {
+        val (x, y) = DeveloperSettings.floatingShortcutPosition()
+        val bounds = developerShortcutBounds(shortcut)
+        shortcut.translationX = bounds.left + bounds.maxX * x
+        shortcut.translationY = bounds.top + bounds.maxY * y
+    }
+
+    private fun moveDeveloperShortcut(shortcut: View, x: Float, y: Float) {
+        val bounds = developerShortcutBounds(shortcut)
+        shortcut.translationX = x.coerceIn(bounds.left, bounds.left + bounds.maxX)
+        shortcut.translationY = y.coerceIn(bounds.top, bounds.top + bounds.maxY)
+    }
+
+    private fun saveDeveloperShortcutPosition(shortcut: View) {
+        val bounds = developerShortcutBounds(shortcut)
+        val x = if (bounds.maxX == 0f || shortcut.translationX - bounds.left < bounds.maxX / 2) 0f else 1f
+        val y = if (bounds.maxY == 0f) 0f else (shortcut.translationY - bounds.top) / bounds.maxY
+        shortcut.animate()
+            .translationX(bounds.left + bounds.maxX * x)
+            .setDuration(DEVELOPER_SHORTCUT_SNAP_MS)
+            .withEndAction { DeveloperSettings.setFloatingShortcutPosition(x, y) }
+            .start()
+    }
+
+    private fun developerShortcutBounds(shortcut: View): DeveloperShortcutBounds {
+        val edgeGap = resources.displayMetrics.density * 8f
+        val insets = ViewCompat.getRootWindowInsets(binding.root)
+            ?.getInsets(WindowInsetsCompat.Type.systemBars())
+            ?: Insets.NONE
+        val left = insets.left + edgeGap
+        val top = insets.top + edgeGap
+        return DeveloperShortcutBounds(
+            left = left,
+            top = top,
+            maxX = (binding.root.width - shortcut.width - left - insets.right - edgeGap).coerceAtLeast(0f),
+            maxY = (binding.root.height - shortcut.height - top - insets.bottom - edgeGap).coerceAtLeast(0f),
+        )
     }
 
     /**
@@ -739,6 +834,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     }
 
     companion object {
+        private const val DEVELOPER_SHORTCUT_SNAP_MS = 180L
         private const val STATE_PENDING_INTENT = "pending_launch_intent"
 
         /** Discord's own "I forgot my password" help article. */

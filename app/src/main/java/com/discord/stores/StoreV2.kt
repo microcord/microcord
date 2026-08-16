@@ -20,8 +20,11 @@ abstract class StoreV2 : Store(), DispatchHandler, ObservationDeck.UpdateSource 
     private fun assertStoreThread() {
         if (Thread.currentThread().id != StoreThreadScheduler.storeThreadId) {
             AppLog.e(
-                "markChanged() should be run from the Store Dispatcher",
-                IllegalStateException("Dispatch not run on store thread"),
+                "${javaClass.simpleName}.markChanged() ran off the Store Dispatcher",
+                IllegalStateException(
+                    "expected=${StoreThreadScheduler.storeThreadId}, " +
+                        "actual=${Thread.currentThread().id}:${Thread.currentThread().name}",
+                ),
             )
         }
     }

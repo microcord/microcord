@@ -2353,7 +2353,15 @@ class StoreStream private constructor(
 
         // Voice, calls and streams
         dispatchSubscribeBatched(events.voiceStateUpdate, "streamVoiceStateUpdate") { voiceState ->
-            voiceState.member?.let { member ->
+            if (AppGatewaySocketLogger.isVoiceStateLoggingEnabled()) {
+                Log.d(
+                    "GatewayVoice",
+                    "VOICE_STATE_UPDATE guild=${voiceState.guildId} channel=${voiceState.channelId} " +
+                        "user=${voiceState.userId} member=${voiceState.member != null}",
+                )
+            }
+            val member = voiceState.member
+            if (member != null) {
                 users.handleGuildMemberAdd(member)
                 guilds.handleGuildMember(member, voiceState.guildId)
                 channelMembers.handleGuildMemberUpdate(voiceState.guildId, member)
@@ -2447,6 +2455,7 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handleGatewayConnectedInternal(connected: Boolean) {
+        if (AppGatewaySocketLogger.isLifecycleEnabled()) Log.d(GATEWAY_TAG, "connected=$connected")
         messages.handleConnected(connected)
         messagesLoader.handleConnected(connected)
         analytics.handleConnected(connected)
@@ -2458,6 +2467,7 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handleGatewayConnectionReadyInternal(ready: Boolean) {
+        if (AppGatewaySocketLogger.isLifecycleEnabled()) Log.d(GATEWAY_TAG, "ready=$ready")
         if (::voiceTransport.isInitialized) voiceTransport.storeRtcConnection.handleConnectionReady(ready)
         connectivity.handleConnectionReady(ready)
         guildSubscriptions.handleConnectionReady(ready)
@@ -3335,6 +3345,7 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handleConnectionOpenInternal(rawPayload: ModelPayload) {
+        if (AppGatewaySocketLogger.isLifecycleEnabled()) Log.d(GATEWAY_TAG, "READY received")
         BootLog.record(BootLogEvent.CACHE_HYDRATION_STARTED)
         val hydrated = when (val result = readyPayloadHydrator.hydrateReadyPayload(rawPayload)) {
             ReadyPayloadHydrator.HydrateResult.Error -> {
@@ -3494,6 +3505,9 @@ class StoreStream private constructor(
 
     @StoreThread
     private fun handleConnectionOpenSupplementalInternal(payload: ModelReadySupplemental) {
+        if (AppGatewaySocketLogger.isLifecycleEnabled()) {
+            Log.d(GATEWAY_TAG, "READY_SUPPLEMENTAL guilds=${payload.guilds?.size ?: 0}")
+        }
         val users = readySupplementalUsers.orEmpty()
         readySupplementalUsers = null
 

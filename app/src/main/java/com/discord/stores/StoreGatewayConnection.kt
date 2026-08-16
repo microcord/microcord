@@ -447,6 +447,14 @@ class StoreGatewayConnection(
         socket?.simulateReconnectForTesting()
     }
 
+    fun disconnectForTesting() {
+        socket?.close()
+    }
+
+    fun reconnectForTesting() {
+        socket?.reconnectWithNewSession("")
+    }
+
     fun reconnectWithNewSession(reason: String) {
         socket?.reconnectWithNewSession(reason)
     }

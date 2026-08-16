@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/loading_background">
@@ -59,4 +60,15 @@
                 android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/app_developer_shortcut"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/developer_options"
+        android:src="@drawable/ic_settings_24dp"
+        android:visibility="gone"
+        app:backgroundTint="?attr/color_brand"
+        app:borderWidth="0dp"
+        app:tint="@color/white" />
 </FrameLayout>

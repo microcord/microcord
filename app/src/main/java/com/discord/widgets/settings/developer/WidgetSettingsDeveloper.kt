@@ -68,6 +68,18 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             isChecked = AppGatewaySocketLogger.isEnabled()
             setOnCheckedListener(AppGatewaySocketLogger::setEnabled)
         }
+        binding.settingsDeveloperLogGatewayLifecycle.apply {
+            isChecked = AppGatewaySocketLogger.isLifecycleEnabled()
+            setOnCheckedListener(AppGatewaySocketLogger::setLifecycleEnabled)
+        }
+        binding.settingsDeveloperLogGatewayVoiceStates.apply {
+            isChecked = AppGatewaySocketLogger.isVoiceStateLoggingEnabled()
+            setOnCheckedListener(AppGatewaySocketLogger::setVoiceStateLoggingEnabled)
+        }
+        binding.settingsDeveloperFloatingShortcut.apply {
+            isChecked = DeveloperSettings.isFloatingShortcutEnabled()
+            setOnCheckedListener(DeveloperSettings::setFloatingShortcutEnabled)
+        }
         binding.settingsDeveloperLogRestRequests.apply {
             isChecked = AppRestRequestLogger.isEnabled()
             setOnCheckedListener(AppRestRequestLogger::setEnabled)
@@ -97,6 +109,12 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
         }
         binding.developerSettingsSimulateGatewayReconnect.setOnClickListener {
             StoreStream.getGatewayConnection().simulateReconnectForTesting()
+        }
+        binding.developerSettingsDisconnectGateway.setOnClickListener {
+            StoreStream.getGatewayConnection().disconnectForTesting()
+        }
+        binding.developerSettingsReconnectGateway.setOnClickListener {
+            StoreStream.getGatewayConnection().reconnectForTesting()
         }
         binding.developerSettingsWriteCaches.setOnClickListener {
             AppToast.show(requireContext(), if (StoreStream.writeCaches()) "Caches written" else "Some caches failed to write")
