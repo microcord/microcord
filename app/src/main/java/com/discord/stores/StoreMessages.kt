@@ -974,23 +974,22 @@ class StoreMessages @JvmOverloads constructor(
                 guildId = guildId,
                 content = content,
                 author = author.synthesizeApiUser(),
+                mentions = mentions?.map { it.synthesizeApiUser() },
+                application = application,
+                activity = messageActivity,
                 allowedMentions = allowedMentions?.toRestApiParams(),
                 captcha = captchaSolution,
                 attachments = attachments,
                 stickers = stickers,
                 location = location,
                 flags = flags,
+                messageReference = messageReference,
             ),
         )
         return when (submission) {
             is MessageSendCoordinator.Submission.Rejected -> Observable.just(submission.result)
             is MessageSendCoordinator.Submission.Accepted -> {
                 val enriched = submission.optimistic.copy(
-                    mentions = mentions?.map { it.synthesizeApiUser() },
-                    stickers = stickers,
-                    messageReference = messageReference ?: submission.optimistic.messageReference,
-                    application = application,
-                    activity = messageActivity,
                     lastManualAttemptTimestamp = lastManualAttemptTimestamp ?: clock.currentTimeMillis(),
                     initialAttemptTimestamp = initialAttemptTimestamp ?: clock.currentTimeMillis(),
                     numRetries = numRetries ?: 0,
@@ -1117,10 +1116,16 @@ class StoreMessages @JvmOverloads constructor(
     ): Observable<MessageResult> {
         val coordinator = sendCoordinator ?: return Observable.just(MessageResult.NoValidContent)
         val message = getMessage(channelId, messageId) ?: return Observable.just(MessageResult.NoValidContent)
-        val submission = coordinator.edit(message, content, allowedMentions?.toRestApiParams())
+        val submission = coordinator.edit(
+            message,
+            content,
+            allowedMentions?.toRestApiParams(),
+        )
         return when (submission) {
             is MessageSendCoordinator.Submission.Rejected -> Observable.just(submission.result)
-            is MessageSendCoordinator.Submission.Accepted -> awaitResult(coordinator, submission.requestId)
+            is MessageSendCoordinator.Submission.Accepted -> {
+                awaitResult(coordinator, submission.requestId)
+            }
         }
     }
 

@@ -10,6 +10,9 @@ import dev.mantikafasi.manticord.plugins.api.PluginProfileTabContribution
 import dev.mantikafasi.manticord.plugins.api.PluginSlashCommand
 import dev.mantikafasi.manticord.plugins.api.PluginContextMenuItem
 import dev.mantikafasi.manticord.plugins.api.PluginMessageContribution
+import dev.mantikafasi.manticord.plugins.api.PluginMessageInterceptionType
+import dev.mantikafasi.manticord.plugins.api.PluginMessageInterceptor
+import dev.mantikafasi.manticord.plugins.api.HostMessageInterceptor
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import dev.mantikafasi.manticord.plugins.api.PluginResources
 import dev.mantikafasi.manticord.plugins.api.PluginScope
@@ -29,6 +32,7 @@ import java.security.MessageDigest
 import android.os.Handler
 import android.os.Looper
 import com.discord.R
+import com.discord.models.message.Message
 import com.discord.app.AppActivity
 import com.discord.utilities.lifecycle.ActivityProvider
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -52,6 +56,7 @@ internal typealias OwnedProfileTabContribution = OwnedContribution<PluginProfile
 internal typealias OwnedSlashCommand = OwnedContribution<PluginSlashCommand>
 internal typealias OwnedContextMenuItem = OwnedContribution<PluginContextMenuItem>
 internal typealias OwnedMessageContribution = OwnedContribution<PluginMessageContribution>
+internal typealias OwnedMessageInterceptor = OwnedContribution<PluginMessageInterceptor>
 
 internal data class PluginContentInfo(
     val type: String,
@@ -117,6 +122,7 @@ internal object PluginUiRegistry {
     private val slashCommands = ContributionRegistry<PluginSlashCommand>("slash command")
     private val contextMenuItems = ContributionRegistry<PluginContextMenuItem>("context menu item")
     private val messages = ContributionRegistry<PluginMessageContribution>("message")
+    private val messageInterceptors = ContributionRegistry<PluginMessageInterceptor>("message interceptor")
 
     fun headers() = headers.snapshot()
     fun composers() = composers.snapshot()
@@ -126,6 +132,24 @@ internal object PluginUiRegistry {
     fun slashCommands() = slashCommands.snapshot()
     fun contextMenuItems() = contextMenuItems.snapshot()
     fun messages() = messages.snapshot()
+    fun messageInterceptors() = messageInterceptors.snapshot()
+
+    fun hasMessageInterceptors(type: PluginMessageInterceptionType): Boolean =
+        messageInterceptors.snapshot().any { type in it.contribution.types && it.contribution is HostMessageInterceptor }
+
+    fun interceptMessage(
+        type: PluginMessageInterceptionType,
+        message: Message,
+    ): Message {
+        val interceptors = messageInterceptors.snapshot()
+        if (interceptors.isEmpty()) return message
+        return interceptors.fold(message) { current, owned ->
+            val interceptor = owned.contribution as? HostMessageInterceptor
+                ?: return@fold current
+            if (type !in interceptor.types) return@fold current
+            runCatching { interceptor.transform(current) }.getOrDefault(current)
+        }
+    }
 
     fun content(owner: String): List<PluginContentInfo> = buildList {
         headers().filter { it.owner == owner }.forEach {
@@ -154,6 +178,9 @@ internal object PluginUiRegistry {
         messages().filter { it.owner == owner }.forEach {
             add(PluginContentInfo("Message ${it.contribution.placement.name.lowercase()}", it.contribution.title))
         }
+        messageInterceptors().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Message interceptor", it.contribution.types.joinToString { type -> type.name.lowercase() }))
+        }
     }
 
     fun addHeaderListener(listener: () -> Unit) = headers.addListener(listener)
@@ -180,6 +207,8 @@ internal object PluginUiRegistry {
     fun registerContextMenuItem(owner: String, item: PluginContextMenuItem) = contextMenuItems.register(owner, item)
     fun registerMessage(owner: String, contribution: PluginMessageContribution) =
         messages.register(owner, contribution)
+    fun registerMessageInterceptor(owner: String, interceptor: PluginMessageInterceptor) =
+        messageInterceptors.register(owner, interceptor)
 
     fun removeOwner(owner: String) {
         headers.removeOwner(owner)
@@ -190,6 +219,7 @@ internal object PluginUiRegistry {
         slashCommands.removeOwner(owner)
         contextMenuItems.removeOwner(owner)
         messages.removeOwner(owner)
+        messageInterceptors.removeOwner(owner)
     }
 }
 
@@ -286,6 +316,11 @@ internal class PluginScopeImpl(
         override fun registerMessage(contribution: PluginMessageContribution): PluginRegistration {
             check(!closed.get()) { "plugin scope is closed" }
             return track(PluginUiRegistry.registerMessage(pluginId, contribution))
+        }
+
+        override fun registerMessageInterceptor(interceptor: PluginMessageInterceptor): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerMessageInterceptor(pluginId, interceptor))
         }
     }
     override val storage: PluginStorage = object : PluginStorage {

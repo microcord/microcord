@@ -2,19 +2,24 @@ package com.discord.utilities.messagesend
 
 import android.content.ContentResolver
 import com.discord.api.message.MessageReference
+import com.discord.api.application.Application
 import com.discord.api.premium.PremiumTier
 import com.discord.api.message.Message as ApiMessage
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.api.message.allowedmentions.MessageAllowedMentions
 import com.discord.api.message.allowedmentions.MessageAllowedMentionsTypes
 import com.discord.api.user.User
+import com.discord.api.message.activity.MessageActivity
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.api.sticker.Sticker
 import com.discord.models.message.Message
+import com.discord.plugins.PluginUiRegistry
+import dev.mantikafasi.manticord.plugins.api.PluginMessageInterceptionType
 import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StorePendingReplies
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.attachments.toUploadAttachment
 import com.discord.utilities.captcha.CaptchaSolution
 import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.rest.RestAPI
@@ -58,6 +63,9 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val guildId: Long? = null,
         val content: String,
         val author: User? = null,
+        val mentions: List<User>? = null,
+        val application: Application? = null,
+        val activity: MessageActivity? = null,
         val canSend: Boolean = true,
         val communicationDisabled: Boolean = false,
         val systemDm: Boolean = false,
@@ -75,6 +83,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
          * send posted as an empty message.
          */
         val stickers: List<Sticker>? = null,
+        val messageReference: MessageReference? = null,
         /** Reference `SendMessageOptions.location`; see [MessageSendLocation]. */
         val location: String = MessageSendLocation.OTHER,
     )
@@ -167,14 +176,16 @@ class MessageSendCoordinator @JvmOverloads constructor(
     }
 
     fun send(input: Send): Submission {
-        validate(input)?.let { return Submission.Rejected(it) }
         val nonce = nonceGenerator.nonce().toString()
-        val reference = input.reply?.messageReference
-        val optimistic = Message(
+        val reference = input.messageReference ?: input.reply?.messageReference
+        val base = Message(
             id = nonce.toLong(),
             channelId = input.channelId,
             guildId = input.guildId,
             author = input.author,
+            mentions = input.mentions,
+            application = input.application,
+            activity = input.activity,
             content = input.content,
             timestamp = UtcDateTime(now()),
             nonce = nonce,
@@ -188,11 +199,34 @@ class MessageSendCoordinator @JvmOverloads constructor(
             flags = input.flags,
             initialAttemptTimestamp = now(),
         )
+        val optimistic = if (PluginUiRegistry.hasMessageInterceptors(PluginMessageInterceptionType.SEND)) {
+            PluginUiRegistry.interceptMessage(PluginMessageInterceptionType.SEND, base)
+        } else {
+            base
+        }.copy(
+            id = base.id,
+            channelId = base.channelId,
+            guildId = base.guildId,
+            author = base.author,
+            nonce = base.nonce,
+            type = base.type,
+        )
+        val attachments = if (optimistic.localAttachments == base.localAttachments) input.attachments else {
+            contentResolver?.let { resolver ->
+                runCatching { optimistic.localAttachments?.map { it.toUploadAttachment(resolver) } }.getOrNull()
+            } ?: input.attachments
+        }
+        validate(input.copy(
+            content = optimistic.content.orEmpty(),
+            attachments = attachments,
+            stickers = optimistic.stickers,
+            flags = optimistic.flags,
+        ))?.let { return Submission.Rejected(it) }
         val operation = Operation(
             channelId = input.channelId,
             queueRequestId = nonce,
             optimistic = optimistic,
-            attachments = input.attachments,
+            attachments = attachments,
             location = input.location,
         )
         operations[nonce] = operation
@@ -208,12 +242,25 @@ class MessageSendCoordinator @JvmOverloads constructor(
         characterLimit: Int = this.characterLimit,
     ): Submission {
         if (message.id <= 0 || message.channelId <= 0) return Submission.Rejected(MessageResult.NoValidContent)
-        validateContent(content, characterLimit)?.let { return Submission.Rejected(it) }
+        val base = message.copy(content = content, type = TYPE_SENDING, allowedMentions = allowedMentions?.toApiModel())
+        val optimistic = if (PluginUiRegistry.hasMessageInterceptors(PluginMessageInterceptionType.EDIT)) {
+            PluginUiRegistry.interceptMessage(PluginMessageInterceptionType.EDIT, base)
+        } else {
+            base
+        }.copy(
+            id = base.id,
+            channelId = base.channelId,
+            guildId = base.guildId,
+            author = base.author,
+            nonce = base.nonce,
+            type = base.type,
+        )
+        validateContent(optimistic.content.orEmpty(), characterLimit)?.let { return Submission.Rejected(it) }
         val requestId = "edit:${message.channelId}:${message.id}:${nonceGenerator.nonce()}"
         val operation = Operation(
             channelId = message.channelId,
             queueRequestId = message.id.toString(),
-            optimistic = message.copy(content = content, type = TYPE_SENDING),
+            optimistic = optimistic,
             original = message,
             isEdit = true,
         )
@@ -222,9 +269,9 @@ class MessageSendCoordinator @JvmOverloads constructor(
         queue(operation.channelId).enqueue(
             MessageRequest.Edit(
                 channelId = message.channelId,
-                content = content,
+                content = optimistic.content.orEmpty(),
                 messageId = message.id,
-                allowedMentions = allowedMentions?.toApiModel(),
+                allowedMentions = optimistic.allowedMentions,
                 attemptTimestamp = now(),
                 requestId = operation.queueRequestId,
                 onCompleted = { result, _ -> settle(requestId, result) },

@@ -10,7 +10,7 @@ plugins {
 val pluginSdkJar by tasks.registering(Jar::class) {
     dependsOn(":app:bundleDebugClassesToCompileJar", ":app:processDebugResources", ":plugin-api:bundleLibCompileToJarDebug")
     archiveBaseName.set("manticord-plugin-api")
-    archiveVersion.set("1.0.0")
+    archiveVersion.set("1.0.5")
     destinationDirectory.set(layout.buildDirectory.dir("plugin-sdk"))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from({ zipTree(file("app/build/intermediates/compile_app_classes_jar/debug/bundleDebugClassesToCompileJar/classes.jar")) })
@@ -23,7 +23,7 @@ publishing {
         create<MavenPublication>("pluginSdk") {
             groupId = "dev.mantikafasi.manticord"
             artifactId = "plugin-api"
-            version = "1.0.0"
+            version = "1.0.5"
             artifact(pluginSdkJar)
             pom.withXml {
                 asNode().appendNode("dependencies").appendNode("dependency").apply {
@@ -38,7 +38,7 @@ publishing {
     repositories {
         maven {
             name = "GitHubEnterprise"
-            url = uri("https://git.hoodnet.work/_registry/maven/discord-android-rebuild/nullcord")
+            url = uri("https://maven.git.hoodnet.work/discord-android-rebuild/nullcord")
             credentials {
                 username = providers.environmentVariable("GITHUB_ACTOR").orNull
                     ?: providers.gradleProperty("gpr.user").orNull

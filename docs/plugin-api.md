@@ -364,6 +364,49 @@ scope.ui.registerMessage(
 )
 ```
 
+### Message Interceptors
+
+`registerMessageInterceptor(...)` synchronously transforms Manticord's real
+`com.discord.models.message.Message` at shared `SEND`, `EDIT`, and `RECEIVE` boundaries.
+Interceptors are ordered by priority, then stable `owner:id` order. Return the original instance for
+a no-op or use Kotlin `copy(...)` to alter content, attachments, stickers, mentions, flags,
+references, embeds, or components in Manticord's local model. No wrapper is allocated; disabled or
+non-matching interceptors leave the original message on the normal path.
+
+Normal Discord user send/edit REST routes still determine what reaches the server: send supports
+content, attachments, stickers, mentions, flags, and references; edit supports content and allowed
+mentions. Embeds and components are server-owned for normal user messages, so changing them affects
+Manticord's local optimistic/received rendering, not Discord's accepted payload.
+
+```kotlin
+scope.ui.registerMessageInterceptor(
+    pluginMessageInterceptor(
+        "strip_plugin_prefix",
+        PluginMessageInterceptionType.SEND,
+        transform = { message ->
+            if (message.content?.startsWith("plugin:") == true) {
+                message.copy(content = message.content.removePrefix("plugin:").trimStart())
+            } else {
+                message
+            }
+        },
+    ),
+)
+```
+
+Plugins that need to observe received, sent, or edited messages should subscribe directly to the
+existing public Manticord store. No plugin-specific event fan-out is installed, so disabled plugins
+add no Gateway callback, main-thread post, or message-allocation overhead.
+
+```kotlin
+StoreStream.getMessages()
+    .observeMessagesForChannel(channelId)
+    .subscribe { messages -> render(messages) }
+```
+
+The observable includes optimistic local messages and subsequent Gateway updates. Plugins own their
+Rx subscription and should unsubscribe it from their `stop()` method when they create one.
+
 ### Slash Commands
 
 `registerSlashCommand(...)` adds a local command to the existing application-command store. Commands

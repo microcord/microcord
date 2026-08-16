@@ -95,6 +95,8 @@ import com.discord.utilities.time.Clock
 import com.discord.utilities.websocket.GatewayCompression
 import com.discord.utilities.websocket.OkHttpGatewayWebSocketFactory
 import com.discord.models.message.Message as DomainMessage
+import com.discord.plugins.PluginUiRegistry
+import dev.mantikafasi.manticord.plugins.api.PluginMessageInterceptionType
 import com.discord.utilities.messagesend.MessageSendCoordinator
 import com.discord.utilities.notifications.NotificationData
 import com.discord.utilities.notifications.NotificationKind
@@ -108,7 +110,6 @@ import com.discord.widgets.chat.input.ChatInputGuardActions
 import com.discord.widgets.chat.input.ChatInputStoreBindings
 import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.notice.NoticePopupChannel
-import com.discord.plugins.PluginUiRegistry
 import com.discord.widgets.chat.list.WidgetChatList
 import com.discord.widgets.chat.overlay.WidgetChatOverlay
 import com.discord.widgets.friends.FriendRelationshipUi
@@ -2249,8 +2250,14 @@ class StoreStream private constructor(
         // Messages
         dispatchSubscribe(events.messageCreate, "streamMessageCreate", ::handleMessageCreateInternal)
         dispatchSubscribe(events.messageUpdate, "streamMessageUpdate") { message ->
-            users.handleMessageCreateOrUpdate(DomainMessage(message))
+            val incoming = DomainMessage(message)
+            users.handleMessageCreateOrUpdate(incoming)
             messages.handleMessageUpdate(message)
+            if (PluginUiRegistry.hasMessageInterceptors(PluginMessageInterceptionType.RECEIVE)) {
+                messages.handleMessageUpdate(message.channelId, message.id) {
+                    PluginUiRegistry.interceptMessage(PluginMessageInterceptionType.RECEIVE, it)
+                }
+            }
             pinnedMessages.handleMessageUpdate(message)
             messageState.handleMessageUpdate(message)
             messageReplies.handleMessageUpdate(message)
@@ -2488,7 +2495,13 @@ class StoreStream private constructor(
         users.handleMessageCreateOrUpdate(domain)
         usersTyping.handleMessageCreate(domain.channelId, domain.author?.id)
         applicationInteractions.handleMessageCreate(message)
-        messages.handleMessageCreate(domain)
+        messages.handleMessageCreate(
+            if (PluginUiRegistry.hasMessageInterceptors(PluginMessageInterceptionType.RECEIVE)) {
+                PluginUiRegistry.interceptMessage(PluginMessageInterceptionType.RECEIVE, domain)
+            } else {
+                domain
+            },
+        )
         messagesMostRecent.handleMessageCreate(domain)
         messageAck.handleMessageCreate(message)
         if (message.author?.id == users.getMeInternal().id) {

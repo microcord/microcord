@@ -463,6 +463,16 @@ interface PluginMessageContribution : PluginContribution {
     val isVisible: (PluginMessageContext) -> Boolean
 }
 
+enum class PluginMessageInterceptionType { SEND, EDIT, RECEIVE }
+
+interface PluginMessageInterceptor : PluginContribution {
+    val types: Set<PluginMessageInterceptionType>
+}
+
+class PluginMessageInterceptorBuilder {
+    var priority: Int = 0
+}
+
 class PluginMessageBuilder internal constructor() {
     var priority: Int = 0
     var bind: (View, PluginMessageContext) -> Unit = { _, _ -> }
@@ -542,6 +552,7 @@ interface PluginUi {
     fun registerSlashCommand(command: PluginSlashCommand): PluginRegistration
     fun registerContextMenuItem(item: PluginContextMenuItem): PluginRegistration
     fun registerMessage(contribution: PluginMessageContribution): PluginRegistration
+    fun registerMessageInterceptor(interceptor: PluginMessageInterceptor): PluginRegistration
 }
 
 fun interface PluginSettingsPage {
