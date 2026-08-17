@@ -37,7 +37,7 @@
                     android:layout_marginBottom="32dp"
                     app:stv_title="@string/avatar_in_onboarding_modal_title"
                     app:stv_subtitle="@string/avatar_in_onboarding_modal_subtitle" />
-                <com.facebook.drawee.view.SimpleDraweeView
+                <com.discord.views.VitoImageView
                     android:id="@+id/new_user_avatar_preview"
                     android:layout_width="128dp"
                     android:layout_height="128dp"

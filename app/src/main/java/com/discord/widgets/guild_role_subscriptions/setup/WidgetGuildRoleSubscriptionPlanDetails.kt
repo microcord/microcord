@@ -15,7 +15,7 @@ import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.view.extensions.setTextIfDifferent
 import com.discord.utilities.view.text.addBindedTextWatcher
 import com.discord.widgets.guild_role_subscriptions.showRoleSubscriptionImageUploadDialog
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 
@@ -32,7 +32,7 @@ class WidgetGuildRoleSubscriptionPlanDetails : AppFragment(R.layout.widget_guild
         GuildRoleSubscriptionPlanDetailsViewModel()
     }
 
-    private lateinit var coverImage: SimpleDraweeView
+    private lateinit var coverImage: VitoImageView
     private lateinit var editCoverImage: ImageView
     private lateinit var descriptionLayout: TextInputLayout
 

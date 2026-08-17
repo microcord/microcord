@@ -21,7 +21,7 @@ import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.views.typing.TypingDots
 import com.discord.widgets.botuikit.ComponentProvider
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textview.MaterialTextView
 
@@ -36,7 +36,7 @@ class ButtonComponentView @JvmOverloads constructor(
         componentActionListener: ComponentActionListener,
     ) {
         val button = requireNotNull(findViewById<MaterialButton>(R.id.button))
-        val emoji = requireNotNull(findViewById<SimpleDraweeView>(R.id.emoji))
+        val emoji = requireNotNull(findViewById<VitoImageView>(R.id.emoji))
         val label = requireNotNull(findViewById<MaterialTextView>(R.id.label))
         val linkIcon = requireNotNull(findViewById<AppCompatImageView>(R.id.link_icon))
         val loadingDots = requireNotNull(findViewById<TypingDots>(R.id.loading_dots))

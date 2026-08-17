@@ -10,7 +10,7 @@ import com.discord.api.channel.getDisplayName
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * The horizontal server/DM rail above the quick-switcher results.
@@ -52,7 +52,7 @@ class WidgetGlobalSearchGuildsAdapter(
     private class GuildViewHolder(
         adapter: WidgetGlobalSearchGuildsAdapter,
     ) : ClickableViewHolder(R.layout.widget_global_search_item_guild, adapter) {
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.guilds_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.guilds_item_avatar)
         private val avatarText: TextView = itemView.findViewById(R.id.guilds_item_avatar_text)
         private val mentions: TextView = itemView.findViewById(R.id.guilds_item_mentions)
         private val selected: ImageView = itemView.findViewById(R.id.guilds_item_selected)
@@ -80,7 +80,7 @@ class WidgetGlobalSearchGuildsAdapter(
     private class DirectMessageViewHolder(
         adapter: WidgetGlobalSearchGuildsAdapter,
     ) : ClickableViewHolder(R.layout.widget_global_search_item_dm, adapter) {
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.guilds_item_dm_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.guilds_item_dm_avatar)
         private val count: TextView = itemView.findViewById(R.id.guilds_item_dm_count)
 
         override fun onConfigure(position: Int, data: WidgetGlobalSearchGuildsModel.Item) {

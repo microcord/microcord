@@ -12,7 +12,7 @@ import com.discord.api.role.GuildRole
 import com.discord.models.domain.emoji.toCodePoints
 import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
@@ -23,7 +23,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
     private val title: TextView
     private val description: TextView
     private val uploadButton: MaterialButton
-    private val image: SimpleDraweeView
+    private val image: VitoImageView
     private val editImage: ImageView
     private var avatarSize = resources.getDimensionPixelSize(R.dimen.avatar_size_huge)
     private var onImageRemovedListener: (() -> Unit)? = null

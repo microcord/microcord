@@ -10,7 +10,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.user.UserUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /** The attendee list shown on the details sheet's "Interested" tab. */
 class GuildScheduledEventRsvpUserListAdapter(
@@ -31,7 +31,7 @@ class GuildScheduledEventRsvpUserListAdapter(
             R.layout.guild_scheduled_event_rsvp_user_list_adapter_item,
             this@GuildScheduledEventRsvpUserListAdapter,
         ) {
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.user_profile_adapter_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.user_profile_adapter_item_avatar)
         private val discriminator: TextView = itemView.findViewById(R.id.user_profile_adapter_item_discriminator)
         private val userName: TextView = itemView.findViewById(R.id.user_profile_adapter_item_user_name)
 

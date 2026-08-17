@@ -14,10 +14,13 @@ import com.facebook.fresco.vito.core.impl.DefaultImageDecodeOptionsProviderImpl
 import com.facebook.fresco.vito.core.impl.ImagePipelineUtilsImpl
 import com.facebook.fresco.vito.provider.components.FrescoVitoComponents
 import com.facebook.fresco.vito.provider.impl.DefaultFrescoVitoProvider
+import com.facebook.fresco.vito.options.ImageOptions
 import com.facebook.imagepipeline.common.ImageDecodeOptions
 import com.facebook.imagepipeline.cache.DefaultBitmapMemoryCacheParamsSupplier
 import com.facebook.imagepipeline.cache.MemoryCacheParams
+import com.facebook.imagepipeline.core.DownsampleMode
 import com.facebook.imagepipeline.core.ImagePipelineConfig
+import com.facebook.imagepipeline.request.ImageRequest
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -29,11 +32,10 @@ import java.util.concurrent.TimeUnit
  * Two on-disk caches are configured because [MGImages.getImageRequest] routes almost every request
  * into Fresco's *small* image cache, keeping avatars and guild icons from being evicted by large
  * attachments and animated content. Both caches live under the app cache directory and are capped
- * at [MAX_DISK_CACHE_SIZE].
- *
- * The reference installs no custom network fetcher or producer sequence; the default OkHttp-less
- * `HttpUrlConnectionNetworkFetcher` is used.
- */
+     * at [MAX_DISK_CACHE_SIZE].
+     *
+     * Vito defaults to the small-image disk cache so emoji and avatars share one working set.
+     */
 object MGImagesConfig {
 
     private const val CACHE_DIR = "app_images_cache"
@@ -52,14 +54,22 @@ object MGImagesConfig {
 
     fun init(context: Application) {
         val builder = ImagePipelineConfig.newBuilder(context)
-            .setDownsampleEnabled(true)
+            .setDownsampleMode(DownsampleMode.ALWAYS)
             .setMainDiskCacheConfig(newDiskCacheConfig(context, CACHE_DIR))
             .setSmallImageDiskCacheConfig(newDiskCacheConfig(context, CACHE_DIR_SMALL))
             .setBitmapMemoryCacheParamsSupplier(getAppBitmapMemoryCacheParamsSupplier(context))
+            .setNetworkFetcher(OkHttpNetworkFetcher())
         builder.experiment()
             .setShouldDownscaleFrameToDrawableDimensions(true)
         val config = builder.build()
         Fresco.initialize(context, config)
+        ImageOptions.setDefaults(
+            ImageOptions.create()
+                .cacheChoice(ImageRequest.CacheChoice.SMALL)
+                .fadeDurationMs(0)
+                .releaseOnWindowDetached(false)
+                .build(),
+        )
         FrescoVitoComponents.setImplementation(
             DefaultFrescoVitoProvider(
                 DefaultFrescoVitoConfig(),

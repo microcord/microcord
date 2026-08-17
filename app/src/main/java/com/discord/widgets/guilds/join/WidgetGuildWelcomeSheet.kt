@@ -12,7 +12,7 @@ import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
 import com.discord.utilities.icon.IconUtils
 import com.discord.widgets.guildscheduledevent.WidgetGuildScheduledEventDetailsBottomSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import androidx.recyclerview.widget.RecyclerView
 import rx.subscriptions.CompositeSubscription
 import com.discord.i18n.i18nRender
@@ -25,7 +25,7 @@ class WidgetGuildWelcomeSheet : AppBottomSheet() {
     private val channelsAdapter = WidgetGuildWelcomeSheetChannelAdapter()
 
     private lateinit var flipper: AppViewFlipper
-    private lateinit var icon: SimpleDraweeView
+    private lateinit var icon: VitoImageView
     private lateinit var iconName: TextView
     private lateinit var name: TextView
     private lateinit var description: TextView

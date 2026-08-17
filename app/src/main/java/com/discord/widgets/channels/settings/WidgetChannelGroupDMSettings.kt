@@ -25,7 +25,7 @@ import com.discord.widgets.channels.settings.ChannelGroupDMSettingsViewModel.Vie
 import com.discord.widgets.channels.GroupDmLeave
 import com.discord.widgets.servers.NotificationMuteSettingsView
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 import com.discord.i18n.i18nRender
@@ -48,7 +48,7 @@ class WidgetChannelGroupDMSettings : AppFragment(R.layout.widget_channel_group_d
     private lateinit var saveButton: FloatingActionButton
     private lateinit var muteSettings: NotificationMuteSettingsView
     private lateinit var scrollView: NestedScrollView
-    private lateinit var groupIcon: SimpleDraweeView
+    private lateinit var groupIcon: VitoImageView
     private lateinit var groupIconLabel: TextView
     private lateinit var groupIconRemove: TextView
 

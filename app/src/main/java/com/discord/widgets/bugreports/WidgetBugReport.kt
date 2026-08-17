@@ -30,7 +30,7 @@ import com.discord.utilities.view.validators.Input
 import com.discord.utilities.view.validators.ValidationManager
 import com.discord.views.SearchInputView
 import com.discord.views.sticker.StickerView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.textview.MaterialTextView
@@ -68,7 +68,7 @@ class WidgetBugReport : AppFragment(R.layout.widget_bug_report) {
     private lateinit var featureArea: TextInputLayout
     private lateinit var featureAreaTouchDelegate: View
     private lateinit var priority: TextInputLayout
-    private lateinit var priorityIcon: SimpleDraweeView
+    private lateinit var priorityIcon: VitoImageView
     private lateinit var priorityTouchDelegate: View
     private lateinit var submitError: MaterialTextView
     private lateinit var submit: MaterialButton

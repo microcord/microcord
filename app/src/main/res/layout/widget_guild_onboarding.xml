@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     style="@style/UiKit.ViewGroup.Page">
 
-    <com.facebook.drawee.view.SimpleDraweeView
+    <com.discord.views.VitoImageView
         android:id="@+id/guild_onboarding_splash"
         android:layout_width="0dp"
         android:layout_height="0dp"

@@ -9,7 +9,7 @@
     android:orientation="horizontal"
     android:padding="12dp">
 
-    <com.facebook.drawee.view.SimpleDraweeView
+    <com.discord.views.VitoImageView
         android:id="@+id/voice_member_avatar"
         android:layout_width="32dp"
         android:layout_height="32dp"

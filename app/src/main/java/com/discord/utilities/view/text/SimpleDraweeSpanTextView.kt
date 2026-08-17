@@ -34,19 +34,16 @@ open class SimpleDraweeSpanTextView : AppCompatTextView {
 
     override fun onDetachedFromWindow() {
         isAttached = false
-        draweeStringBuilder?.onDetachFromView(this)
         super.onDetachedFromWindow()
     }
 
     override fun onFinishTemporaryDetach() {
         super.onFinishTemporaryDetach()
         isAttached = true
-        draweeStringBuilder?.onAttachToView(this)
     }
 
     override fun onStartTemporaryDetach() {
         isAttached = false
-        draweeStringBuilder?.onDetachFromView(this)
         super.onStartTemporaryDetach()
     }
 

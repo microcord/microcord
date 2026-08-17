@@ -7,7 +7,7 @@ import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.utilities.icon.IconUtils
 import com.discord.views.CutoutView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * One listener in the audience roll.
@@ -21,7 +21,7 @@ class AudienceViewHolder(adapter: StageCallAdapter) :
 
     private val iconContainer: CutoutView =
         requireNotNull(itemView.findViewById(R.id.stage_channel_audience_member_icon_container))
-    private val icon: SimpleDraweeView =
+    private val icon: VitoImageView =
         requireNotNull(itemView.findViewById(R.id.stage_channel_audience_member_icon))
     private val raisedHand: ImageView =
         requireNotNull(itemView.findViewById(R.id.stage_channel_audience_member_raised_hand))

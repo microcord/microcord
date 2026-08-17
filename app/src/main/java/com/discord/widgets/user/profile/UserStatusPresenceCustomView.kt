@@ -13,7 +13,7 @@ import androidx.appcompat.widget.AppCompatImageView
 import com.discord.R
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.emoji.toCodePoints
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class UserStatusPresenceCustomView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
     data class Emoji(val id: String?, val name: String?, val isAnimated: Boolean)
@@ -24,7 +24,7 @@ class UserStatusPresenceCustomView(context: Context, attrs: AttributeSet) : Line
     }
 
     private val clear: AppCompatImageView
-    private val emoji: SimpleDraweeView
+    private val emoji: VitoImageView
     private val text: TextView
 
     init {

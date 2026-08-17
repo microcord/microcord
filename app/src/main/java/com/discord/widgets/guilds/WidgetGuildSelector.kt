@@ -17,7 +17,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.io.Serializable
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
@@ -100,7 +100,7 @@ class WidgetGuildSelector : AppBottomSheet() {
         override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(guilds[position])
 
         inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
-            private val icon: SimpleDraweeView = view.findViewById(R.id.item_icon)
+            private val icon: VitoImageView = view.findViewById(R.id.item_icon)
             private val acronym: TextView = view.findViewById(R.id.item_text)
             private val name: TextView = view.findViewById(R.id.item_name)
 

@@ -19,7 +19,7 @@
         android:orientation="vertical"
         android:padding="10dp">
 
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/soundboard_sound_emoji"
             android:layout_width="36dp"
             android:layout_height="36dp" />

@@ -15,7 +15,7 @@ import com.discord.models.user.User
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.views.user.avatarUrl
 import com.discord.views.user.setAvatar
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import kotlin.math.min
 
 class StageCardSpeakersView @JvmOverloads constructor(
@@ -68,7 +68,7 @@ class StageCardSpeakersView @JvmOverloads constructor(
     private class SpeakerHolder(parent: ViewGroup) : RecyclerView.ViewHolder(
         LayoutInflater.from(parent.context).inflate(R.layout.widget_discovery_stage_card_speaker, parent, false),
     ) {
-        private val avatar = requireNotNull<SimpleDraweeView>(itemView.findViewById(R.id.discovery_stage_card_speaker_avatar))
+        private val avatar = requireNotNull<VitoImageView>(itemView.findViewById(R.id.discovery_stage_card_speaker_avatar))
         private val name = requireNotNull<TextView>(itemView.findViewById(R.id.discovery_stage_card_speaker_name))
 
         fun bind(speaker: Speaker) {

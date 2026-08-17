@@ -14,7 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.discord.R;
-import com.facebook.drawee.view.SimpleDraweeView;
+import com.discord.views.VitoImageView;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,7 +30,7 @@ public class FlexInputResourceTest {
             FrameLayout parent = new FrameLayout(context);
             View inflated = LayoutInflater.from(context)
                     .inflate(com.lytefast.flexinput.R.layout.view_attachment_preview_item, parent, false);
-            SimpleDraweeView preview = (SimpleDraweeView) inflated;
+            VitoImageView preview = (VitoImageView) inflated;
             Drawable placeholder = context.getResources().getDrawable(R.drawable.ic_file_24dp);
 
             placeholder.setBounds(0, 0, 24, 24);

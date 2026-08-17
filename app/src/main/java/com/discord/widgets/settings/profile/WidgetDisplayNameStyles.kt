@@ -34,7 +34,7 @@ import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.views.DisplayNameTextView
 import com.discord.widgets.settings.SettingsNavigation
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import kotlin.random.Random
 
@@ -90,8 +90,8 @@ class WidgetDisplayNameStyles : AppFragment(R.layout.widget_display_name_styles)
         pending = saved ?: defaultStyle()
 
         val avatar = IconUtils.getForUser(me)
-        view.findViewById<SimpleDraweeView>(R.id.display_name_styles_preview_avatar).setImageURI(avatar)
-        view.findViewById<SimpleDraweeView>(R.id.display_name_styles_chat_avatar).setImageURI(avatar)
+        view.findViewById<VitoImageView>(R.id.display_name_styles_preview_avatar).setImageURI(avatar)
+        view.findViewById<VitoImageView>(R.id.display_name_styles_chat_avatar).setImageURI(avatar)
         view.findViewById<TextView>(R.id.display_name_styles_preview_username).text =
             me.getUserNameWithDiscriminator()
 

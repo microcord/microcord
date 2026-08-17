@@ -15,7 +15,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.view.ToastManager
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.i18n.i18nRender
 
 /**
@@ -31,7 +31,7 @@ class RoleIconView(
     attrs: AttributeSet,
 ) : FrameLayout(context, attrs) {
 
-    private val iconView: SimpleDraweeView
+    private val iconView: VitoImageView
 
     init {
         LayoutInflater.from(context).inflate(R.layout.role_icon_view, this)

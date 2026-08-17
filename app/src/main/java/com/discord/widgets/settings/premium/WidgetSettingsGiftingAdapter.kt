@@ -90,7 +90,7 @@ class WidgetSettingsGiftingAdapter(
     inner class SkuListItem(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val arrow: ImageView = itemView.findViewById(R.id.gift_sku_arrow)
         private val copies: TextView = itemView.findViewById(R.id.gift_sku_copies)
-        private val icon: com.facebook.drawee.view.SimpleDraweeView = itemView.findViewById(R.id.gift_sku_icon)
+        private val icon: com.discord.views.VitoImageView = itemView.findViewById(R.id.gift_sku_icon)
         private val name: TextView = itemView.findViewById(R.id.gift_sku_name)
 
         fun bind(item: GiftItem) {

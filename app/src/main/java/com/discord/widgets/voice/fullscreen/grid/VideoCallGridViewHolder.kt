@@ -13,7 +13,7 @@ import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.PileView
 import com.discord.views.calls.VideoCallParticipantView
 import com.discord.widgets.voice.fullscreen.CallParticipant
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /** The two tile kinds the fullscreen call grid can show. */
 sealed class VideoCallGridViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -77,7 +77,7 @@ sealed class VideoCallGridViewHolder(itemView: View) : RecyclerView.ViewHolder(i
     /** An embedded activity running in the channel, shown as a tappable preview card. */
     class EmbeddedActivity(itemView: View) : VideoCallGridViewHolder(itemView) {
 
-        private val backgroundImage: SimpleDraweeView =
+        private val backgroundImage: VitoImageView =
             requireNotNull(itemView.findViewById(R.id.app_background_image))
         private val backgroundOverlay: View =
             requireNotNull(itemView.findViewById(R.id.app_background_overlay))

@@ -19,7 +19,7 @@ import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.view.extensions.setEnabledAndAlpha
 import com.discord.views.user.avatarUrl
 import com.discord.views.user.setAvatar
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.util.concurrent.TimeUnit
 
 /**
@@ -62,7 +62,7 @@ class WidgetStageRaisedHandsBottomSheetAdapter(
         R.layout.stage_raised_hands_item_user,
         stageAdapter,
     ) {
-        private val avatar: SimpleDraweeView =
+        private val avatar: VitoImageView =
             itemView.findViewById(R.id.stage_raised_hands_item_user_avatar)
         private val name: TextView = itemView.findViewById(R.id.stage_raised_hands_item_user_name)
         private val memberInfo: TextView = itemView.findViewById(R.id.stage_raised_hands_item_role)

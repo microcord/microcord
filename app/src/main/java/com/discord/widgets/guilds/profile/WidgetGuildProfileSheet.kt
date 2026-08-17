@@ -38,7 +38,7 @@ import com.discord.widgets.channels.WidgetChannelContent
 import com.discord.widgets.servers.WidgetServerSettings
 import com.discord.widgets.servers.WidgetServerSettingsEmojis
 import com.discord.widgets.settings.profile.WidgetEditUserOrGuildMemberProfile
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.subscriptions.CompositeSubscription
 
 class WidgetGuildProfileSheet : AppBottomSheet() {
@@ -310,7 +310,7 @@ class WidgetGuildProfileSheet : AppBottomSheet() {
         }
         root.findViewById<LinearLayout>(R.id.per_guild_identity_container)?.visibility =
             if (actions.displayGuildIdentityRow) View.VISIBLE else View.GONE
-        root.findViewById<SimpleDraweeView>(R.id.guild_profile_sheet_guild_avatar)?.apply {
+        root.findViewById<VitoImageView>(R.id.guild_profile_sheet_guild_avatar)?.apply {
             visibility = if (actions.guildAvatar.isNullOrEmpty()) View.GONE else View.VISIBLE
             IconUtils.getForGuildMember(actions.guildAvatar, state.guildId, state.meUser.id, 32)
                 ?.let { MGImages.setImage(this, it) }

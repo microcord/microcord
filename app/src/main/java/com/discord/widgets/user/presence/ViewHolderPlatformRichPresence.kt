@@ -21,7 +21,7 @@ import com.discord.utilities.presence.isGamePlatform
 import com.discord.utilities.presence.isXboxActivity
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * A game being played on a console or partner platform — Xbox, PlayStation, Samsung.
@@ -36,8 +36,8 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 class ViewHolderPlatformRichPresence(
     root: View,
-    richPresenceImageLarge: SimpleDraweeView,
-    richPresenceImageSmall: SimpleDraweeView,
+    richPresenceImageLarge: VitoImageView,
+    richPresenceImageSmall: VitoImageView,
     richPresenceHeader: TextView,
     richPresenceTitle: TextView,
     richPresenceTime: TextView,

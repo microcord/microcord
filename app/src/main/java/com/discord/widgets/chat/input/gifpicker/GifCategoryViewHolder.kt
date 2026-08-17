@@ -9,7 +9,7 @@ import com.discord.R
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.chat.input.gifpicker.GifCategoryItem.Standard
 import com.discord.widgets.chat.input.gifpicker.GifCategoryItem.Trending
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * One tile on the picker's landing grid.
@@ -19,7 +19,7 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 class GifCategoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
-    private val preview: SimpleDraweeView = itemView.findViewById(R.id.gif_category_item_preview)
+    private val preview: VitoImageView = itemView.findViewById(R.id.gif_category_item_preview)
     private val icon: ImageView = itemView.findViewById(R.id.gif_category_item_icon)
     private val title: TextView = itemView.findViewById(R.id.gif_category_item_title)
 

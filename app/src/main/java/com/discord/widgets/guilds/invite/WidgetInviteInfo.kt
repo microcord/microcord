@@ -24,7 +24,7 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.guilds.computeShortName
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.user.UserUtils.isPremiumTier2
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class WidgetInviteInfo @JvmOverloads constructor(
     context: Context,
@@ -80,7 +80,7 @@ class WidgetInviteInfo @JvmOverloads constructor(
         binding.inviteMessage.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
         binding.inviteMemberContainerLayout.visibility = View.GONE
         binding.inviteAvatar.configure(null, null)
-        val image = requireNotNull<SimpleDraweeView>(binding.inviteAvatar.findViewById(R.id.guild_avatar))
+        val image = requireNotNull<VitoImageView>(binding.inviteAvatar.findViewById(R.id.guild_avatar))
         image.setActualImageResource(context.getThemedDrawableRes(R.attr.img_poop, R.drawable.img_poop_dark))
         requireNotNull<TextView>(binding.inviteAvatar.findViewById(R.id.guild_text)).visibility = View.GONE
         binding.inviteAvatarSmall.visibility = View.GONE

@@ -24,7 +24,7 @@ import com.discord.widgets.channels.list.WidgetCollapsedUsersListAdapter
 import com.discord.widgets.channels.list.items.CollapsedUser
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.SpotifyListenTogetherEntry
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.Subscription
 import com.discord.i18n.i18nRender
@@ -44,7 +44,7 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
 
     private val container: View = itemView.findViewById(R.id.item_listen_together_container)
     private val header: TextView = itemView.findViewById(R.id.item_listen_together_header)
-    private val albumImage: SimpleDraweeView =
+    private val albumImage: VitoImageView =
         itemView.findViewById(R.id.item_listen_together_album_image)
     private val sessionEnded: TextView = itemView.findViewById(R.id.item_listen_together_session_ended)
     private val track: TextView = itemView.findViewById(R.id.item_listen_together_track)

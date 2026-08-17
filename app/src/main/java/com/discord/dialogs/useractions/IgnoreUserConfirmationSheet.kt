@@ -13,7 +13,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.widgets.settings.SettingsStrings
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import rx.subscriptions.CompositeSubscription
 
@@ -88,7 +88,7 @@ class IgnoreUserConfirmationSheet : AppBottomSheet() {
             .appSubscribe(IgnoreUserConfirmationSheet::class.java) { user ->
                 user ?: return@appSubscribe
                 IconUtils.setIcon(
-                    view.findViewById<SimpleDraweeView>(R.id.ignore_confirmation_avatar),
+                    view.findViewById<VitoImageView>(R.id.ignore_confirmation_avatar),
                     user,
                     R.dimen.avatar_size_extra_large,
                 )

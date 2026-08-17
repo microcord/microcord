@@ -26,7 +26,7 @@ import com.discord.widgets.guildscheduledevent.buttonconfiguration.ButtonConfigu
 import com.discord.widgets.guildscheduledevent.buttonconfiguration.DirectoryButtonConfiguration
 import com.discord.widgets.guildscheduledevent.buttonconfiguration.GuildButtonConfiguration
 import com.discord.widgets.voice.VoiceUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.lang.ref.WeakReference
 import rx.subscriptions.CompositeSubscription
 
@@ -69,13 +69,13 @@ class WidgetGuildScheduledEventDetailsBottomSheet : AppBottomSheet() {
     private lateinit var recycler: RecyclerView
     private lateinit var dateView: GuildScheduledEventDateView
     private lateinit var title: TextView
-    private lateinit var guildIcon: SimpleDraweeView
+    private lateinit var guildIcon: VitoImageView
     private lateinit var guildName: TextView
     private lateinit var channelIcon: ImageView
     private lateinit var channelName: LinkifiedTextView
     private lateinit var rsvpIcon: ImageView
     private lateinit var rsvpCount: TextView
-    private lateinit var creatorAvatar: SimpleDraweeView
+    private lateinit var creatorAvatar: VitoImageView
     private lateinit var createdBy: TextView
     private lateinit var description: LinkifiedTextView
     private lateinit var buttons: GuildScheduledEventBottomButtonView

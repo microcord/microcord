@@ -661,7 +661,7 @@ class WidgetChatInputAttachments(
         fun uri(position: Int): Uri? = item(position)?.uri
 
         inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            private val preview = itemView.findViewById<com.facebook.drawee.view.SimpleDraweeView>(
+            private val preview = itemView.findViewById<com.discord.views.VitoImageView>(
                 com.lytefast.flexinput.R.id.content_iv,
             )
             private val selected = itemView.findViewById<View>(com.lytefast.flexinput.R.id.item_check_indicator)

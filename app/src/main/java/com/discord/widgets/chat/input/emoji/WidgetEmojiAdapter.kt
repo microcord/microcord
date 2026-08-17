@@ -12,7 +12,8 @@ import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiCategory
 import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.guild.Guild
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.utilities.images.MGImages
+import com.discord.views.VitoImageView
 
 /**
  * The emoji grid.
@@ -101,6 +102,11 @@ class WidgetEmojiAdapter(
         }
     }
 
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        if (holder is EmojiViewHolder) holder.unbind()
+        super.onViewRecycled(holder)
+    }
+
     fun setItems(items: List<Item>) {
         this.items = items
         notifyDataSetChanged()
@@ -136,11 +142,17 @@ class WidgetEmojiAdapter(
         private val onEmojiSelected: OnEmojiSelectedListener,
     ) : RecyclerView.ViewHolder(itemView) {
 
-        private val image: SimpleDraweeView = itemView as SimpleDraweeView
+        private val image: VitoImageView = itemView as VitoImageView
+        private val detector = MGImages.DistinctChangeDetector()
 
         fun bind(item: Item.EmojiItem) {
-            image.setImageURI(
+            MGImages.setImage(
+                image,
                 item.emoji.getImageUri(item.allowEmojisToAnimate, MAX_EMOJI_SIZE_PX, image.context),
+                MAX_EMOJI_SIZE_PX,
+                MAX_EMOJI_SIZE_PX,
+                useSmallCache = true,
+                changeDetector = detector,
             )
             image.contentDescription = if (item.guildName != null) {
                 "${item.emojiName}, ${item.guildName}"
@@ -153,6 +165,11 @@ class WidgetEmojiAdapter(
                 onEmojiSelected.onEmojiLongPressed(item.emoji)
                 true
             }
+        }
+
+        fun unbind() {
+            detector.clear(image)
+            MGImages.cancelImageRequests(image)
         }
     }
 

@@ -25,7 +25,7 @@ import com.discord.databinding.ViewUserProfileWidgetsBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.flexbox.FlexboxLayout
 import com.google.android.flexbox.FlexWrap
 import java.util.Locale
@@ -178,7 +178,7 @@ class UserProfileWidgetsView @JvmOverloads constructor(
             ?: dynamic.filterIsInstance<UserApplicationDynamicField.Image>()
                 .firstNotNullOfOrNull { it.value.proxyUrl ?: it.value.url }
             ?: application.artwork()?.url
-        if (hero != null) addView(SimpleDraweeView(context).apply {
+        if (hero != null) addView(VitoImageView(context).apply {
             layoutParams = LayoutParams(MATCH_PARENT, dp(156))
             hierarchy.setActualImageScaleType(com.facebook.drawee.drawable.ScalingUtils.ScaleType.CENTER_CROP)
             MGImages.setRoundingParams(this, cornerRadius = dp(8).toFloat(), circle = false)
@@ -246,7 +246,7 @@ class UserProfileWidgetsView @JvmOverloads constructor(
 
     private fun Double.displayNumber() = if (this % 1.0 == 0.0) toLong().toString() else toString()
 
-    private fun cover(record: Game?, widthDp: Int, heightDp: Int, crop: Boolean) = SimpleDraweeView(context).apply {
+    private fun cover(record: Game?, widthDp: Int, heightDp: Int, crop: Boolean) = VitoImageView(context).apply {
         layoutParams = LayoutParams(if (widthDp == 0) 0 else dp(widthDp), dp(heightDp))
         val artwork = record?.artwork()
         hierarchy.setActualImageScaleType(if (crop && artwork?.isIcon != true) {
@@ -327,7 +327,7 @@ class UserProfileWidgetsView @JvmOverloads constructor(
         else -> false
     }
 
-    private fun SimpleDraweeView.bind(url: String?) {
+    private fun VitoImageView.bind(url: String?) {
         visibility = if (url == null) GONE else VISIBLE
         setImageURI(url)
     }

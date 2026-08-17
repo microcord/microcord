@@ -11,7 +11,7 @@ import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.github.mmin18.widget.RealtimeBlurView
 
 class PrivateCallBlurredGridView @JvmOverloads constructor(
@@ -19,7 +19,7 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
     private var callUsers: List<StoreVoiceParticipants.VoiceUser> = emptyList()
-    private val gridItems = linkedMapOf<Long, SimpleDraweeView>()
+    private val gridItems = linkedMapOf<Long, VitoImageView>()
     private val grid = GridLayout(context).apply {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         columnCount = columns()
@@ -56,7 +56,7 @@ class PrivateCallBlurredGridView @JvmOverloads constructor(
         this.callUsers = callUsers
     }
 
-    private fun createItem(fullWidth: Boolean) = SimpleDraweeView(context).apply {
+    private fun createItem(fullWidth: Boolean) = VitoImageView(context).apply {
         layoutParams = GridLayout.LayoutParams(
             GridLayout.spec(GridLayout.UNDEFINED, 1f),
             GridLayout.spec(GridLayout.UNDEFINED, if (fullWidth) columns() else 1, 1f),

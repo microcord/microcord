@@ -21,7 +21,7 @@ import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.view.extensions.fadeBy
 import com.discord.views.VoiceUserView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import org.webrtc.RendererCommon
 
 class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") constructor(
@@ -103,7 +103,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
     private val letterbox: View
     private val voiceUser: VoiceUserView
     private val renderer: AppVideoStreamRenderer
-    private val preview: SimpleDraweeView
+    private val preview: VitoImageView
     private val previewText: TextView
     private val paused: TextView
     private val ended: View

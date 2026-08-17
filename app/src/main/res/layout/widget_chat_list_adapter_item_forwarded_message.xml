@@ -113,7 +113,7 @@
             android:paddingBottom="4dp"
             android:visibility="gone">
 
-            <com.facebook.drawee.view.SimpleDraweeView
+            <com.discord.views.VitoImageView
                 android:id="@+id/forwarded_message_source_guild_icon"
                 android:layout_width="14dp"
                 android:layout_height="14dp"

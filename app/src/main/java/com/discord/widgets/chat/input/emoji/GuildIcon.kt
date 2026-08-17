@@ -4,9 +4,9 @@ import android.content.Context
 import android.util.AttributeSet
 import com.discord.models.guild.Guild
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
-class GuildIcon : SimpleDraweeView {
+class GuildIcon : VitoImageView {
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
     constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int) : super(context, attrs)

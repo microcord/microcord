@@ -7,7 +7,7 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -40,7 +40,7 @@ class WidgetChannelFollowSuccessDialog : AppDialog(R.layout.widget_channel_follo
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val successText: TextView = view.findViewById(R.id.channel_follow_success_text)
-        val successImage: SimpleDraweeView = view.findViewById(R.id.channel_follow_success_image)
+        val successImage: VitoImageView = view.findViewById(R.id.channel_follow_success_image)
         val confirm: MaterialButton = view.findViewById(R.id.channel_follow_success_confirm)
 
         successText.setText(successTextOptions.random())

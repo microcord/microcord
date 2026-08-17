@@ -26,9 +26,8 @@ import com.discord.utilities.view.extensions.fadeIn
 import com.discord.utilities.view.extensions.fadeOut
 import com.discord.utilities.view.extensions.getContentView
 import com.discord.utilities.view.text.LinkifiedTextView
-import com.facebook.drawee.backends.pipeline.Fresco
+import com.discord.views.VitoImageView
 import com.facebook.drawee.controller.BaseControllerListener
-import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.image.ImageInfo
 import com.google.android.material.button.MaterialButton
 import java.text.ParseException
@@ -54,6 +53,7 @@ class WidgetChangeLogSpecial : AppFragment(R.layout.widget_change_log_special) {
 
     private var maxScrolledPercent: Int = 0
     private var openedTimestamp: Long = 0
+    private var thumbnailAnimatable: Animatable? = null
 
     private val body: LinkifiedTextView
         get() = requireView().findViewById(R.id.change_log_body)
@@ -63,9 +63,9 @@ class WidgetChangeLogSpecial : AppFragment(R.layout.widget_change_log_special) {
         get() = requireView().findViewById(R.id.change_log_special_scrollview)
     private val video: VideoView
         get() = requireView().findViewById(R.id.change_log_video)
-    private val videoOverlay: SimpleDraweeView
+    private val videoOverlay: VitoImageView
         get() = requireView().findViewById(R.id.change_log_video_overlay)
-    private val thumbnail: SimpleDraweeView
+    private val thumbnail: VitoImageView
         get() = requireView().findViewById(R.id.change_log_thumbnail)
 
     private val version: String
@@ -80,10 +80,11 @@ class WidgetChangeLogSpecial : AppFragment(R.layout.widget_change_log_special) {
             super.onFinalImageSet(id, imageInfo, animatable)
             try {
                 val overlay = videoOverlay
+                thumbnailAnimatable = animatable
                 overlay.visibility = if (animatable != null) View.VISIBLE else View.GONE
                 overlay.setOnClickListener {
                     hideVideoOverlay()
-                    thumbnail.controller?.animatable?.start()
+                    thumbnailAnimatable?.start()
                 }
             } catch (e: Exception) {
                 AppLog.e("Failed to set changelog thumbnail image.", e)
@@ -181,12 +182,7 @@ class WidgetChangeLogSpecial : AppFragment(R.layout.widget_change_log_special) {
 
         if (!isVideo) {
             thumbnail.visibility = View.VISIBLE
-            thumbnail.controller = Fresco.newDraweeControllerBuilder()
-                .setOldController(thumbnail.controller)
-                .setUri(videoUrl)
-                .setAutoPlayAnimations(false)
-                .setControllerListener(thumbnailControllerListener)
-                .build()
+            thumbnail.show(listOf(videoUrl), autoPlay = false, controllerListener = thumbnailControllerListener)
             thumbnail.requestLayout()
             return
         }

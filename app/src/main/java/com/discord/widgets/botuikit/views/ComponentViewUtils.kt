@@ -4,10 +4,10 @@ import android.net.Uri
 import android.view.View
 import com.discord.api.botuikit.ComponentEmoji
 import com.discord.models.domain.emoji.toCodePoints
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 object ComponentViewUtils {
-    fun SimpleDraweeView.setEmojiOrHide(componentEmoji: ComponentEmoji?, emojiAnimationsEnabled: Boolean) {
+    fun VitoImageView.setEmojiOrHide(componentEmoji: ComponentEmoji?, emojiAnimationsEnabled: Boolean) {
         if (componentEmoji == null) {
             visibility = View.GONE
             return

@@ -6,7 +6,7 @@
     <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
         <LinearLayout android:paddingBottom="@dimen/padding_bottom_fab_screen" style="@style/UiKit.ViewGroup.LinearLayout">
             <LinearLayout android:id="@+id/webhook_edit_avatar_container" android:gravity="center_horizontal" android:paddingTop="24dp" android:paddingBottom="8dp" style="@style/UiKit.ViewGroup.LinearLayout">
-                <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/webhook_edit_avatar" android:layout_width="80dp" android:layout_height="80dp" android:background="?attr/selectableItemBackgroundBorderless" app:roundAsCircle="true" app:placeholderImage="?attr/colorBackgroundSecondary"/>
+                <com.discord.views.VitoImageView android:id="@+id/webhook_edit_avatar" android:layout_width="80dp" android:layout_height="80dp" android:background="?attr/selectableItemBackgroundBorderless" app:roundAsCircle="true" app:placeholderImage="?attr/colorBackgroundSecondary"/>
                 <TextView android:id="@+id/webhook_edit_avatar_help" android:gravity="center" android:paddingTop="8dp" android:text="@string/webhook_modal_icon_description" style="@style/UiKit.Settings.Item.SubText"/>
             </LinearLayout>
             <com.google.android.material.textfield.TextInputLayout android:id="@+id/webhook_edit_name" android:layout_margin="16dp" android:hint="@string/webhook_form_name" style="@style/UiKit.TextInputLayout.Primary">

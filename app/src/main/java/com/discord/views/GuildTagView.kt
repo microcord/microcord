@@ -19,13 +19,13 @@ import com.discord.api.user.PrimaryGuild
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class GuildTagView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : CardView(context, attrs) {
-    private val badge = SimpleDraweeView(context)
+    private val badge = VitoImageView(context)
     private val label = TextView(context, null, 0, R.style.UiKit_TextView).apply {
         isSingleLine = true
         setTypeface(typeface, Typeface.BOLD)

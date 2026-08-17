@@ -88,7 +88,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemVoiceChannel
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
 import com.discord.widgets.channels.list.items.ChannelListVocalItem
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textview.MaterialTextView
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -856,7 +856,7 @@ class WidgetChannelsListAdapter(
     ) : Item(layoutResId, adapter) {
 
         private val root = itemView as RelativeLayout
-        private val avatar: SimpleDraweeView =
+        private val avatar: VitoImageView =
             itemView.findViewById(R.id.channels_item_voice_user_avatar)
         private val camera: ImageView = itemView.findViewById(R.id.channels_item_voice_user_camera)
         private val headphones: ImageView =
@@ -913,7 +913,7 @@ class WidgetChannelsListAdapter(
 
         private val root = itemView as RelativeLayout
         private val status: StatusView = itemView.findViewById(R.id.channel_list_item_private_status)
-        private val avatar: SimpleDraweeView =
+        private val avatar: VitoImageView =
             itemView.findViewById(R.id.channels_list_item_private_avatar)
         private val desc: SimpleDraweeSpanTextView =
             itemView.findViewById(R.id.channels_list_item_private_desc)

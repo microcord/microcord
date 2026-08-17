@@ -22,7 +22,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.ServerFolderView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * The eight holder shapes the guild sidebar can inflate.
@@ -62,7 +62,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
     /** A region-blocked guild: its own icon and name, with a warning badge and no unread state. */
     class GeoRestrictedViewHolder(itemView: View) : GuildListViewHolder(itemView) {
 
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.guilds_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.guilds_item_avatar)
         private val avatarText: TextView = itemView.findViewById(R.id.guilds_item_avatar_text)
 
         fun configure(data: GuildListItem.GeoRestrictedItem) {
@@ -120,7 +120,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         private val onClicked: (GuildListItem.PrivateChannelItem) -> Unit,
         private val onLongPressed: (GuildListItem.PrivateChannelItem) -> Unit,
     ) : GuildListViewHolder(view) {
-        private val avatar: SimpleDraweeView = view.findViewById(R.id.guilds_item_dm_avatar)
+        private val avatar: VitoImageView = view.findViewById(R.id.guilds_item_dm_avatar)
         private val mentions: TextView = view.findViewById(R.id.guilds_item_dm_count)
 
         fun configure(data: GuildListItem.PrivateChannelItem) {
@@ -300,7 +300,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         private val unreadIndicator: ImageView = itemView.findViewById(R.id.guilds_item_unread)
         private val applicationStatus: ImageView = itemView.findViewById(R.id.guilds_item_application_status)
         private val applicationStream: ImageView = itemView.findViewById(R.id.guilds_item_application_stream)
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.guilds_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.guilds_item_avatar)
         private val avatarText: TextView = itemView.findViewById(R.id.guilds_item_avatar_text)
         private val avatarWrap: FrameLayout = itemView.findViewById(R.id.guilds_item_avatar_wrap)
         private val eventStatus: ImageView = itemView.findViewById(R.id.guilds_item_event_status)

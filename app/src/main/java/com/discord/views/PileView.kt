@@ -13,7 +13,7 @@ import com.discord.R
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
 
@@ -81,8 +81,8 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
 
     private fun addItem(index: Int, lastIndex: Int, overflowCount: Int, item: Item) {
         val root = LayoutInflater.from(context).inflate(R.layout.view_pile_item, this, false) as CutoutView
-        val background = requireNotNull<SimpleDraweeView>(root.findViewById(R.id.pileItemBg))
-        val image = requireNotNull<SimpleDraweeView>(root.findViewById(R.id.pileItemImage))
+        val background = requireNotNull<VitoImageView>(root.findViewById(R.id.pileItemBg))
+        val image = requireNotNull<VitoImageView>(root.findViewById(R.id.pileItemImage))
         val initials = requireNotNull<TextView>(root.findViewById(R.id.pileItemInitials))
         root.id = generateViewId()
         root.layoutParams = LayoutParams(itemSizePx, itemSizePx).apply {

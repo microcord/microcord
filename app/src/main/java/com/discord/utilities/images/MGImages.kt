@@ -13,15 +13,14 @@ import android.util.Log
 import android.widget.ImageView
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
-import androidx.core.content.res.ResourcesCompat
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.backends.pipeline.Fresco
+import com.discord.views.VitoImageView
 import com.facebook.drawee.controller.ControllerListener
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.generic.GenericDraweeHierarchy
-import com.facebook.drawee.generic.GenericDraweeHierarchyBuilder
 import com.facebook.drawee.generic.RoundingParams
-import com.facebook.drawee.view.DraweeView
+import com.facebook.fresco.vito.options.ImageOptions
+import com.facebook.fresco.vito.source.ImageSourceProvider
+import com.facebook.fresco.vito.view.VitoView
 import com.facebook.imagepipeline.common.ResizeOptions
 import com.facebook.imagepipeline.image.ImageInfo
 import com.facebook.imagepipeline.request.ImageRequest
@@ -29,7 +28,7 @@ import com.facebook.imagepipeline.request.ImageRequestBuilder
 import java.io.IOException
 
 /**
- * Thin, opinionated wrapper over Fresco's Drawee/ImagePipeline used by every first-party view.
+     * Thin, opinionated wrapper over Fresco Vito / ImagePipeline used by every first-party view.
  *
  * Reference: `com/discord/utilities/images/MGImages.java`.
  *
@@ -44,7 +43,7 @@ object MGImages {
 
     /**
      * Guards redundant image requests. RecyclerView rebinds the same view with the same URL
-     * constantly; re-issuing the Drawee controller for an unchanged value causes a visible flicker
+     * constantly; re-issuing the request for an unchanged value causes a visible flicker
      * and wasted pipeline work.
      */
     interface ChangeDetector {
@@ -69,22 +68,10 @@ object MGImages {
             dataMap[key] = value
             return true
         }
-    }
 
-    // ---------------------------------------------------------------------------------------
-    // Drawee access
-    // ---------------------------------------------------------------------------------------
-
-    @Suppress("UNCHECKED_CAST")
-    private fun getDrawee(imageView: ImageView): DraweeView<GenericDraweeHierarchy> =
-        imageView as DraweeView<GenericDraweeHierarchy>
-
-    private fun getHierarchy(imageView: ImageView): GenericDraweeHierarchy {
-        val drawee = getDrawee(imageView)
-        if (!drawee.hasHierarchy()) {
-            drawee.hierarchy = GenericDraweeHierarchyBuilder(imageView.resources).build()
+        fun clear(key: Any) {
+            dataMap.remove(key)
         }
-        return drawee.hierarchy
     }
 
     // ---------------------------------------------------------------------------------------
@@ -144,7 +131,7 @@ object MGImages {
      * Binds the first request in [urls] that resolves, matching Fresco's "first available" builder.
      *
      * Nothing happens when [changeDetector] reports the URL list as unchanged; an empty list clears
-     * the controller.
+     * the view.
      */
     @JvmStatic
     @JvmOverloads
@@ -160,22 +147,21 @@ object MGImages {
         autoPlayAnimations: Boolean = true,
     ) {
         if (!changeDetector.track(view, urls to autoPlayAnimations)) return
-        if (urls.isEmpty()) {
-            getDrawee(view).controller = null
+        if (view is VitoImageView) {
+            view.show(urls, width, height, autoPlayAnimations, transform, controllerListener, useSmallCache)
             return
         }
-        val requests = urls.map { url ->
-            getImageRequest(url, width, height, useSmallCache)
-                .also { transform?.invoke(it) }
-                .build()
-        }.toTypedArray()
-        val controller = Fresco.newDraweeControllerBuilder()
-            .setOldController(getDrawee(view).controller)
-            .setControllerListener(controllerListener)
-            .setAutoPlayAnimations(autoPlayAnimations)
-            .setFirstAvailableImageRequests(requests)
+        if (urls.isEmpty()) {
+            VitoView.release(view)
+            return
+        }
+        val options = ImageOptions.create()
+            .autoPlay(autoPlayAnimations)
+            .apply {
+                if (width > 0 && height > 0) resize(ResizeOptions(width, height))
+            }
             .build()
-        getDrawee(view).controller = controller
+        VitoView.show(ImageSourceProvider.firstAvailable(*urls.map(ImageSourceProvider::forUri).toTypedArray()), options, view)
     }
 
     @JvmOverloads
@@ -198,7 +184,7 @@ object MGImages {
         changeDetector: ChangeDetector = AlwaysUpdateChangeDetector,
     ) {
         if (!changeDetector.track(view, resourceId)) return
-        getHierarchy(view).setPlaceholderImage(drawableOf(view, resourceId))
+        view.setImageResource(resourceId)
     }
 
     @JvmOverloads
@@ -209,11 +195,9 @@ object MGImages {
         changeDetector: ChangeDetector = AlwaysUpdateChangeDetector,
     ) {
         if (!changeDetector.track(view, resourceId)) return
-        getHierarchy(view).setPlaceholderImage(drawableOf(view, resourceId), scaleType)
+        if (view is VitoImageView) view.hierarchy.setActualImageScaleType(scaleType)
+        view.setImageResource(resourceId)
     }
-
-    private fun drawableOf(view: ImageView, @DrawableRes resourceId: Int): Drawable? =
-        ResourcesCompat.getDrawable(view.resources, resourceId, view.context.theme)
 
     @JvmOverloads
     fun setImage(
@@ -222,11 +206,11 @@ object MGImages {
         changeDetector: ChangeDetector = AlwaysUpdateChangeDetector,
     ) {
         if (!changeDetector.track(view, drawable)) return
-        getHierarchy(view).setPlaceholderImage(drawable)
+        view.setImageDrawable(drawable)
     }
 
     fun cancelImageRequests(view: ImageView) {
-        getDrawee(view).controller = null
+        if (view is VitoImageView) view.release() else VitoView.release(view)
     }
 
     // ---------------------------------------------------------------------------------------
@@ -235,7 +219,7 @@ object MGImages {
 
     @JvmStatic
     fun setScaleType(view: ImageView, scaleType: ScalingUtils.ScaleType) {
-        getHierarchy(view).setActualImageScaleType(scaleType)
+        if (view is VitoImageView) view.hierarchy.setActualImageScaleType(scaleType)
     }
 
     /**
@@ -266,7 +250,7 @@ object MGImages {
         overlayColor?.let { roundingParams.setOverlayColor(it) }
         borderColor?.let { roundingParams.setBorderColor(it) }
         borderWidth?.let { roundingParams.setBorderWidth(it) }
-        getHierarchy(view).setRoundingParams(roundingParams)
+        if (view is VitoImageView) view.hierarchy.roundingParams = roundingParams
     }
 
     // ---------------------------------------------------------------------------------------

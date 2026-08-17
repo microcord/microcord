@@ -11,7 +11,7 @@ import com.discord.stores.StoreMessageReactions
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.utilities.user.UserUtils.getDisplayName
 
 class ManageReactionsResultsAdapter(
@@ -34,7 +34,7 @@ class ManageReactionsResultsAdapter(
             adapter,
         ) {
         private val remove = itemView.findViewById<ImageView>(R.id.manage_reactions_result_remove_reaction)
-        private val avatar = itemView.findViewById<SimpleDraweeView>(R.id.manage_reactions_result_user_avatar)
+        private val avatar = itemView.findViewById<VitoImageView>(R.id.manage_reactions_result_user_avatar)
         private val name = itemView.findViewById<TextView>(R.id.manage_reactions_result_user_name)
 
         override fun onConfigure(position: Int, data: ResultItem) {

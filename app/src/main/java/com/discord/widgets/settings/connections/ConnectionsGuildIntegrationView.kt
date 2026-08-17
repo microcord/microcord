@@ -9,12 +9,12 @@ import android.widget.TextView
 import com.discord.R
 import com.discord.api.connectedaccounts.ConnectedAccountIntegration
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 class ConnectionsGuildIntegrationView(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs) {
     private val handle: TextView
-    private val icon: SimpleDraweeView
+    private val icon: VitoImageView
     private val name: TextView
     private val error: TextView
     private val join: MaterialButton

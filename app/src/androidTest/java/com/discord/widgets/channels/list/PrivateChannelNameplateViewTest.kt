@@ -17,7 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.discord.R
 import com.discord.api.user.Nameplate
 import com.discord.views.NameplateView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.linecorp.apng.ApngDrawable
 import java.io.ByteArrayInputStream
 import org.junit.Assert.assertEquals
@@ -98,7 +98,7 @@ class PrivateChannelNameplateViewTest {
         ) as RelativeLayout
         val nameplate = root.findViewById<NameplateView>(R.id.channels_list_item_private_nameplate)
         val content = root.findViewById<View>(R.id.channels_list_item_private_content)
-        val image = nameplate.getChildAt(0) as SimpleDraweeView
+        val image = nameplate.getChildAt(0) as VitoImageView
         val width = View.MeasureSpec.makeMeasureSpec(
             (360 * context.resources.displayMetrics.density).toInt(),
             View.MeasureSpec.EXACTLY,
@@ -149,7 +149,7 @@ class PrivateChannelNameplateViewTest {
         ) as ViewGroup
         val memberNameplate = memberRoot.findViewById<NameplateView>(R.id.channel_members_list_item_nameplate)
         val memberContentEnd = memberRoot.findViewById<View>(R.id.channel_members_list_item_content_end)
-        val memberImage = memberNameplate.getChildAt(0) as SimpleDraweeView
+        val memberImage = memberNameplate.getChildAt(0) as VitoImageView
         memberRoot.measure(
             width,
             View.MeasureSpec.makeMeasureSpec(root.height, View.MeasureSpec.EXACTLY),

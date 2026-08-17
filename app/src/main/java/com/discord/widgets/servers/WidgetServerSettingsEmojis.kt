@@ -51,7 +51,7 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.servers.guild_role_subscription.emojis.SelectEmojiRolesDialog
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
 
@@ -352,11 +352,11 @@ class WidgetServerSettingsEmojis : AppFragment(R.layout.widget_server_settings_e
         private class EmojiItemViewHolder(adapter: Adapter) :
             MGRecyclerViewHolder<Adapter, Item>(R.layout.widget_server_settings_emojis_item, adapter) {
             private val container: View = itemView.findViewById(R.id.server_settings_emojis_container)
-            private val emojiImage: SimpleDraweeView = itemView.findViewById(R.id.server_settings_emojis_avatar)
+            private val emojiImage: VitoImageView = itemView.findViewById(R.id.server_settings_emojis_avatar)
             private val name: TextView = itemView.findViewById(R.id.server_settings_emojis_name)
             private val nickname: TextView = itemView.findViewById(R.id.server_settings_emojis_nickname)
             private val username: TextView = itemView.findViewById(R.id.server_settings_emojis_username)
-            private val uploaderAvatar: SimpleDraweeView =
+            private val uploaderAvatar: VitoImageView =
                 itemView.findViewById(R.id.server_settings_emojis_username_avatar)
             private val overflow: ImageView = itemView.findViewById(R.id.server_settings_emojis_overflow)
 

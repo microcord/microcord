@@ -26,7 +26,7 @@ import com.discord.widgets.guildscheduledevent.buttonconfiguration.ButtonConfigu
 import com.discord.widgets.guildscheduledevent.buttonconfiguration.DirectoryButtonConfiguration
 import com.discord.widgets.guildscheduledevent.buttonconfiguration.GuildButtonConfiguration
 import com.discord.widgets.hubs.events.HubGuildScheduledEventData
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * The event card, used verbatim by every surface that shows an event.
@@ -44,11 +44,11 @@ class GuildScheduledEventItemView @JvmOverloads constructor(
     private val root: ConstraintLayout
     private val buttons: GuildScheduledEventBottomButtonView
     private val locationContainer: ConstraintLayout
-    private val creatorAvatar: SimpleDraweeView
+    private val creatorAvatar: VitoImageView
     private val date: GuildScheduledEventDateView
     private val description: LinkifiedTextView
     private val channelName: TextView
-    private val guildIcon: SimpleDraweeView
+    private val guildIcon: VitoImageView
     private val guildPlaceholder: TextView
     private val guildName: TextView
     private val rsvpCount: TextView

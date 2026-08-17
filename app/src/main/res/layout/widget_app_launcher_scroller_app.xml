@@ -7,7 +7,7 @@
     android:background="@drawable/drawable_app_launcher_scroller_tile"
     android:foreground="?attr/selectableItemBackground">
 
-    <com.facebook.drawee.view.SimpleDraweeView
+    <com.discord.views.VitoImageView
         android:id="@+id/app_launcher_scroller_app_icon"
         android:layout_width="60dp"
         android:layout_height="60dp"

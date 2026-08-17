@@ -34,7 +34,7 @@ import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.user.WidgetUserMutualGuilds
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.i18n.i18nRender
 
 /**
@@ -61,7 +61,7 @@ class WidgetChannelTopic : AppFragment(R.layout.widget_channel_topic) {
     private val viewModel: WidgetChannelTopicViewModel by appViewModels { WidgetChannelTopicViewModel() }
 
     private lateinit var channelAka: UserAkaView
-    private lateinit var channelIcon: SimpleDraweeView
+    private lateinit var channelIcon: VitoImageView
     private lateinit var ellipsis: ImageView
     private lateinit var moreIcon: ImageView
     private lateinit var channelName: TextView

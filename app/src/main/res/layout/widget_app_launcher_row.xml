@@ -15,7 +15,7 @@
         android:orientation="horizontal"
         android:padding="12dp">
 
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/app_launcher_row_icon"
             android:layout_width="32dp"
             android:layout_height="32dp"

@@ -9,7 +9,7 @@ import com.discord.R
 import com.discord.models.guild.Guild
 import com.discord.utilities.icon.IconUtils
 import com.discord.views.guildboost.GuildBoostProgressView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class SettingsGuildBoostSampleGuildAdapter :
     RecyclerView.Adapter<SettingsGuildBoostSampleGuildAdapter.GuildListItem>() {
@@ -38,7 +38,7 @@ class SettingsGuildBoostSampleGuildAdapter :
         private val onGuildClicked: (Long) -> Unit,
     ) : RecyclerView.ViewHolder(itemView) {
         private val count: TextView = itemView.findViewById(R.id.boosted_sample_guild_count)
-        private val icon: SimpleDraweeView = itemView.findViewById(R.id.boosted_sample_guild_icon)
+        private val icon: VitoImageView = itemView.findViewById(R.id.boosted_sample_guild_icon)
         private val name: TextView = itemView.findViewById(R.id.boosted_sample_guild_name)
         private val progress: GuildBoostProgressView = itemView.findViewById(R.id.boosted_sample_guild_progress)
 

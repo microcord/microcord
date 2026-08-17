@@ -6,9 +6,8 @@ import android.view.View
 import android.widget.FrameLayout
 import com.discord.api.collectibles.ProfileFrameItem
 import com.discord.api.collectibles.ProfileFrameLayer
-import com.facebook.drawee.backends.pipeline.Fresco
+import com.discord.views.VitoImageView
 import com.facebook.drawee.controller.BaseControllerListener
-import com.facebook.drawee.view.SimpleDraweeView
 import com.facebook.imagepipeline.image.ImageInfo
 
 /**
@@ -109,16 +108,16 @@ class ProfileFrameView @JvmOverloads constructor(
         val top = anchorTop - overflowTop
 
         layerViews.forEach { view ->
-            val ratio = view.aspectRatio ?: return@forEach
+            val ratio = view.imageAspectRatio ?: return@forEach
             val layerHeight = (layerWidth * ratio).toInt()
             view.layout(left, top, left + layerWidth, top + layerHeight)
         }
     }
 
     /** A single frame image, which cannot be positioned until its own proportions are known. */
-    private inner class LayerView(context: Context) : SimpleDraweeView(context) {
+    private inner class LayerView(context: Context) : VitoImageView(context) {
 
-        var aspectRatio: Float? = null
+        var imageAspectRatio: Float? = null
             private set
 
         init {
@@ -127,25 +126,21 @@ class ProfileFrameView @JvmOverloads constructor(
         }
 
         fun load(skuId: Long, layer: ProfileFrameLayer) {
-            val url = layer.assetUrl(skuId)
-            controller = Fresco.newDraweeControllerBuilder()
-                .setUri(url)
-                .setOldController(controller)
-                .setControllerListener(
-                    object : BaseControllerListener<ImageInfo>() {
-                        override fun onFinalImageSet(
-                            id: String?,
-                            imageInfo: ImageInfo?,
-                            animatable: android.graphics.drawable.Animatable?,
-                        ) {
-                            val info = imageInfo ?: return
-                            if (info.width <= 0) return
-                            aspectRatio = info.height.toFloat() / info.width
-                            positionLayers()
-                        }
-                    },
-                )
-                .build()
+            show(
+                listOf(layer.assetUrl(skuId)),
+                controllerListener = object : BaseControllerListener<ImageInfo>() {
+                    override fun onFinalImageSet(
+                        id: String?,
+                        imageInfo: ImageInfo?,
+                        animatable: android.graphics.drawable.Animatable?,
+                    ) {
+                        val info = imageInfo ?: return
+                        if (info.width <= 0) return
+                        imageAspectRatio = info.height.toFloat() / info.width
+                        positionLayers()
+                    }
+                },
+            )
         }
     }
 }

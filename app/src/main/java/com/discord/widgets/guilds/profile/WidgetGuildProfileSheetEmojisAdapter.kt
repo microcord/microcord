@@ -6,7 +6,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.models.domain.emoji.Emoji
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class WidgetGuildProfileSheetEmojisAdapter : RecyclerView.Adapter<BaseEmojiViewHolder>() {
     private var data: List<EmojiItem> = emptyList()
@@ -21,7 +21,7 @@ class WidgetGuildProfileSheetEmojisAdapter : RecyclerView.Adapter<BaseEmojiViewH
                 R.layout.widget_guild_profile_emoji_item,
                 parent,
                 false,
-            ) as SimpleDraweeView,
+            ) as VitoImageView,
         )
         EmojiItem.TYPE_MORE_EMOJI -> MoreEmojiViewHolder(
             LayoutInflater.from(parent.context).inflate(

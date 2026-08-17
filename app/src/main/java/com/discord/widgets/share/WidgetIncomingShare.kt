@@ -40,7 +40,7 @@ import com.discord.widgets.chat.input.WidgetChatInput
 import com.discord.widgets.user.search.WidgetGlobalSearchAdapter
 import com.discord.widgets.user.search.WidgetGlobalSearchModel
 import com.discord.widgets.user.search.WidgetGlobalSearchViewModel
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Subscription
 
 class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
@@ -469,7 +469,7 @@ class WidgetIncomingShare : AppFragment(R.layout.widget_incoming_share) {
             private val onRemove: (Uri) -> Unit,
         ) : RecyclerView.ViewHolder(binding.root) {
             fun bind(uri: Uri) {
-                (binding.root as SimpleDraweeView).setImageURI(uri)
+                (binding.root as VitoImageView).setImageURI(uri)
                 binding.root.contentDescription = binding.root.context.getString(R.string.attachment_utilities_remove)
                 binding.root.setOnClickListener { onRemove(uri) }
             }

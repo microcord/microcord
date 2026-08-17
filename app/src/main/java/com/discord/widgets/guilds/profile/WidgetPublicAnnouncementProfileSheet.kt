@@ -6,7 +6,7 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class WidgetPublicAnnouncementProfileSheet : AppBottomSheet() {
     override fun getContentViewResId(): Int = R.layout.widget_announcement_guild_profile_sheet
@@ -14,7 +14,7 @@ class WidgetPublicAnnouncementProfileSheet : AppBottomSheet() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         IconUtils.setIcon(
-            view.findViewById<SimpleDraweeView>(R.id.announcement_guild_avatar),
+            view.findViewById<VitoImageView>(R.id.announcement_guild_avatar),
             "asset://asset/images/system_user_avatar.png",
             R.dimen.avatar_size_xxlarge,
         )

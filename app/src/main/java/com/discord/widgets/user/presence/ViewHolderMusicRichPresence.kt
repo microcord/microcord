@@ -20,7 +20,7 @@ import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.i18n.i18nRender
 
 /**
@@ -33,8 +33,8 @@ import com.discord.i18n.i18nRender
  */
 class ViewHolderMusicRichPresence(
     root: View,
-    richPresenceImageLarge: SimpleDraweeView,
-    richPresenceImageSmall: SimpleDraweeView,
+    richPresenceImageLarge: VitoImageView,
+    richPresenceImageSmall: VitoImageView,
     richPresenceHeader: TextView,
     richPresenceTitle: TextView,
     richPresenceDetails: TextView,

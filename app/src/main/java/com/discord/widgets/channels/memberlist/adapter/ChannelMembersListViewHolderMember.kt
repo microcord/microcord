@@ -19,7 +19,7 @@ import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.discord.views.NameplateView
 import com.discord.views.UsernameView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 private const val ROW_EDGE_PADDING_DP = 16
 private const val NAME_END_MARGIN_DP = 4
@@ -66,7 +66,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             }
         }
         reserveArtGutter(data.nameplate != null)
-        binding.root.findViewById<SimpleDraweeView>(R.id.channel_members_list_item_avatar).setImageURI(data.avatarUrl)
+        binding.root.findViewById<VitoImageView>(R.id.channel_members_list_item_avatar).setImageURI(data.avatarUrl)
         binding.root.findViewById<AvatarDecorationView>(R.id.channel_members_list_item_avatar_decoration)
             .bind(data.avatarDecoration)
         binding.root.findViewById<UsernameView>(R.id.channel_members_list_item_name).apply {

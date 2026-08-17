@@ -3,7 +3,7 @@
     <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp" android:paddingBottom="16dp">
 
         <FrameLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginBottom="16dp">
-            <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/ignore_confirmation_avatar" android:layout_width="80dp" android:layout_height="80dp" android:importantForAccessibility="no" app:roundAsCircle="true" app:placeholderImage="?attr/colorPrimaryCircle"/>
+            <com.discord.views.VitoImageView android:id="@+id/ignore_confirmation_avatar" android:layout_width="80dp" android:layout_height="80dp" android:importantForAccessibility="no" app:roundAsCircle="true" app:placeholderImage="?attr/colorPrimaryCircle"/>
             <ImageView android:id="@+id/ignore_confirmation_avatar_badge" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="bottom|end" android:padding="4dp" android:background="@drawable/drawable_circle_background_tertiary" android:src="?attr/ic_visibility_off" android:importantForAccessibility="no" app:tint="?attr/colorInteractiveNormal"/>
         </FrameLayout>
 

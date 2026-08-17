@@ -22,7 +22,7 @@ import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.utilities.user.UserUtils.getDisplayName
 
 /**
@@ -36,7 +36,7 @@ class WidgetChatListAdapterItemAutoModBlocked(
     adapter: WidgetChatListAdapter,
 ) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_auto_mod_blocked, adapter) {
 
-    private val avatar: SimpleDraweeView =
+    private val avatar: VitoImageView =
         itemView.findViewById(R.id.chat_list_adapter_item_text_avatar)
     private val username: TextView = itemView.findViewById(R.id.username)
     private val timestamp: TextView = itemView.findViewById(R.id.timestamp)

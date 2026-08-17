@@ -19,7 +19,7 @@ import com.discord.utilities.images.MGImages
 import com.discord.views.GuildView
 import com.discord.views.directories.ServerDiscoveryHeader
 import com.discord.views.guilds.ServerMemberCount
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 class GuildDiscoveryAdapter(
@@ -85,7 +85,7 @@ class GuildDiscoveryAdapter(
 
 
     private fun bindServer(holder: Holder, guild: DiscoverableGuild) = with<View, Unit>(holder.itemView) {
-        val banner = findViewById<SimpleDraweeView>(R.id.discovery_card_banner)
+        val banner = findViewById<VitoImageView>(R.id.discovery_card_banner)
         MGImages.setImage(
             banner,
             IconUtils.getBannerForGuild(guild.id, guild.banner)

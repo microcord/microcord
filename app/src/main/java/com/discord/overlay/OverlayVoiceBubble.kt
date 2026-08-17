@@ -12,14 +12,14 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.subjects.PublishSubject
 import rx.subjects.Subject
 
 class OverlayVoiceBubble(context: Context) : OverlayBubbleWrap(context), AppComponent {
-    val imageView: SimpleDraweeView = LayoutInflater.from(context)
-        .inflate(R.layout.overlay_voice_bubble, this, false) as SimpleDraweeView
+    val imageView: VitoImageView = LayoutInflater.from(context)
+        .inflate(R.layout.overlay_voice_bubble, this, false) as VitoImageView
 
     override val unsubscribeSignal: Subject<Void, Void> = PublishSubject.create()
 

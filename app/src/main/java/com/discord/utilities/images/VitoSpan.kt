@@ -8,6 +8,7 @@ import com.facebook.fresco.vito.options.ImageOptions
 import com.facebook.fresco.vito.options.RoundingOptions
 import com.facebook.fresco.vito.source.ImageSourceProvider
 import com.facebook.imagepipeline.common.ResizeOptions
+import com.facebook.imagepipeline.request.ImageRequest
 
 fun DraweeSpanStringBuilder.setVitoSpan(
     context: Context,
@@ -27,9 +28,12 @@ fun DraweeSpanStringBuilder.setVitoSpan(
     resizeHeight: Int = height,
 ) {
     val options = ImageOptions.create()
+        .cacheChoice(ImageRequest.CacheChoice.SMALL)
         .resize(ResizeOptions(resizeWidth, resizeHeight))
         .scale(scaleType)
         .autoPlay(autoPlay)
+        .fadeDurationMs(0)
+        .releaseOnWindowDetached(false)
         .placeholder(placeholder)
         .placeholderApplyRoundingOptions(circular)
         .overlay(overlay)

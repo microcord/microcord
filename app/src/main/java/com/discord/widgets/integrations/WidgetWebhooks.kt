@@ -28,7 +28,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.TimeUtils
 import com.discord.widgets.settings.SettingsStrings
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 
 /**
@@ -125,7 +125,7 @@ class WidgetWebhooks : AppFragment(R.layout.widget_webhooks) {
     private fun buildRow(webhook: ModelWebhook): View {
         val row = LayoutInflater.from(requireContext())
             .inflate(R.layout.widget_webhooks_list_item, list, false)
-        row.findViewById<SimpleDraweeView>(R.id.webhook_item_avatar).setImageURI(
+        row.findViewById<VitoImageView>(R.id.webhook_item_avatar).setImageURI(
             IconUtils.getForUser(webhook.id, webhook.avatar, isWebhook = true),
         )
         row.findViewById<TextView>(R.id.webhook_item_name).text = webhook.name

@@ -15,7 +15,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.views.CutoutView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * Lists the people already in a stage whom the user has blocked, above the "join anyway" prompt.
@@ -101,7 +101,7 @@ class StageAudienceBlockedBottomSheetAdapter(
         R.layout.stage_audience_blocked_bottom_sheet_item,
         adapter,
     ) {
-        private val avatar: SimpleDraweeView =
+        private val avatar: VitoImageView =
             itemView.findViewById(R.id.stage_channel_blocked_member_icon)
         private val avatarContainer: CutoutView =
             itemView.findViewById(R.id.stage_channel_blocked_member_icon_container)

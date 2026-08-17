@@ -32,7 +32,7 @@ import com.discord.widgets.chat.input.autocomplete.EmojiAutocompletable
 import com.discord.widgets.chat.input.autocomplete.GlobalRoleAutocompletable
 import com.discord.widgets.chat.input.autocomplete.RoleAutocompletable
 import com.discord.widgets.chat.input.autocomplete.UserAutocompletable
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.util.Locale
 
 /**
@@ -45,7 +45,7 @@ class AutocompleteItemViewHolder(
     private val onItemSelected: (Autocompletable) -> Unit,
 ) : RecyclerView.ViewHolder(itemView) {
 
-    private val avatar: SimpleDraweeView = itemView.findViewById(R.id.chat_input_item_avatar)
+    private val avatar: VitoImageView = itemView.findViewById(R.id.chat_input_item_avatar)
     private val status: StatusView = itemView.findViewById(R.id.chat_input_item_status)
     private val emojiView: SimpleDraweeSpanTextView = itemView.findViewById(R.id.chat_input_item_emoji)
     private val name: TextView = itemView.findViewById(R.id.chat_input_item_name)

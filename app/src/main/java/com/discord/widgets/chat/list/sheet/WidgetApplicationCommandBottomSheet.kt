@@ -20,7 +20,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.ui
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import rx.subscriptions.CompositeSubscription
 import com.discord.i18n.i18nRender
@@ -40,7 +40,7 @@ class WidgetApplicationCommandBottomSheet : AppBottomSheet() {
         )
     }
 
-    private lateinit var avatar: SimpleDraweeView
+    private lateinit var avatar: VitoImageView
     private lateinit var title: TextView
     private lateinit var applicationName: TextView
     private lateinit var content: TextView

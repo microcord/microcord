@@ -14,14 +14,14 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.guild_role_subscriptions.tier.model.Benefit
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class GuildRoleSubscriptionBenefitItemView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
-    private val image: SimpleDraweeView
+    private val image: VitoImageView
     private val name: TextView
     private val description: TextView
 

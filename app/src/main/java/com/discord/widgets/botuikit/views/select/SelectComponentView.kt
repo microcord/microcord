@@ -18,7 +18,7 @@ import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.ComponentView
 import com.discord.widgets.botuikit.views.ComponentViewUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.flexbox.FlexboxLayout
 import com.google.android.material.textview.MaterialTextView
 
@@ -35,7 +35,7 @@ class SelectComponentView @JvmOverloads constructor(
         componentActionListener: ComponentActionListener,
     ) {
         val selectionRoot = requireNotNull(findViewById<FlexboxLayout>(R.id.select_component_selections_root))
-        val icon = requireNotNull(findViewById<SimpleDraweeView>(R.id.select_component_selection_icon))
+        val icon = requireNotNull(findViewById<VitoImageView>(R.id.select_component_selection_icon))
         val text = requireNotNull(findViewById<MaterialTextView>(R.id.select_component_selection_text))
         val chevron = requireNotNull(findViewById<ImageView>(R.id.select_component_chevron))
         val loadingDots = requireNotNull(findViewById<TypingDots>(R.id.select_component_loading))
@@ -81,7 +81,7 @@ class SelectComponentView @JvmOverloads constructor(
                     )
                     pill.findViewById<MaterialTextView>(R.id.select_component_pill_text).text = selected.label
                     ComponentViewUtils.run {
-                        pill.findViewById<SimpleDraweeView>(R.id.select_component_pill_emoji)
+                        pill.findViewById<VitoImageView>(R.id.select_component_pill_emoji)
                             .setEmojiOrHide(selected.emoji, component.emojiAnimationsEnabled)
                     }
                     selectionRoot.addView(pill)

@@ -21,7 +21,7 @@ import com.discord.utilities.view.extensions.setCompoundDrawableWithIntrinsicBou
 import com.discord.utilities.view.extensions.setTextIfDifferent
 import com.discord.utilities.view.text.addBindedTextWatcher
 import com.discord.widgets.guild_role_subscriptions.tier.model.Benefit
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
@@ -48,7 +48,7 @@ class WidgetGuildRoleSubscriptionTierBenefit :
     private lateinit var channelName: TextView
     private lateinit var intangibleNameLabel: TextView
     private lateinit var intangibleNameLayout: TextInputLayout
-    private lateinit var emojiImage: SimpleDraweeView
+    private lateinit var emojiImage: VitoImageView
     private lateinit var emojiName: TextView
     private lateinit var emojiSelector: View
     private lateinit var descriptionLayout: TextInputLayout

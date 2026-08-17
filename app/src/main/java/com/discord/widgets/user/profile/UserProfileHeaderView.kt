@@ -25,7 +25,7 @@ import com.discord.utilities.user.UserUtils.getUserNameWithDiscriminator
 import com.discord.views.user.UserAvatarPresenceView
 import com.discord.widgets.user.Badge
 import com.discord.widgets.media.WidgetMedia
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayout(context, attrs) {
     private val binding = UserProfileHeaderViewBinding.inflate(LayoutInflater.from(context), this, true)
@@ -253,7 +253,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         }
     }
 
-    private fun badgeView(badge: Badge): SimpleDraweeView = SimpleDraweeView(context).apply {
+    private fun badgeView(badge: Badge): VitoImageView = VitoImageView(context).apply {
         if (badge.iconUrl != null) {
             MGImages.setImage(this, badge.iconUrl, useSmallCache = true)
         } else {

@@ -22,7 +22,7 @@ import com.discord.utilities.locale.LocaleManager
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setCompoundDrawableWithIntrinsicBounds
 import com.discord.views.sticker.StickerView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import java.text.NumberFormat
 import rx.subscriptions.CompositeSubscription
@@ -52,7 +52,7 @@ class WidgetGuildStickerSheet : AppBottomSheet() {
     private lateinit var premiumButton: MaterialButton
     private lateinit var guildContainer: LinearLayout
     private lateinit var guildIconWrapper: FrameLayout
-    private lateinit var guildIcon: SimpleDraweeView
+    private lateinit var guildIcon: VitoImageView
     private lateinit var guildIconText: TextView
     private lateinit var guildName: TextView
     private lateinit var guildInfo: TextView

@@ -21,7 +21,7 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.stores.StoreStream
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -80,7 +80,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
         private val name: TextView = itemView.findViewById(R.id.friends_list_item_name)
         private val activity: SimpleDraweeSpanTextView =
             itemView.findViewById(R.id.friends_list_item_activity)
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.friends_list_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.friends_list_item_avatar)
         private val status: StatusView = itemView.findViewById(R.id.friends_list_item_status)
         private val avatarDecoration: AvatarDecorationView =
             itemView.findViewById(R.id.friends_list_item_avatar_decoration)
@@ -116,7 +116,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
         private val name: TextView = itemView.findViewById(R.id.friends_list_item_name)
         private val activity: SimpleDraweeSpanTextView =
             itemView.findViewById(R.id.friends_list_item_activity)
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.friends_list_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.friends_list_item_avatar)
         private val status: StatusView = itemView.findViewById(R.id.friends_list_item_status)
         private val avatarDecoration: AvatarDecorationView =
             itemView.findViewById(R.id.friends_list_item_avatar_decoration)

@@ -31,7 +31,7 @@
         android:paddingStart="12dp"
         android:paddingEnd="12dp">
 
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/poll_answer_emoji"
             android:layout_width="24dp"
             android:layout_height="24dp"

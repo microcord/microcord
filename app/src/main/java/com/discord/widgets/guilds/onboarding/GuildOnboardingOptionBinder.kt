@@ -91,7 +91,6 @@ internal class GuildOnboardingOptionBinder(
         boundOptionId = null
         boundSelected = false
         MGImages.cancelImageRequests(binding.guildOnboardingOptionEmojiImage)
-        binding.guildOnboardingOptionEmojiImage.controller = null
     }
 
     private companion object {

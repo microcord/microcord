@@ -27,7 +27,7 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.channels.WidgetChannelPickerBottomSheet
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.SettingsStrings
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 
@@ -46,7 +46,7 @@ class WidgetWebhookEdit : AppFragment(R.layout.widget_webhook_edit) {
     private val token: String? get() = mostRecentIntent.getStringExtra(ARG_TOKEN)
 
     private lateinit var name: TextInputLayout
-    private lateinit var avatar: SimpleDraweeView
+    private lateinit var avatar: VitoImageView
     private lateinit var channelRow: TextView
     private lateinit var save: FloatingActionButton
 

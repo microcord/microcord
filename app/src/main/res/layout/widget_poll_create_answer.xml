@@ -14,7 +14,7 @@
         app:layout_constraintBottom_toBottomOf="@id/poll_answer_wrap"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@id/poll_answer_wrap">
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/poll_answer_emoji"
             android:layout_width="24dp"
             android:layout_height="24dp"

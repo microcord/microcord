@@ -16,7 +16,7 @@ import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.ui
 import com.discord.widgets.channels.WidgetChannelSelector
 import com.discord.widgets.guilds.WidgetGuildSelector
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import rx.subscriptions.CompositeSubscription
@@ -37,7 +37,7 @@ class WidgetChannelFollowSheet : AppBottomSheet() {
         )
     }
 
-    private lateinit var guildIcon: SimpleDraweeView
+    private lateinit var guildIcon: VitoImageView
     private lateinit var channelName: TextView
     private lateinit var flipper: AppViewFlipper
     private lateinit var selectGuild: MaterialCardView

@@ -15,7 +15,7 @@
         android:layout_centerHorizontal="true"
         android:gravity="center"
         android:orientation="horizontal">
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/poll_details_answer_emoji"
             android:layout_width="24dp"
             android:layout_height="24dp"

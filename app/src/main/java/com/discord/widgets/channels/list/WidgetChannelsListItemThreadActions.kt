@@ -35,7 +35,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.threads.ThreadUtils
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.util.Locale
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
@@ -54,7 +54,7 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
 
     override fun getContentViewResId(): Int = R.layout.widget_channels_list_item_thread_actions
 
-    private lateinit var icon: SimpleDraweeView
+    private lateinit var icon: VitoImageView
     private lateinit var title: TextView
     private lateinit var markAsRead: TextView
     private lateinit var mute: TextView

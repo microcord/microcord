@@ -21,7 +21,7 @@ import com.discord.models.user.User
 import com.discord.i18n.I18nHooks
 import com.discord.stores.StoreStream
 import com.discord.widgets.tabs.NavigationTab
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.Subscription
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -95,7 +95,7 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
             }
             itemView.contentDescription = guild.name
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_server_name).text = guild.name
-            itemView.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_server_image).apply {
+            itemView.findViewById<VitoImageView>(R.id.user_profile_adapter_item_server_image).apply {
                 visibility = if (guild.icon == null) View.GONE else View.VISIBLE
                 setImageURI(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=128" })
             }
@@ -108,7 +108,7 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
                 text = identity
                 visibility = if (item.nick != null || hasGuildMemberAvatar) View.VISIBLE else View.GONE
             }
-            itemView.findViewById<SimpleDraweeView>(R.id.guild_member_avatar).apply {
+            itemView.findViewById<VitoImageView>(R.id.guild_member_avatar).apply {
                 val hash = item.member?.avatarHash
                 visibility = if (hasGuildMemberAvatar) View.VISIBLE else View.GONE
                 setImageURI(if (hash == null || item.user == null) null else "https://cdn.discordapp.com/guilds/${guild.id}/users/${item.user.id}/avatars/$hash.webp?size=32")

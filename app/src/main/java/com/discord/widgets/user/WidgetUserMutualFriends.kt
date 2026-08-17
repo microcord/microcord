@@ -26,7 +26,7 @@ import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.StatusView
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.Subscription
 
@@ -112,7 +112,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
                 PresenceUtils.setStatusLineWithLeadingIcon(friend.presence, friend.isApplicationStreaming == true, this, true)
                 visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
             }
-            itemView.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_friend_avatar).setImageURI(avatarUrl(friend.user))
+            itemView.findViewById<VitoImageView>(R.id.user_profile_adapter_item_friend_avatar).setImageURI(avatarUrl(friend.user))
             itemView.findViewById<AvatarDecorationView>(R.id.user_profile_adapter_item_friend_avatar_decoration)
                 .bind(friend.user.avatarDecoration)
             listOf(R.id.mutual_server_1, R.id.mutual_server_2, R.id.mutual_server_3, R.id.mutual_server_4).forEachIndexed { index, id ->
@@ -121,7 +121,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
                 root.visibility = if (guild == null) View.GONE else View.VISIBLE
                 if (guild != null) {
                     root.contentDescription = guild.name
-                    root.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_friend_mutual_image).apply {
+                    root.findViewById<VitoImageView>(R.id.user_profile_adapter_item_friend_mutual_image).apply {
                         visibility = if (guild.icon == null) View.GONE else View.VISIBLE
                         setImageURI(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=64" })
                     }

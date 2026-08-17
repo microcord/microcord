@@ -7,7 +7,7 @@ import com.discord.databinding.WidgetGuildCloneBinding
 import com.discord.databinding.WidgetGuildCreateBinding
 import com.discord.views.LoadingButton
 import com.discord.views.ScreenTitleView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.textfield.TextInputLayout
 
 interface GuildCreateCloneViews {
@@ -15,7 +15,7 @@ interface GuildCreateCloneViews {
     val guildCreateButton: LoadingButton
     val guildCreateIconUploader: ViewGroup
     val guildCreateName: TextInputLayout
-    val iconUploaderImage: SimpleDraweeView
+    val iconUploaderImage: VitoImageView
     val iconUploaderPlaceholderGroup: Group
     val screenTitleView: ScreenTitleView?
 

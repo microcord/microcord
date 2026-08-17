@@ -13,7 +13,7 @@ import com.discord.models.domain.ModelGuildBoostSlot
 import com.discord.models.guild.Guild
 import com.discord.utilities.icon.IconUtils
 import com.discord.views.guildboost.GuildBoostProgressView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.util.Date
 
 class WidgetSettingsGuildBoostSubscriptionAdapter(
@@ -114,9 +114,9 @@ class WidgetSettingsGuildBoostSubscriptionAdapter(
     }
 
     class GuildListItem(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val banner: SimpleDraweeView = itemView.findViewById(R.id.boosted_guild_banner)
+        private val banner: VitoImageView = itemView.findViewById(R.id.boosted_guild_banner)
         private val count: TextView = itemView.findViewById(R.id.boosted_sample_guild_count)
-        private val icon: SimpleDraweeView = itemView.findViewById(R.id.boosted_sample_guild_icon)
+        private val icon: VitoImageView = itemView.findViewById(R.id.boosted_sample_guild_icon)
         private val name: TextView = itemView.findViewById(R.id.boosted_sample_guild_name)
         private val progress: GuildBoostProgressView = itemView.findViewById(R.id.boosted_guild_progress_view)
 

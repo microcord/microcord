@@ -13,7 +13,7 @@ import com.discord.utilities.images.MGImages
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * A plain game with rich presence.
@@ -24,8 +24,8 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 class ViewHolderGameRichPresence(
     root: View,
-    richPresenceImageLarge: SimpleDraweeView,
-    richPresenceImageSmall: SimpleDraweeView,
+    richPresenceImageLarge: VitoImageView,
+    richPresenceImageSmall: VitoImageView,
     richPresenceHeader: TextView,
     richPresenceTitle: TextView,
     richPresenceDetails: TextView,

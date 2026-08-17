@@ -15,7 +15,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import com.discord.views.StatusView
 import com.discord.widgets.user.search.WidgetGlobalSearchModel
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * The result list shared by the nearby scan and the add-friend search.
@@ -87,7 +87,7 @@ class WidgetFriendsAddUserAdapter(recycler: RecyclerView) :
             adapter,
         ) {
 
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.add_friend_user_item_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.add_friend_user_item_avatar)
         private val name: TextView = itemView.findViewById(R.id.add_friend_user_item_name)
         private val nameSecondary: TextView =
             itemView.findViewById(R.id.add_friend_user_item_name_secondary)

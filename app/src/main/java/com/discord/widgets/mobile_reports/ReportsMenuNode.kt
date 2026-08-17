@@ -23,7 +23,7 @@ import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.CheckedSetting
 import com.discord.views.GuildView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 
@@ -73,7 +73,7 @@ class ReportsMenuNode @JvmOverloads constructor(
             setTextColor(preview.authorNameColor)
         }
         IconUtils.setIcon(
-            findViewById<SimpleDraweeView>(R.id.chat_list_adapter_item_text_avatar),
+            findViewById<VitoImageView>(R.id.chat_list_adapter_item_text_avatar),
             preview.author,
             R.dimen.avatar_size_small,
         )
@@ -213,7 +213,7 @@ class ReportsMenuNode @JvmOverloads constructor(
                 0.8f,
             )
         IconUtils.setIcon(
-            findViewById<SimpleDraweeView>(R.id.mobile_reports_block_user_avatar),
+            findViewById<VitoImageView>(R.id.mobile_reports_block_user_avatar),
             block.user,
             R.dimen.avatar_size_standard,
         )

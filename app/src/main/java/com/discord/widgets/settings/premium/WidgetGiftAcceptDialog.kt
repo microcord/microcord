@@ -16,7 +16,7 @@ import com.discord.utilities.premium.PremiumUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.text.LinkifiedTextView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 internal class WidgetGiftAcceptDialog : AppDialog(R.layout.widget_accept_gift_dialog) {
@@ -110,7 +110,7 @@ internal class WidgetGiftAcceptDialog : AppDialog(R.layout.widget_accept_gift_di
     }
 
     private fun bindImage(view: View, gift: ModelGift) {
-        val image = view.findViewById<SimpleDraweeView>(R.id.accept_gift_body_image)
+        val image = view.findViewById<VitoImageView>(R.id.accept_gift_body_image)
         if (gift.isAnyNitroGift()) image.setActualImageResource(PremiumUtils.getNitroGiftIcon(gift))
     }
 

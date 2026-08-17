@@ -13,7 +13,7 @@ import com.discord.views.PileView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.views.AvatarDecorationView
 import com.discord.widgets.chat.list.entries.StartOfPrivateChatEntry
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * Head of a DM or group DM: the recipient's (or group's) avatar, its name, the
@@ -29,7 +29,7 @@ class WidgetChatListAdapterItemPrivateChannelStart(
     private val mutualGuildPile: PileView = itemView.findViewById(R.id.mutual_guild_pile)
     private val mutualGuilds: LinearLayout = itemView.findViewById(R.id.mutual_guilds)
     private val mutualGuildsText: TextView = itemView.findViewById(R.id.mutual_guilds_text)
-    private val channelImage: SimpleDraweeView =
+    private val channelImage: VitoImageView =
         itemView.findViewById(R.id.private_channel_start_image)
     private val channelText: TextView = itemView.findViewById(R.id.private_channel_start_text)
     private val channelImageDecoration: AvatarDecorationView =

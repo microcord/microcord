@@ -31,11 +31,9 @@ import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.imagepipeline.request.ImageRequest
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -160,14 +158,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         val size = dpToPixels(64)
         val resized = "${attachment.proxyUrl}?width=$size&height=$size"
         val extension = if (Build.VERSION.SDK_INT == 28 || Build.VERSION.SDK_INT == 29) "png" else "webp"
-        val requests = arrayOf(
-            ImageRequest.fromUri("$resized&format=$extension"),
-            ImageRequest.fromUri(resized),
-        )
-        binding.inlineMediaImagePreview.controller = Fresco.newDraweeControllerBuilder()
-            .setOldController(binding.inlineMediaImagePreview.controller)
-            .setFirstAvailableImageRequests(requests)
-            .build()
+        binding.inlineMediaImagePreview.show(listOf("$resized&format=$extension", resized), width = size, height = size)
     }
 
     private fun configureMediaGrid(post: PostData) {
@@ -213,13 +204,13 @@ class ForumBrowserPostView @JvmOverloads constructor(
                 } else {
                     val source = "${attachment.proxyUrl}?width=640&height=360&format=webp"
                     if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
-                        tile.addView(SimpleDraweeView(context).apply {
+                        tile.addView(VitoImageView(context).apply {
                             hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.CENTER_CROP)
                             alpha = 0.2f
                             setImageURI(source)
                         }, FrameLayout.LayoutParams(-1, -1))
                     }
-                    tile.addView(SimpleDraweeView(context).apply {
+                    tile.addView(VitoImageView(context).apply {
                         hierarchy.setActualImageScaleType(if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
                             ScalingUtils.ScaleType.FIT_CENTER
                         } else {

@@ -13,7 +13,7 @@ import com.discord.utilities.presence.isGameActivity
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.views.StreamPreviewView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * Somebody's Go Live stream, with a live thumbnail and — when they are also playing something — the
@@ -24,7 +24,7 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 class ViewHolderStreamRichPresence(
     root: View,
-    richPresenceImageLarge: SimpleDraweeView,
+    richPresenceImageLarge: VitoImageView,
     richPresenceHeader: TextView,
     richPresenceTitle: TextView,
     richPresenceDetails: TextView,

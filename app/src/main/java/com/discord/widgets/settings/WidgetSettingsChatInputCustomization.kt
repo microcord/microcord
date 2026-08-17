@@ -26,7 +26,7 @@ import com.discord.utilities.feature.PluginSurfaceCustomization
 import com.discord.utilities.feature.PluginSurfaceCustomization.Surface
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.snackbar.Snackbar
 import com.discord.views.CheckedSetting
 import dev.mantikafasi.manticord.plugins.api.PluginComposerZone
@@ -189,7 +189,7 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
         val view: View = if (button == Button.PROFILE) {
             val me = StoreStream.getUsers().getMe()
             val guildId = StoreStream.getChannelsSelected().getSelectedChannel()?.guildId ?: 0L
-            SimpleDraweeView(context).apply {
+            VitoImageView(context).apply {
                 MGImages.setRoundingParams(this, cornerRadius = 0f, circle = true)
                 setImageURI(
                     IconUtils.getForGuildMemberOrUser(

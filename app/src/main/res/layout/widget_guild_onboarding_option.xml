@@ -17,7 +17,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:textSize="22sp" />
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/guild_onboarding_option_emoji_image"
             android:layout_width="match_parent"
             android:layout_height="match_parent"

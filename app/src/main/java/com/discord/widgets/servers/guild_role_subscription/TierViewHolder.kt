@@ -7,7 +7,7 @@ import com.discord.R
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.stickers.StickerPackFormatting
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 sealed class TierViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
     class AddTierItemViewHolder(
@@ -32,7 +32,7 @@ sealed class TierViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) 
                 StickerPackFormatting.formattedPriceUsd(tier.tierPrice, itemView.context)
             itemView.findViewById<View>(R.id.guild_role_subscription_tier_draft_tag).visibility =
                 if (tier.isPublished) View.GONE else View.VISIBLE
-            val image = itemView.findViewById<SimpleDraweeView>(R.id.guild_role_subscription_tier_icon)
+            val image = itemView.findViewById<VitoImageView>(R.id.guild_role_subscription_tier_icon)
             val url = tier.tierImageAssetId?.let {
                 IconUtils.getStoreAssetImage(tier.applicationId, it.toString(), MAX_TIER_IMAGE_SIZE)
             }

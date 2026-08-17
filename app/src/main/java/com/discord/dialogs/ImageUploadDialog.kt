@@ -10,7 +10,7 @@ import com.discord.app.AppDialog
 import com.discord.media_picker.MediaPicker
 import com.discord.utilities.images.MGImages
 import com.discord.views.ThemedColor
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -72,7 +72,7 @@ class ImageUploadDialog : AppDialog(R.layout.image_upload_dialog) {
         view.findViewById<MaterialButton>(R.id.CANCEL_BUTTON).setOnClickListener { dismiss() }
 
         val previewSize = resources.getDimensionPixelSize(previewType.previewSizeDimenId)
-        val preview = view.findViewById<SimpleDraweeView>(R.id.notice_image)
+        val preview = view.findViewById<VitoImageView>(R.id.notice_image)
         preview.layoutParams = preview.layoutParams.apply {
             height = previewSize
             width = previewSize

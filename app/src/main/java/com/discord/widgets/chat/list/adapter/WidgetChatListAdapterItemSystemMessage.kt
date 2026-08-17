@@ -33,7 +33,7 @@ import com.discord.views.sticker.StickerView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.servers.guildboost.WidgetGuildBoost
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import kotlin.math.roundToInt
 
 /**
@@ -52,7 +52,7 @@ class WidgetChatListAdapterItemSystemMessage(
         itemView.findViewById(R.id.chat_list_adapter_item_thread_embed_spine)
     private val roleSubscriptionCard: ConstraintLayout =
         itemView.findViewById(R.id.role_subscription_purchase_welcome_card)
-    private val roleSubscriptionAvatar: SimpleDraweeView =
+    private val roleSubscriptionAvatar: VitoImageView =
         itemView.findViewById(R.id.role_subscription_purchaser_avatar)
     private val roleSubscriptionUsername: TextView =
         itemView.findViewById(R.id.role_subscription_purchaser_username)

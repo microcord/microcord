@@ -17,7 +17,6 @@ dynamicanimation = "1.1.0"
 exoplayer = "2.19.1"
 flexbox = "3.0.0"
 fresco = "3.7.0"
-photoDraweeView = "2.1.0"
 lottie = "6.7.1"
 apng = "1.12.0"
 preference = "1.2.1"
@@ -90,9 +89,10 @@ fresco-vito-options = { group = "com.facebook.fresco", name = "vito-options", ve
 fresco-vito-core = { group = "com.facebook.fresco", name = "vito-core", version.ref = "fresco" }
 fresco-vito-core-java-impl = { group = "com.facebook.fresco", name = "vito-core-java-impl", version.ref = "fresco" }
 fresco-vito-provider = { group = "com.facebook.fresco", name = "vito-provider", version.ref = "fresco" }
+fresco-vito-view = { group = "com.facebook.fresco", name = "vito-view", version.ref = "fresco" }
+fresco-middleware = { group = "com.facebook.fresco", name = "middleware", version.ref = "fresco" }
 fresco-animated-gif = { group = "com.facebook.fresco", name = "animated-gif", version.ref = "fresco" }
 fresco-animated-webp = { group = "com.facebook.fresco", name = "animated-webp", version.ref = "fresco" }
-photo-drawee-view = { group = "me.relex", name = "photodraweeview", version.ref = "photoDraweeView" }
 lottie = { group = "com.airbnb.android", name = "lottie", version.ref = "lottie" }
 apng = { group = "com.linecorp", name = "apng", version.ref = "apng" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }

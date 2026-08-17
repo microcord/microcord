@@ -26,7 +26,7 @@ import com.discord.widgets.hubs.toArgsIntent
 import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.utilities.view.recycler.MaxHeightRecyclerView
 import com.discord.utilities.views.SimpleRecyclerAdapter
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /** How many "recently added" servers the directory home page shows. */
 private const val MAX_RECOMMENDATION_COUNT = 5
@@ -182,7 +182,7 @@ internal class DirectoryServerOptionsSheet : AppBottomSheet() {
             itemView.findViewById<TextView>(R.id.select_component_sheet_item_description).visibility = View.GONE
             // Fresco cannot decode a VectorDrawable through setActualImageResource; the hierarchy
             // resolves it through Resources instead, which can.
-            itemView.findViewById<SimpleDraweeView>(R.id.select_component_sheet_item_icon)
+            itemView.findViewById<VitoImageView>(R.id.select_component_sheet_item_icon)
                 .hierarchy.setPlaceholderImage(data.iconRes)
             itemView.setOnClickListener {
                 onSelected?.invoke(data)

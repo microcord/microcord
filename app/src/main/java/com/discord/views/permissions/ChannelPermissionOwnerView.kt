@@ -2,7 +2,6 @@ package com.discord.views.permissions
 
 import android.content.Context
 import android.graphics.drawable.ColorDrawable
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
@@ -14,10 +13,7 @@ import androidx.core.graphics.drawable.DrawableCompat
 import com.discord.R
 import com.discord.utilities.color.ColorCompat
 import com.discord.widgets.channels.permissions.PermissionOwner
-import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.view.SimpleDraweeView
-import com.facebook.imagepipeline.request.ImageRequestBuilder
-import java.util.Locale
+import com.discord.views.VitoImageView
 import com.discord.utilities.user.UserUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.icon.IconUtils
@@ -26,7 +22,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
     ConstraintLayout(context, attrs) {
     private val crown: ImageView
     private val description: TextView
-    private val image: SimpleDraweeView
+    private val image: VitoImageView
     private val name: TextView
 
     init {
@@ -48,7 +44,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         val role = owner.role
         val shield = requireNotNull(ContextCompat.getDrawable(context, R.drawable.ic_person_shield_24dp)).mutate()
         DrawableCompat.setTint(shield, role.color.takeIf { it != 0 } ?: ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal))
-        image.controller = null
+        image.release()
         image.hierarchy.setPlaceholderImage(shield)
         name.text = role.name
         description.setText(
@@ -65,11 +61,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
             "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension?size=32"
         } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
         image.hierarchy.setPlaceholderImage(ColorDrawable(0))
-        image.controller = Fresco.newDraweeControllerBuilder()
-            .setOldController(image.controller)
-            .setImageRequest(ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).build())
-            .setAutoPlayAnimations(true)
-            .build()
+        image.setImageURI(url)
         name.text = user.getDisplayName(owner.nickname)
         description.text = user.username + UserUtils.discriminatorSuffix(user.discriminator)
         crown.visibility = if (owner.isOwner) View.VISIBLE else View.GONE

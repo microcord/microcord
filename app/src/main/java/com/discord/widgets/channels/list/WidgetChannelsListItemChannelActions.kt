@@ -48,7 +48,7 @@ import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.stage.StageChannelJoinHelper
 import com.discord.widgets.stage.sheet.WidgetEndStageBottomSheet
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import com.discord.plugins.PluginContextMenuHost
@@ -66,7 +66,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
     override fun getContentViewResId(): Int = R.layout.widget_channels_list_item_actions
 
-    private lateinit var icon: SimpleDraweeView
+    private lateinit var icon: VitoImageView
     private lateinit var title: TextView
     private lateinit var profile: TextView
     private lateinit var markAsRead: TextView

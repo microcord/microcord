@@ -17,7 +17,7 @@ import com.discord.utilities.drawable.setCompoundDrawablesCompat
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.GifItem
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.SuggestedTermsItem
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.flexbox.FlexboxLayout
 
 /** The two row shapes the GIF grid can hold. */
@@ -31,7 +31,7 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
      */
     class Gif(itemView: View) : GifViewHolder(itemView) {
 
-        private val image: SimpleDraweeView = itemView.findViewById(R.id.gif_item_image)
+        private val image: VitoImageView = itemView.findViewById(R.id.gif_item_image)
         private val favorite: ImageView = itemView.findViewById(R.id.gif_item_favorite)
 
         init {

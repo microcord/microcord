@@ -30,7 +30,7 @@ import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.sticker.StickerView
 import com.discord.widgets.home.WidgetHome
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import java.lang.ref.WeakReference
 import kotlin.reflect.KClass
 
@@ -232,8 +232,8 @@ object NoticePopup {
         noticeIconTopRight: Drawable?,
         onClickTopRightIcon: (View) -> Unit,
     ) {
-        val icon = container.findViewById<SimpleDraweeView>(R.id.popup_icon)
-        val attachment = container.findViewById<SimpleDraweeView>(R.id.popup_attachment)
+        val icon = container.findViewById<VitoImageView>(R.id.popup_icon)
+        val attachment = container.findViewById<VitoImageView>(R.id.popup_attachment)
         val body = container.findViewById<SimpleDraweeSpanTextView>(R.id.popup_body)
         val closeButton = container.findViewById<ImageView>(R.id.popup_close_btn)
         val sticker = container.findViewById<StickerView>(R.id.popup_sticker)

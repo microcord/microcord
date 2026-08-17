@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/drawable_collectible_tile" android:foreground="?attr/selectableItemBackground">
-    <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/collectible_tile_image" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_margin="8dp" app:actualImageScaleType="fitCenter"/>
+    <com.discord.views.VitoImageView android:id="@+id/collectible_tile_image" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_margin="8dp" app:actualImageScaleType="fitCenter"/>
     <TextView android:id="@+id/collectible_tile_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="center" android:gravity="center" android:paddingStart="4dp" android:paddingEnd="4dp" android:textColor="?attr/colorHeaderPrimary" android:textSize="13sp" android:maxLines="2" android:visibility="gone" style="@style/UiKit.TextView.Semibold"/>
     <ImageView android:id="@+id/collectible_tile_lock" android:layout_width="16dp" android:layout_height="16dp" android:layout_gravity="top|end" android:layout_margin="6dp" android:src="@drawable/ic_channel_lock_16dp" android:visibility="gone" android:importantForAccessibility="no"/>
 </FrameLayout>

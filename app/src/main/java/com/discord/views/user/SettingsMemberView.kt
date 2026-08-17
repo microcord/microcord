@@ -17,9 +17,9 @@ import com.discord.views.ThemedColor
 import com.discord.views.UsernameView
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.generic.RoundingParams
+import com.discord.utilities.view.text.SimpleDraweeSpanTextView
+import com.discord.views.VitoImageView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
-import com.facebook.drawee.span.SimpleDraweeSpanTextView
-import com.facebook.drawee.view.SimpleDraweeView
 import java.util.Locale
 import com.discord.utilities.user.UserUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -28,7 +28,7 @@ class SettingsMemberView constructor(
     context: Context,
     attrs: AttributeSet?,
 ) : ConstraintLayout(context, attrs) {
-    private val largeAvatar: SimpleDraweeView
+    private val largeAvatar: VitoImageView
     private val memberSubtitle: SimpleDraweeSpanTextView
     private val memberTitle: UsernameView
     private var avatarBackgroundColor = ThemedColor.resolve(context, R.attr.colorBackgroundPrimary)
@@ -159,7 +159,7 @@ internal fun avatarUrl(user: User, guildMember: GuildMember?, size: Int? = null,
  * the controller.
  */
 internal fun setAvatar(
-    view: SimpleDraweeView,
+    view: VitoImageView,
     url: String,
     @Suppress("UNUSED_PARAMETER") animate: Boolean = true,
     resizePx: Int? = null,

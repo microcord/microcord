@@ -9,7 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.i18n.FormatUtils
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import java.text.DateFormat
 import java.util.Date
@@ -36,7 +36,7 @@ class WidgetSettingsGiftingOutboundPromosAdapter(
     ) {
         private val button: MaterialButton = itemView.findViewById(R.id.giftPromoButton)
         private val description: TextView = itemView.findViewById(R.id.giftPromoDescription)
-        private val image: SimpleDraweeView = itemView.findViewById(R.id.giftPromoImage)
+        private val image: VitoImageView = itemView.findViewById(R.id.giftPromoImage)
         private val moreDetails: TextView = itemView.findViewById(R.id.giftPromoMoreDetails)
         private val title: TextView = itemView.findViewById(R.id.giftPromoTitle)
         private lateinit var item: SettingsGiftingViewModel.OutboundPromoItem

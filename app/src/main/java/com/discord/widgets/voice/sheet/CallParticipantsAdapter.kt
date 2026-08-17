@@ -26,7 +26,7 @@ import com.discord.views.PileView
 import com.discord.views.StreamPreviewView
 import com.discord.views.VoiceUserView
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventItemView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 
 /**
@@ -195,7 +195,7 @@ class CallParticipantsAdapter @JvmOverloads constructor(
         R.layout.voice_user_list_item_embedded_activity,
         adapter,
     ) {
-        private val appIcon: SimpleDraweeView = itemView.findViewById(R.id.app_icon)
+        private val appIcon: VitoImageView = itemView.findViewById(R.id.app_icon)
         private val appName: TextView = itemView.findViewById(R.id.app_name)
         private val clickableContainer: ConstraintLayout =
             itemView.findViewById(R.id.clickable_container)

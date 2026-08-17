@@ -16,7 +16,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.user.User
 import com.discord.models.domain.ModelGuildTemplate
 import com.discord.models.domain.ModelInvite
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.i18n.i18nRender
 
 class AuthInviteInfoView @JvmOverloads constructor(
@@ -24,7 +24,7 @@ class AuthInviteInfoView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : RelativeLayout(context, attrs, defStyleAttr) {
-    private val guildAvatar: SimpleDraweeView
+    private val guildAvatar: VitoImageView
     private val guildName: TextView
     private val invitedText: TextView
     private val templateIcon: ImageView

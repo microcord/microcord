@@ -23,7 +23,7 @@ import com.discord.models.presence.Presence
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.views.StatusView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import rx.Observable
 import rx.Subscription
@@ -223,7 +223,7 @@ class WidgetGroupDmPickerDialog : DialogFragment() {
                     text = recipient.presence?.activityText().orEmpty()
                     visibility = if (text.isBlank()) View.GONE else View.VISIBLE
                 }
-                itemView.findViewById<SimpleDraweeView>(R.id.friends_list_item_avatar)
+                itemView.findViewById<VitoImageView>(R.id.friends_list_item_avatar)
                     .setImageURI(userAvatar(user))
                 itemView.findViewById<View>(R.id.friend_container).setOnClickListener { click(recipient) }
                 itemView.contentDescription = user.username

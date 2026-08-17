@@ -22,7 +22,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
 
-            <com.facebook.drawee.view.SimpleDraweeView
+            <com.discord.views.VitoImageView
                 android:id="@+id/app_launcher_activity_image"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

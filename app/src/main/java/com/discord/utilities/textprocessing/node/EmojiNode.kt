@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.drawable.ColorDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
+import android.text.style.ImageSpan
+import androidx.core.content.res.ResourcesCompat
 import com.discord.R
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.simpleast.core.node.TextNode
@@ -75,19 +77,27 @@ class EmojiNode<T : EmojiNode.RenderContext>(
                 (renderContext as? SpoilerNode.RenderContext)?.spoilerColorRes
                     ?: ColorCompat.getThemedColor(context, R.attr.theme_chat_spoiler_bg),
             )
-            draweeBuilder.setVitoSpan(
-                context = context,
-                url = url,
-                start = start,
-                end = end,
-                width = renderWidth,
-                height = renderHeight,
-                alignment = alignment,
-                autoPlay = isRevealed,
-                placeholder = ColorDrawable(TRANSPARENT),
-                overlay = overlay,
-                scaleType = ScalingUtils.ScaleType.FIT_CENTER,
-            )
+            val resId = if (url.startsWith("res:///")) url.removePrefix("res:///").toIntOrNull() ?: 0 else 0
+            if (resId != 0) {
+                val drawable = ResourcesCompat.getDrawable(context.resources, resId, null)?.mutate()
+                if (drawable != null) {
+                    drawable.setBounds(0, 0, renderWidth, renderHeight)
+                    builder.setSpan(ImageSpan(drawable, alignment), start, end + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            } else {
+                draweeBuilder.setVitoSpan(
+                    context = context,
+                    url = url,
+                    start = start,
+                    end = end,
+                    width = renderWidth,
+                    height = renderHeight,
+                    alignment = alignment,
+                    autoPlay = isRevealed,
+                    overlay = overlay,
+                    scaleType = ScalingUtils.ScaleType.FIT_CENTER,
+                )
+            }
         }
 
         if (content.isEmpty() || start > end) return
@@ -117,7 +127,6 @@ class EmojiNode<T : EmojiNode.RenderContext>(
 
         private const val EMOJI_SIZE_DP = 16
         private const val JUMBOIFY_SCALE_FACTOR = 3
-        private const val TRANSPARENT = 0
 
         /** `BetterImageSpan` alignments used by `DraweeSpanStringBuilder`. */
         private const val ALIGN_BASELINE = 1

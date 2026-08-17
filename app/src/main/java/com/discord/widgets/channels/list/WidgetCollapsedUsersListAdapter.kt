@@ -13,7 +13,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.channels.list.items.CollapsedUser
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * The overlapping avatar pile used wherever a small group of users has to fit in one row — a voice
@@ -57,7 +57,7 @@ class WidgetCollapsedUsersListAdapter(
     ) : MGRecyclerViewHolder<WidgetCollapsedUsersListAdapter, CollapsedUser>(layoutResId, adapter) {
 
         private val count: TextView = itemView.findViewById(R.id.widget_collapsed_user_count)
-        private val avatar: SimpleDraweeView =
+        private val avatar: VitoImageView =
             itemView.findViewById(R.id.widget_collapsed_user_imageview)
 
         override fun onConfigure(position: Int, data: CollapsedUser) {

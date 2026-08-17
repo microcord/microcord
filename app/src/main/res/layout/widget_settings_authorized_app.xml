@@ -7,7 +7,7 @@
         <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
 
             <LinearLayout android:orientation="vertical" android:gravity="center_horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingLeft="16dp" android:paddingTop="24dp" android:paddingRight="16dp" android:paddingBottom="8dp">
-                <com.facebook.drawee.view.SimpleDraweeView android:id="@+id/authorized_app_icon" android:layout_width="64dp" android:layout_height="64dp" android:importantForAccessibility="no" app:placeholderImage="?attr/ic_game_icon_placeholder" app:roundedCornerRadius="12dp"/>
+                <com.discord.views.VitoImageView android:id="@+id/authorized_app_icon" android:layout_width="64dp" android:layout_height="64dp" android:importantForAccessibility="no" app:placeholderImage="?attr/ic_game_icon_placeholder" app:roundedCornerRadius="12dp"/>
                 <TextView android:textColor="?attr/colorTextMuted" android:id="@+id/authorized_app_authorized_on" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" style="@style/UiKit.TextView.Subtext"/>
                 <TextView android:textColor="?attr/colorHeaderSecondary" android:id="@+id/authorized_app_description" android:gravity="center" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:visibility="gone" style="@style/UiKit.TextView.Medium"/>
             </LinearLayout>

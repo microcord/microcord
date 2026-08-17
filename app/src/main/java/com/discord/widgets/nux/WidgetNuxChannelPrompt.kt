@@ -26,7 +26,7 @@ import com.discord.utilities.view.validators.Input
 import com.discord.utilities.view.validators.ValidationManager
 import com.discord.views.LoadingButton
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.textfield.TextInputLayout
 
 /**
@@ -38,7 +38,7 @@ import com.google.android.material.textfield.TextInputLayout
  */
 class WidgetNuxChannelPrompt : AppFragment(R.layout.widget_nux_channel_prompt) {
 
-    private lateinit var guildIcon: SimpleDraweeView
+    private lateinit var guildIcon: VitoImageView
     private lateinit var guildIconName: TextView
     private lateinit var guildName: TextView
     private lateinit var topicInput: TextInputLayout

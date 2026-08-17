@@ -30,7 +30,7 @@ import com.discord.views.AvatarDecorationView
 import com.discord.views.GuildTagView
 import com.discord.views.NameplateView
 import com.discord.widgets.user.profile.ProfileEffectView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import androidx.core.widget.doAfterTextChanged
 import com.discord.R
 import com.discord.app.AppFragment
@@ -101,7 +101,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var avatarDecorationHeader: TextView
     private lateinit var nameplateHeader: TextView
     private lateinit var avatarDecorationCard: CardView
-    private lateinit var avatarDecorationPreviewAvatar: SimpleDraweeView
+    private lateinit var avatarDecorationPreviewAvatar: VitoImageView
     private lateinit var avatarDecorationPreview: AvatarDecorationView
     private lateinit var avatarDecorationValue: TextView
     private lateinit var nameplateCard: CardView
@@ -112,7 +112,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private lateinit var nameplateValue: TextView
     private lateinit var primaryGuildHeader: TextView
     private lateinit var primaryGuildCard: CardView
-    private lateinit var primaryGuildIcon: SimpleDraweeView
+    private lateinit var primaryGuildIcon: VitoImageView
     private lateinit var primaryGuildValue: TextView
     private lateinit var primaryGuildTagPreview: GuildTagView
     private lateinit var save: FloatingActionButton

@@ -49,7 +49,7 @@ import com.discord.widgets.guilds.onboarding.WidgetChannelsAndRoles
 import com.discord.widgets.message_requests.WidgetMessageRequests
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.CollapsingToolbarLayout
 import com.discord.widgets.servers.member_verification.MemberVerificationPendingDialog
@@ -70,7 +70,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
     private lateinit var container: RoundedCoordinatorLayout
     private lateinit var appBarLayout: CustomAppBarLayout
     private lateinit var collapsingToolbar: CollapsingToolbarLayout
-    private lateinit var banner: SimpleDraweeView
+    private lateinit var banner: VitoImageView
     private lateinit var bannerForeground: FrameLayout
     private lateinit var header: TextView
     private lateinit var privateChannelsHeader: Toolbar

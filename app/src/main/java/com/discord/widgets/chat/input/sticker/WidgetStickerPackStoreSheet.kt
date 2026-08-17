@@ -18,7 +18,7 @@ import com.discord.widgets.stickers.StickerPremiumUpsellDialog
 import com.discord.widgets.stickers.StickerPurchaseLocation
 import com.discord.widgets.stickers.StickerSendability
 import com.discord.widgets.stickers.WidgetStickerPackDetailsDialog
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.subscriptions.CompositeSubscription
 
 /**
@@ -39,7 +39,7 @@ class WidgetStickerPackStoreSheet : AppBottomSheet() {
         StickerPackStoreSheetViewModel(sticker)
     }
 
-    private lateinit var banner: SimpleDraweeView
+    private lateinit var banner: VitoImageView
     private lateinit var recycler: RecyclerView
     private lateinit var buyButtonContainer: View
     private lateinit var buyButton: LoadingButton

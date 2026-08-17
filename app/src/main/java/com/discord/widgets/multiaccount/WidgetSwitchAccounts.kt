@@ -25,7 +25,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.ui
 import com.discord.widgets.notice.WidgetNoticeDialog
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 
@@ -221,7 +221,7 @@ class WidgetSwitchAccounts : AppBottomSheet() {
         }
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            private val avatar: SimpleDraweeView = view.findViewById(R.id.switch_accounts_item_avatar)
+            private val avatar: VitoImageView = view.findViewById(R.id.switch_accounts_item_avatar)
             private val name: TextView = view.findViewById(R.id.switch_accounts_item_name)
             private val hint: TextView = view.findViewById(R.id.switch_accounts_item_hint)
             private val status: ImageView = view.findViewById(R.id.switch_accounts_item_status)

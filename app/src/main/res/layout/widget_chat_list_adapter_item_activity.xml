@@ -19,7 +19,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <com.facebook.drawee.view.SimpleDraweeView
+        <com.discord.views.VitoImageView
             android:id="@+id/activity_art"
             android:layout_width="match_parent"
             android:layout_height="144dp"
@@ -36,7 +36,7 @@
             android:paddingTop="12dp"
             android:paddingEnd="16dp">
 
-            <com.facebook.drawee.view.SimpleDraweeView
+            <com.discord.views.VitoImageView
                 android:id="@+id/activity_icon"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
@@ -84,20 +84,20 @@
                 android:layout_weight="1"
                 android:contentDescription="@string/embedded_activity_participants">
 
-                <com.facebook.drawee.view.SimpleDraweeView
+                <com.discord.views.VitoImageView
                     android:id="@+id/activity_avatar_1"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     app:roundAsCircle="true" />
 
-                <com.facebook.drawee.view.SimpleDraweeView
+                <com.discord.views.VitoImageView
                     android:id="@+id/activity_avatar_2"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_marginStart="24dp"
                     app:roundAsCircle="true" />
 
-                <com.facebook.drawee.view.SimpleDraweeView
+                <com.discord.views.VitoImageView
                     android:id="@+id/activity_avatar_3"
                     android:layout_width="32dp"
                     android:layout_height="32dp"

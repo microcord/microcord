@@ -19,7 +19,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.time.Clock
 import com.discord.widgets.channels.list.WidgetCollapsedUsersListAdapter
 import com.discord.widgets.channels.list.items.CollapsedUser
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import kotlin.math.min
 
@@ -31,9 +31,9 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
 ) : LinearLayout(context, attrs, defStyleAttr, defStyleRes) {
     private val actionButton: MaterialButton
     private val applicationName: TextView
-    private val avatar: SimpleDraweeView
-    private val avatarStatus: SimpleDraweeView
-    private val cover: SimpleDraweeView
+    private val avatar: VitoImageView
+    private val avatarStatus: VitoImageView
+    private val cover: VitoImageView
     private val header: TextView
     private val subtext: TextView
     private val userAdapter: WidgetCollapsedUsersListAdapter

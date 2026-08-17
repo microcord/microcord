@@ -3,7 +3,6 @@ package com.discord.views.user
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
-import android.net.Uri
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -22,10 +21,8 @@ import com.discord.utilities.streams.StreamContext
 import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.discord.views.ThemedColor
-import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.facebook.imagepipeline.request.BasePostprocessor
-import com.facebook.imagepipeline.request.ImageRequestBuilder
 import kotlin.math.max
 
 class UserAvatarPresenceView @JvmOverloads constructor(
@@ -48,10 +45,10 @@ class UserAvatarPresenceView @JvmOverloads constructor(
         ) : this(user, presence, null, showPresence, guildMember)
     }
 
-    private val avatar: SimpleDraweeView
+    private val avatar: VitoImageView
     private val avatarDecoration: AvatarDecorationView
     private val avatarCutout: ImageView
-    private val staticAvatar: SimpleDraweeView
+    private val staticAvatar: VitoImageView
     private val status: StatusView
     private var cutoutSpacePx = 0
     private var onAvatarBitmapLoadedListener: (Bitmap, String?) -> Unit = { _, _ -> }
@@ -147,21 +144,18 @@ class UserAvatarPresenceView @JvmOverloads constructor(
         status.setCornerRadius(cornerRadius)
     }
 
-    private fun setAvatar(view: SimpleDraweeView, url: String, animate: Boolean, notify: Boolean) {
-        val request = ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).apply {
-            if (notify) {
-                postprocessor = object : BasePostprocessor() {
+    private fun setAvatar(view: VitoImageView, url: String, animate: Boolean, notify: Boolean) {
+        view.show(
+            listOf(url),
+            autoPlay = animate,
+            transform = if (!notify) null else { builder ->
+                builder.postprocessor = object : BasePostprocessor() {
                     override fun process(bitmap: Bitmap) {
                         onAvatarBitmapLoadedListener(bitmap.copy(Bitmap.Config.ARGB_8888, false), url)
                     }
                 }
-            }
-        }.build()
-        view.controller = Fresco.newDraweeControllerBuilder()
-            .setOldController(view.controller)
-            .setImageRequest(request)
-            .setAutoPlayAnimations(animate)
-            .build()
+            },
+        )
     }
 
     private fun View.resize(size: Int) {

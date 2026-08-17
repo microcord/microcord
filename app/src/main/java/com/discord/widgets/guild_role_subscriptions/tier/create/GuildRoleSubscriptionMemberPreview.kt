@@ -13,7 +13,7 @@ import com.discord.api.role.GuildRole
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.views.ThemedColor
 import com.discord.widgets.roles.RoleIconView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class GuildRoleSubscriptionMemberPreview @JvmOverloads constructor(
     context: Context,
@@ -25,7 +25,7 @@ class GuildRoleSubscriptionMemberPreview @JvmOverloads constructor(
 
     init {
         LayoutInflater.from(context).inflate(R.layout.widget_chat_list_adapter_item_text, this, true)
-        val avatar = requireNotNull<SimpleDraweeView>(findViewById(R.id.chat_list_adapter_item_text_avatar))
+        val avatar = requireNotNull<VitoImageView>(findViewById(R.id.chat_list_adapter_item_text_avatar))
         name = requireNotNull(findViewById(R.id.chat_list_adapter_item_text_name))
         roleIcon = requireNotNull(findViewById(R.id.chat_list_adapter_item_text_role_icon))
         requireNotNull<TextView>(findViewById(R.id.chat_list_adapter_item_text_tag)).visibility = View.GONE

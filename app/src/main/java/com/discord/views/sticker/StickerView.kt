@@ -22,7 +22,7 @@ import com.discord.utilities.file.DownloadUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.stickers.StickerUtils
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.linecorp.apng.ApngDrawable
 import rx.Subscription
 import rx.schedulers.Schedulers
@@ -31,7 +31,7 @@ class StickerView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
-    private val imageView: SimpleDraweeView
+    private val imageView: VitoImageView
     private val lottieView: RLottieImageView
     private val placeholder: ImageView
     private var sticker: BaseSticker? = null

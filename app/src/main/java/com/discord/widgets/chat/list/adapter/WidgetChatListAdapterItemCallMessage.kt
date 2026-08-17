@@ -26,7 +26,7 @@ import com.discord.widgets.channels.list.items.CollapsedUser
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import rx.Observable
 import rx.Subscription
 import java.util.concurrent.TimeUnit
@@ -258,7 +258,7 @@ class WidgetChatListAdapterItemCallMessage(
     }
 
     private class ParticipantViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.widget_collapsed_user_imageview)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.widget_collapsed_user_imageview)
         private val count: TextView = itemView.findViewById(R.id.widget_collapsed_user_count)
 
         fun bind(item: CollapsedUser) {

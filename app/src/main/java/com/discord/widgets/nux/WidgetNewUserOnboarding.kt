@@ -36,7 +36,7 @@ import com.discord.widgets.contact_sync.ContactSyncMode
 import com.discord.widgets.contact_sync.ContactSyncAnalytics
 import com.discord.widgets.contact_sync.WidgetContactSync
 import com.discord.widgets.guilds.invite.WidgetGuildInvite
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.discord.utilities.view.extensions.getTextOrEmpty
 
 /** Current Android new-user flow recovered from `RedesignNewUserManager`. */
@@ -165,7 +165,7 @@ class WidgetNewUserOnboarding : AppFragment(R.layout.widget_new_user_onboarding)
 
     private fun bindDefaultAvatars(container: LinearLayout) {
         repeat(DEFAULT_AVATAR_COUNT) { index ->
-            val image = SimpleDraweeView(requireContext()).apply {
+            val image = VitoImageView(requireContext()).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 contentDescription = getString(R.string.avatar_in_onboarding_select_default_avatar)
                 setImageURI(IconUtils.getDefaultAvatar(index))

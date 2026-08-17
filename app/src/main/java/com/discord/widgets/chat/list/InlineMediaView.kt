@@ -22,7 +22,7 @@ import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
@@ -59,7 +59,7 @@ class InlineMediaView @JvmOverloads constructor(
 ) : CardView(context, attrs, defStyleAttr), View.OnAttachStateChangeListener, AppComponent {
     private val playerStub: ViewStub
     private var playerView: PlayerView? = null
-    private val imagePreview: SimpleDraweeView
+    private val imagePreview: VitoImageView
     private val gifIndicator: ImageView
     private val playButton: ImageView
     private val loadingIndicator: ProgressBar

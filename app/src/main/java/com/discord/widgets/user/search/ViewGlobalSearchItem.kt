@@ -24,7 +24,7 @@ import com.discord.utilities.images.MGImages
 import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import com.discord.views.GuildView
 import com.discord.views.StatusView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class ViewGlobalSearchItem @JvmOverloads constructor(
     context: Context,
@@ -34,7 +34,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
     private val description: TextView
     private val group: TextView
     private val guildIcon: GuildView
-    private val icon: SimpleDraweeView
+    private val icon: VitoImageView
     private val mentions: TextView
     private val name: TextView
     private val unread: ImageView
@@ -72,7 +72,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
             visibility = if (data.channel.type == Channel.DM) View.VISIBLE else View.GONE
             setPresence(data.presence)
         }
-        icon.controller = null
+        icon.release()
         when (data.channel.type) {
             Channel.DM, Channel.GROUP_DM -> setPrivateChannelIcon(data.channel)
             Channel.GUILD_VOICE, Channel.GUILD_STAGE_VOICE -> icon.setActualImageResource(R.drawable.ic_channel_voice_grey_18dp)

@@ -9,7 +9,7 @@ import com.discord.models.guild.UserGuildMember
 import com.discord.models.user.CoreUser
 import com.discord.utilities.icon.IconUtils
 import com.discord.views.CutoutView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class UserSummaryView constructor(
     context: Context,
@@ -51,7 +51,7 @@ class UserSummaryView constructor(
             } else {
                 CutoutView.EndOverlap(0)
             }
-            val avatar = requireNotNull<SimpleDraweeView>(cutout.findViewById(R.id.avatar))
+            val avatar = requireNotNull<VitoImageView>(cutout.findViewById(R.id.avatar))
             val member = members[index]
             val url = avatarUrl(
                 member.user,

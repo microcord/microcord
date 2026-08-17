@@ -11,7 +11,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.linecorp.apng.ApngDrawable
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CancellationException
@@ -42,7 +42,7 @@ class AvatarDecorationView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
 
-    private var image: SimpleDraweeView? = null
+    private var image: VitoImageView? = null
     private var animatedImage: ImageView? = null
     private val changeDetector = MGImages.DistinctChangeDetector()
     private var targetId = View.NO_ID
@@ -141,7 +141,7 @@ class AvatarDecorationView @JvmOverloads constructor(
         layoutToTarget()
     }
 
-    private fun staticLayer(): SimpleDraweeView = image ?: SimpleDraweeView(context).also {
+    private fun staticLayer(): VitoImageView = image ?: VitoImageView(context).also {
         image = it
         addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }

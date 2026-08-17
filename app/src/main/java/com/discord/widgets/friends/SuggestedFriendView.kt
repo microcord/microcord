@@ -1,7 +1,6 @@
 package com.discord.widgets.friends
 
 import android.content.Context
-import android.net.Uri
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.TextView
@@ -9,16 +8,14 @@ import androidx.appcompat.widget.AppCompatImageView
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.discord.R
 import com.discord.utilities.icon.IconUtils
-import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.view.SimpleDraweeView
-import com.facebook.imagepipeline.request.ImageRequestBuilder
+import com.discord.views.VitoImageView
 
 class SuggestedFriendView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
-    private val avatar: SimpleDraweeView
+    private val avatar: VitoImageView
     private val decline: AppCompatImageView
     private val publicName: TextView
     private val send: AppCompatImageView
@@ -43,15 +40,7 @@ class SuggestedFriendView @JvmOverloads constructor(
             }
             else -> IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(userId, discriminator))
         }
-        avatar.controller = if (url == null) {
-            null
-        } else {
-            Fresco.newDraweeControllerBuilder()
-                .setOldController(avatar.controller)
-                .setImageRequest(ImageRequestBuilder.newBuilderWithSource(Uri.parse(url)).build())
-                .setAutoPlayAnimations(true)
-                .build()
-        }
+        if (url == null) avatar.release() else avatar.setImageURI(url)
     }
 
     fun setUsername(username: String) {

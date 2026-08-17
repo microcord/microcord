@@ -41,7 +41,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.views.StreamPreviewView
 import com.discord.widgets.user.profile.ProfileThemeColors
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.card.MaterialCardView
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -62,8 +62,8 @@ import rx.Subscription
  */
 open class ViewHolderUserRichPresence(
     protected val root: View,
-    protected val richPresenceImageLarge: SimpleDraweeView,
-    protected val richPresenceImageSmall: SimpleDraweeView?,
+    protected val richPresenceImageLarge: VitoImageView,
+    protected val richPresenceImageSmall: VitoImageView?,
     protected val richPresenceHeader: TextView,
     protected val richPresenceTitle: TextView,
     protected val richPresenceDetails: TextView?,

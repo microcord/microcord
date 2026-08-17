@@ -8,16 +8,15 @@ import com.discord.models.domain.emoji.toCodePoints
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.textprocessing.EmojiImages
-import com.facebook.drawee.backends.pipeline.Fresco
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import kotlin.math.roundToInt
 
-internal fun SimpleDraweeView.setPollEmoji(
+internal fun VitoImageView.setPollEmoji(
     emoji: MessageReactionEmoji?,
 ) {
     if (emoji == null) {
         visibility = View.GONE
-        controller = null
+        release()
         return
     }
     visibility = View.VISIBLE
@@ -26,13 +25,9 @@ internal fun SimpleDraweeView.setPollEmoji(
     val uri = emoji.id?.toLongOrNull()?.let { id ->
         EmojiImages.customEmojiUrl(id, emoji.animated && animate, size)
     } ?: ModelEmojiUnicode.getImageUri(emoji.name.orEmpty().toCodePoints(), context)
-    controller = Fresco.newDraweeControllerBuilder()
-        .setUri(uri)
-        .setOldController(controller)
-        .setAutoPlayAnimations(animate)
-        .build()
+    show(listOf(uri), autoPlay = animate)
 }
 
-internal fun SimpleDraweeView.setPollEmoji(emoji: PollEmoji?) = setPollEmoji(
+internal fun VitoImageView.setPollEmoji(emoji: PollEmoji?) = setPollEmoji(
     emoji?.let { MessageReactionEmoji(it.id?.toString(), it.name, it.animated == true) },
 )

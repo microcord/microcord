@@ -25,7 +25,7 @@ import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.GiftEntry
 import com.discord.widgets.settings.account.WidgetSettingsAccount
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.Subscription
@@ -46,10 +46,10 @@ class WidgetChatListAdapterItemGift(
     adapter: WidgetChatListAdapter,
 ) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_gift, adapter) {
 
-    private val imageBackground: SimpleDraweeView =
+    private val imageBackground: VitoImageView =
         itemView.findViewById(R.id.item_gift_image_background)
     private val header: TextView = itemView.findViewById(R.id.item_gift_header)
-    private val image: SimpleDraweeView = itemView.findViewById(R.id.item_gift_image)
+    private val image: VitoImageView = itemView.findViewById(R.id.item_gift_image)
     private val name: TextView = itemView.findViewById(R.id.item_gift_name)
     private val expires: TextView = itemView.findViewById(R.id.item_gift_expires)
     private val subtext: TextView = itemView.findViewById(R.id.item_gift_subtext)

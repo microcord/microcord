@@ -5,7 +5,7 @@ import com.discord.utilities.dimen.pixelsToDp
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class EmojiViewHolder(adapter: WidgetChatListActionsEmojisAdapter) :
     MGRecyclerViewHolder<WidgetChatListActionsEmojisAdapter, EmojiItem>(
@@ -14,7 +14,7 @@ class EmojiViewHolder(adapter: WidgetChatListActionsEmojisAdapter) :
     ) {
     override fun onConfigure(position: Int, data: EmojiItem) {
         val item = data as EmojiItem.EmojiData
-        val image = itemView as SimpleDraweeView
+        val image = itemView as VitoImageView
         val imageSize = IconUtils.getMediaProxySize(
             pixelsToDp(image.layoutParams.width - image.paddingStart - image.paddingEnd) * 2,
         )

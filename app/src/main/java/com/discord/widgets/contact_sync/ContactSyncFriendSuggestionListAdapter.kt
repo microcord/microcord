@@ -11,7 +11,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.widgets.contact_sync.WidgetContactSyncViewModel.Item
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.checkbox.MaterialCheckBox
 
 /**
@@ -41,7 +41,7 @@ class ContactSyncFriendSuggestionListAdapter(
         adapter,
     ) {
         private val container: ConstraintLayout = itemView.findViewById(R.id.friend_suggestion_container)
-        private val avatar: SimpleDraweeView = itemView.findViewById(R.id.friend_suggestion_avatar)
+        private val avatar: VitoImageView = itemView.findViewById(R.id.friend_suggestion_avatar)
         private val name: TextView = itemView.findViewById(R.id.friend_suggestion_name)
         private val discriminator: TextView = itemView.findViewById(R.id.friend_suggestion_discriminator)
         private val nickname: TextView = itemView.findViewById(R.id.friend_suggestion_nickname)

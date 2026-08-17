@@ -13,14 +13,14 @@ import androidx.core.graphics.drawable.DrawableCompat
 import com.discord.R
 import com.discord.api.guild.GuildFeature
 import com.discord.models.guild.Guild
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.chip.Chip
 
 class GuildBoostConfirmationView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : CardView(context, attrs) {
-    private val avatar: SimpleDraweeView
+    private val avatar: VitoImageView
     private val guildName: TextView
     private val previousTier: Chip
     private val newTier: Chip

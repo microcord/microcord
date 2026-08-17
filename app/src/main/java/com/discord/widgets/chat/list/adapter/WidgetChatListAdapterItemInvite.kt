@@ -33,7 +33,7 @@ import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.InviteEntry
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.guilds.invite.requiresApplication
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.Subscription
@@ -50,11 +50,11 @@ class WidgetChatListAdapterItemInvite(
     adapter: WidgetChatListAdapter,
 ) : WidgetChatListAdapterItemInviteBase(R.layout.widget_chat_list_adapter_item_invite, adapter) {
 
-    private val splash: SimpleDraweeView = itemView.findViewById(R.id.item_invite_splash)
+    private val splash: VitoImageView = itemView.findViewById(R.id.item_invite_splash)
     private val splashContainer: RoundedRelativeLayout =
         itemView.findViewById(R.id.item_invite_splash_container)
     private val header: TextView = itemView.findViewById(R.id.item_invite_header)
-    private val image: SimpleDraweeView = itemView.findViewById(R.id.item_invite_image)
+    private val image: VitoImageView = itemView.findViewById(R.id.item_invite_image)
     private val imageText: TextView = itemView.findViewById(R.id.item_invite_image_text)
     private val name: TextView = itemView.findViewById(R.id.item_invite_name)
     private val channelName: TextView = itemView.findViewById(R.id.item_invite_channel_name)

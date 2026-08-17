@@ -14,7 +14,7 @@ import android.widget.ImageView
 import com.discord.api.user.UserProfile
 import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.linecorp.apng.ApngDrawable
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CancellationException
@@ -114,8 +114,8 @@ class ProfileEffectView @JvmOverloads constructor(
         calls.clear()
         scope.cancel()
         scope = newScope()
-        children().filterIsInstance<SimpleDraweeView>().forEach(MGImages::cancelImageRequests)
-        children().filterIsInstance<ImageView>().filterNot { it is SimpleDraweeView }
+        children().filterIsInstance<VitoImageView>().forEach(MGImages::cancelImageRequests)
+        children().filterIsInstance<ImageView>().filterNot { it is VitoImageView }
             .forEach { it.setImageDrawable(null) }
         drawables.forEach {
             it.stop()
@@ -198,7 +198,7 @@ class ProfileEffectView @JvmOverloads constructor(
     }
 
     private fun showStill(url: String) {
-        val image = SimpleDraweeView(context).apply { scaleType = ImageView.ScaleType.FIT_START }
+        val image = VitoImageView(context).apply { scaleType = ImageView.ScaleType.FIT_START }
         addView(image, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         MGImages.setImage(image, url, useSmallCache = false, autoPlayAnimations = false)
     }

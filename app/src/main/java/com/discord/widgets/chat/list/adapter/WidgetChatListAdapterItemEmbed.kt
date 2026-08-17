@@ -60,7 +60,7 @@ import com.discord.widgets.chat.list.InlineMediaView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.media.WidgetMedia
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.card.MaterialCardView
 import rx.Observable
 import rx.Subscription
@@ -93,16 +93,16 @@ class WidgetChatListAdapterItemEmbed(
     private val content: ConstraintLayout = itemView.findViewById(R.id.chat_list_item_embed_content)
     private val divider: View = itemView.findViewById(R.id.chat_list_item_embed_divider)
     private val provider: TextView = itemView.findViewById(R.id.chat_list_item_embed_provider)
-    private val authorIcon: SimpleDraweeView = itemView.findViewById(R.id.chat_list_item_embed_author_icon)
+    private val authorIcon: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_author_icon)
     private val authorText: TextView = itemView.findViewById(R.id.chat_list_item_embed_author_text)
     private val title: LinkifiedTextView = itemView.findViewById(R.id.chat_list_item_embed_title)
     private val description: LinkifiedTextView = itemView.findViewById(R.id.chat_list_item_embed_description)
     private val fields: LinearLayout = itemView.findViewById(R.id.chat_list_item_embed_fields)
     private val imageContainer: CardView = itemView.findViewById(R.id.embed_image_container)
-    private val image: SimpleDraweeView = itemView.findViewById(R.id.chat_list_item_embed_image)
+    private val image: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_image)
     private val imageIcons: ImageView = itemView.findViewById(R.id.chat_list_item_embed_image_icons)
-    private val thumbnail: SimpleDraweeView = itemView.findViewById(R.id.chat_list_item_embed_image_thumbnail)
-    private val footerIcon: SimpleDraweeView = itemView.findViewById(R.id.chat_list_item_embed_footer_icon)
+    private val thumbnail: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_image_thumbnail)
+    private val footerIcon: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_footer_icon)
     private val footerText: TextView = itemView.findViewById(R.id.chat_list_item_embed_footer_text)
     private val spoilerCover: View = itemView.findViewById(R.id.chat_list_item_embed_spoiler)
     private val inlineMedia: InlineMediaView = itemView.findViewById(R.id.embed_inline_media)

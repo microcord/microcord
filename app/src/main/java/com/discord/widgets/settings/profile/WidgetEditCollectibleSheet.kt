@@ -28,7 +28,7 @@ import com.discord.views.AvatarDecorationView
 import com.discord.views.NameplateView
 import com.discord.widgets.user.profile.ProfileFrameView
 import com.discord.widgets.settings.premium.WidgetSettingsPremium
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import java.text.DateFormat
 import java.util.Date
@@ -63,15 +63,15 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
 
     private lateinit var title: TextView
     private lateinit var decorationPreview: FrameLayout
-    private lateinit var avatar: SimpleDraweeView
+    private lateinit var avatar: VitoImageView
     private lateinit var avatarDecoration: AvatarDecorationView
     private lateinit var nameplatePreview: FrameLayout
     private lateinit var effectPreview: FrameLayout
-    private lateinit var effectImage: SimpleDraweeView
+    private lateinit var effectImage: VitoImageView
     private lateinit var framePreview: FrameLayout
     private lateinit var frameView: ProfileFrameView
     private lateinit var nameplateView: NameplateView
-    private lateinit var nameplateAvatar: SimpleDraweeView
+    private lateinit var nameplateAvatar: VitoImageView
     private lateinit var nameplateName: TextView
     private lateinit var name: TextView
     private lateinit var detail: TextView
@@ -292,7 +292,7 @@ class WidgetEditCollectibleSheet : AppBottomSheet() {
     }
 
     private inner class OptionViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val image: SimpleDraweeView = itemView.findViewById(R.id.collectible_tile_image)
+        private val image: VitoImageView = itemView.findViewById(R.id.collectible_tile_image)
         private val label: TextView = itemView.findViewById(R.id.collectible_tile_label)
         private val lock: View = itemView.findViewById(R.id.collectible_tile_lock)
 

@@ -38,7 +38,7 @@ import com.discord.widgets.channels.WidgetChannelSelector
 import com.discord.widgets.settings.SettingsNavigation
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.settings.StatefulViews
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputLayout
 
@@ -95,7 +95,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
     private val binding get() = requireNotNull(_binding)
 
     private lateinit var scroll: ScrollView
-    private lateinit var icon: SimpleDraweeView
+    private lateinit var icon: VitoImageView
     private lateinit var iconText: TextView
     private lateinit var iconLabel: TextView
     private lateinit var iconRemove: TextView
@@ -271,7 +271,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             return
         }
         section.visibility = View.VISIBLE
-        val image = requireView().findViewById<SimpleDraweeView>(R.id.upload_splash)
+        val image = requireView().findViewById<VitoImageView>(R.id.upload_splash)
         val container = requireView().findViewById<View>(R.id.server_settings_overview_upload_splash_container)
         val remove = requireView().findViewById<TextView>(R.id.server_settings_overview_upload_splash_remove)
         val current = state.get(image.id, IconUtils.getGuildSplashUrl(guild, resources.displayMetrics.widthPixels))
@@ -300,7 +300,7 @@ class WidgetServerSettingsOverview : AppFragment(R.layout.widget_server_settings
             return
         }
         section.visibility = View.VISIBLE
-        val image = requireView().findViewById<SimpleDraweeView>(R.id.upload_banner)
+        val image = requireView().findViewById<VitoImageView>(R.id.upload_banner)
         val container = requireView().findViewById<View>(R.id.server_settings_overview_upload_banner_container)
         val remove = requireView().findViewById<TextView>(R.id.server_settings_overview_upload_banner_remove)
         val current = state.get(

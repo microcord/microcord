@@ -22,7 +22,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.view.recycler.MaxHeightRecyclerView
 import com.discord.views.GuildTagView
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * Picks which server's tag is worn next to the name, or none.
@@ -64,7 +64,7 @@ class WidgetPrimaryGuildSheet : AppBottomSheet() {
     ) : RecyclerView.Adapter<Adapter.ViewHolder>() {
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val icon: SimpleDraweeView = view.findViewById(R.id.primary_guild_item_icon)
+            val icon: VitoImageView = view.findViewById(R.id.primary_guild_item_icon)
             val name: TextView = view.findViewById(R.id.primary_guild_item_name)
             val tag: GuildTagView = view.findViewById(R.id.primary_guild_item_tag)
             val radio: RadioButton = view.findViewById(R.id.primary_guild_item_radio)

@@ -22,7 +22,7 @@ import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.images.CollectibleAssets
 import com.discord.utilities.images.MGImages
 import com.facebook.drawee.drawable.ScalingUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.linecorp.apng.ApngDrawable
 import java.io.ByteArrayInputStream
 import java.util.concurrent.CancellationException
@@ -44,7 +44,7 @@ class NameplateView @JvmOverloads constructor(
 
     internal data class AnimationRequest(val key: String, val generation: Int)
 
-    private val image = SimpleDraweeView(context)
+    private val image = VitoImageView(context)
     private val animatedImage = ImageView(context).apply {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         scaleType = ImageView.ScaleType.MATRIX

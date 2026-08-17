@@ -13,7 +13,7 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.view.extensions.setEnabledAlpha
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.botuikit.views.ComponentViewUtils
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.facebook.drawee.generic.RoundingParams
 import com.google.android.material.checkbox.MaterialCheckBox
 
@@ -32,7 +32,7 @@ class SelectComponentBottomSheetItemViewHolder(
 
     private val title: TextView = itemView.findViewById(R.id.select_component_sheet_item_title)
     private val description: TextView = itemView.findViewById(R.id.select_component_sheet_item_description)
-    private val icon: SimpleDraweeView = itemView.findViewById(R.id.select_component_sheet_item_icon)
+    private val icon: VitoImageView = itemView.findViewById(R.id.select_component_sheet_item_icon)
     private val checkbox: MaterialCheckBox = itemView.findViewById(R.id.select_component_sheet_item_selected)
     private val divider: View = itemView.findViewById(R.id.select_component_sheet_item_divider)
     private val dividerIcon: View = itemView.findViewById(R.id.select_component_sheet_item_divider_icon)

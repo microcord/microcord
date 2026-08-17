@@ -45,7 +45,7 @@
                     android:gravity="center"
                     android:orientation="vertical">
 
-                    <com.facebook.drawee.view.SimpleDraweeView
+                    <com.discord.views.VitoImageView
                         android:id="@+id/activity_oauth_user_icon"
                         android:layout_width="56dp"
                         android:layout_height="56dp"
@@ -74,7 +74,7 @@
                     android:gravity="center"
                     android:orientation="vertical">
 
-                    <com.facebook.drawee.view.SimpleDraweeView
+                    <com.discord.views.VitoImageView
                         android:id="@+id/activity_oauth_application_icon"
                         android:layout_width="56dp"
                         android:layout_height="56dp"

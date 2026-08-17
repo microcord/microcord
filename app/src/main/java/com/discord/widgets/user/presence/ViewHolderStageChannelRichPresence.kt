@@ -17,7 +17,7 @@ import com.discord.utilities.presence.stageChannelRichPresencePartyData
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * A stage the user is listening to.
@@ -34,7 +34,7 @@ import com.facebook.drawee.view.SimpleDraweeView
  */
 class ViewHolderStageChannelRichPresence(
     root: View,
-    richPresenceImageLarge: SimpleDraweeView,
+    richPresenceImageLarge: VitoImageView,
     richPresenceHeader: TextView,
     richPresenceTitle: TextView,
     richPresenceDetails: TextView,

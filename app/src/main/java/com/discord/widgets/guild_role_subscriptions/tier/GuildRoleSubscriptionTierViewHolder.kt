@@ -13,7 +13,7 @@ import com.discord.utilities.view.extensions.setTextAndVisibilityBy
 import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionBenefitItemView
 import com.discord.widgets.guild_role_subscriptions.tier.create.GuildRoleSubscriptionMemberPreview
 import com.discord.widgets.stickers.StickerPackFormatting
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /** Renders one [GuildRoleSubscriptionTierAdapterItem]. */
 sealed class GuildRoleSubscriptionTierViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -70,7 +70,7 @@ sealed class GuildRoleSubscriptionTierViewHolder(itemView: View) : RecyclerView.
 
     class PlanDetailsViewHolder(itemView: View) : GuildRoleSubscriptionTierViewHolder(itemView) {
 
-        private val coverImage: SimpleDraweeView =
+        private val coverImage: VitoImageView =
             requireNotNull(itemView.findViewById(R.id.guild_role_subscription_plan_review_cover_image))
         private val description: TextView =
             requireNotNull(itemView.findViewById(R.id.guild_role_subscription_plan_review_description))
@@ -115,7 +115,7 @@ sealed class GuildRoleSubscriptionTierViewHolder(itemView: View) : RecyclerView.
             requireNotNull(itemView.findViewById(R.id.guild_role_subscription_tier_header_description))
         private val price: TextView =
             requireNotNull(itemView.findViewById(R.id.guild_role_subscription_tier_header_price))
-        private val image: SimpleDraweeView =
+        private val image: VitoImageView =
             requireNotNull(itemView.findViewById(R.id.guild_role_subscription_tier_header_image))
 
         override fun bind(item: GuildRoleSubscriptionTierAdapterItem) {

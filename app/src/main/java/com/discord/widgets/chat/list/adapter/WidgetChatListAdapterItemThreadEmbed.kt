@@ -24,7 +24,7 @@ import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.ThreadEmbedEntry
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 /**
  * The thread preview card that hangs off the message which started the thread.
@@ -48,7 +48,7 @@ class WidgetChatListAdapterItemThreadEmbed(
         itemView.findViewById(R.id.thread_embed_messages_count_chevron)
     private val icon: ImageView = itemView.findViewById(R.id.thread_embed_icon)
     private val messageHeader: View = itemView.findViewById(R.id.thread_embed_most_recent_message_header)
-    private val messageAvatar: SimpleDraweeView =
+    private val messageAvatar: VitoImageView =
         itemView.findViewById(R.id.thread_embed_most_recent_message_avatar)
     private val messageName: TextView = itemView.findViewById(R.id.thread_embed_most_recent_message_name)
     private val messageContent: SimpleDraweeSpanTextView =

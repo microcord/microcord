@@ -23,7 +23,7 @@ import com.discord.databinding.WidgetUserSheetBinding
 import com.discord.widgets.user.presence.ViewHolderUserRichPresence
 import com.discord.widgets.user.usersheet.applyUserSheetNoteTheme
 import com.discord.widgets.user.usersheet.UserSheetNoteTheme
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.linecorp.apng.ApngDrawable
@@ -310,7 +310,7 @@ class ProfileThemeLayoutTest {
         val secondaryButton = activityRoot.findViewById<Button>(R.id.rich_presence_secondary_button)
         val holder = ViewHolderUserRichPresence(
             activityRoot,
-            activityRoot.findViewById<SimpleDraweeView>(R.id.rich_presence_image_large),
+            activityRoot.findViewById<VitoImageView>(R.id.rich_presence_image_large),
             activityRoot.findViewById(R.id.rich_presence_image_small),
             activityHeader,
             activityTitle,

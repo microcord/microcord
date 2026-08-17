@@ -10,13 +10,13 @@ import androidx.annotation.MainThread
 import com.discord.R
 import com.discord.stores.StoreApplicationStreamPreviews.StreamPreview
 import com.discord.utilities.streams.StreamContext.Joinability
-import com.facebook.drawee.view.SimpleDraweeView
+import com.discord.views.VitoImageView
 
 class StreamPreviewView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : FrameLayout(context, attrs) {
-    private val image: SimpleDraweeView
+    private val image: VitoImageView
     private val overlay: TextView
     private val caption: TextView
 
