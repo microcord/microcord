@@ -23,12 +23,9 @@ import android.text.TextPaint
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.GestureDetector
-import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.fragment.app.Fragment
@@ -44,6 +41,7 @@ import com.discord.api.sticker.Sticker
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.databinding.FragmentCameraBinding
+import com.discord.databinding.WidgetChatInputGridImageBinding
 import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
 import com.discord.stores.StoreStream
@@ -595,7 +593,7 @@ class WidgetChatInputAttachments(
         override fun getItemId(position: Int) = item(position)?.id ?: RecyclerView.NO_ID
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
-            LayoutInflater.from(parent.context).inflate(com.lytefast.flexinput.R.layout.view_grid_image, parent, false),
+            WidgetChatInputGridImageBinding.inflate(LayoutInflater.from(parent.context), parent, false),
         )
 
         override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(item(position), position)
@@ -660,21 +658,7 @@ class WidgetChatInputAttachments(
 
         fun uri(position: Int): Uri? = item(position)?.uri
 
-        inner class Holder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            private val preview = itemView.findViewById<com.discord.views.VitoImageView>(
-                com.lytefast.flexinput.R.id.content_iv,
-            )
-            private val selected = itemView.findViewById<View>(com.lytefast.flexinput.R.id.item_check_indicator)
-            private val videoIndicator = ImageView(itemView.context).apply {
-                setImageResource(R.drawable.ic_play_arrow_24dp)
-                setBackgroundResource(R.drawable.drawable_circle_black)
-                setPadding(dp(4), dp(4), dp(4), dp(4))
-                visibility = View.GONE
-                (itemView as FrameLayout).addView(
-                    this,
-                    FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER),
-                )
-            }
+        inner class Holder(private val binding: WidgetChatInputGridImageBinding) : RecyclerView.ViewHolder(binding.root) {
             private var thumbnailJob: Job? = null
             private var attachment: Attachment<Any>? = null
 
@@ -691,10 +675,8 @@ class WidgetChatInputAttachments(
                 setSelected(item != null && selection.isSelected(item, position), animate = false)
                 if (item == null) return
                 val isVideo = item.data == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                videoIndicator.visibility = if (isVideo) View.VISIBLE else View.GONE
+                binding.itemVideoIndicator.visibility = if (isVideo) View.VISIBLE else View.GONE
                 if (isVideo) {
-                    preview.setImageURI(null as String?)
-                    preview.hierarchy.setPlaceholderImage(ColorDrawable(Color.DKGRAY))
                     thumbnailJob = scope.launch {
                         val bitmap = withContext(Dispatchers.IO) {
                             runCatching {
@@ -712,23 +694,19 @@ class WidgetChatInputAttachments(
                             }.getOrNull()
                         }
                         if (attachment == item && bitmap != null) {
-                            preview.hierarchy.setPlaceholderImage(
-                                BitmapDrawable(preview.resources, bitmap),
-                                com.facebook.drawee.drawable.ScalingUtils.ScaleType.CENTER_CROP,
-                            )
+                            binding.contentIv.setImageBitmap(bitmap)
                         }
                     }
                 } else {
-                    preview.hierarchy.setPlaceholderImage(ColorDrawable(Color.DKGRAY))
-                    preview.setImageURI(item.uri)
+                    binding.contentIv.setImageURI(item.uri)
                 }
             }
 
             fun setSelected(isSelected: Boolean, animate: Boolean = true) {
-                selected.visibility = if (isSelected) View.VISIBLE else View.GONE
+                binding.itemCheckIndicator.visibility = if (isSelected) View.VISIBLE else View.GONE
                 val scale = if (isSelected) 0.85f else 1f
-                preview.animate().cancel()
-                preview.animate()
+                binding.contentIv.animate().cancel()
+                binding.contentIv.animate()
                     .scaleX(scale)
                     .scaleY(scale)
                     .setDuration(
@@ -741,10 +719,9 @@ class WidgetChatInputAttachments(
                 thumbnailJob?.cancel()
                 thumbnailJob = null
                 attachment = null
-                videoIndicator.visibility = View.GONE
+                binding.itemVideoIndicator.visibility = View.GONE
+                binding.contentIv.release()
             }
-
-            private fun dp(value: Int) = (value * itemView.resources.displayMetrics.density).toInt()
         }
     }
 

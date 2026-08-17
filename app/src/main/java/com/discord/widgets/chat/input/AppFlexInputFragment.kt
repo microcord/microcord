@@ -18,12 +18,12 @@ import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
 import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.google.android.material.tabs.TabLayout
 import com.lytefast.flexinput.fragment.AddContentDialogFragment
-import com.lytefast.flexinput.fragment.FlexInputFragment
+import com.lytefast.flexinput.fragment.FlexInputFragmentCompat
 import com.lytefast.flexinput.managers.KeyboardManager
 import org.xmlpull.v1.XmlPullParser
 
 /** Restores the XML attributes that the public FlexInput build loses on fragment recreation. */
-class AppFlexInputFragment : FlexInputFragment() {
+class AppFlexInputFragment : FlexInputFragmentCompat() {
     private var inflatedFromXml = false
     var onAttachmentsCleared: () -> Unit = {}
 
