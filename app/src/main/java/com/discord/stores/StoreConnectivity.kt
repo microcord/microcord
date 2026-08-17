@@ -38,9 +38,6 @@ class StoreConnectivity(
     private var stateTriggeredDelay: Long = DELAY_EXTENDED
     private var stateTriggeredTimeMillis: Long = clock.currentTimeMillis()
 
-    /** Nothing surfaces before this; see [handleBackgrounded]. */
-    private var earliestVisibleTimeMillis: Long = 0L
-
     private var networkSubscription: Subscription? = null
     private var messagesLoadingSubscription: Subscription? = null
 
@@ -78,17 +75,14 @@ class StoreConnectivity(
     }
 
     /**
-     * The delay budget measures how long the user has been kept waiting, and a backgrounded user is
-     * not waiting: time away must not spend it. Coming forward then buys a further
-     * [DELAY_FOREGROUND_COOLOFF], so a connection that has to re-establish itself gets to do so
-     * before the user is told anything is wrong.
+     * Pauses the remaining delay while backgrounded so time away does not spend it.
      */
     @StoreThread
     fun handleBackgrounded(backgrounded: Boolean) {
-        stateTriggeredTimeMillis = clock.currentTimeMillis()
-        if (!backgrounded) {
-            earliestVisibleTimeMillis = clock.currentTimeMillis() + DELAY_FOREGROUND_COOLOFF
+        if (backgrounded) {
+            stateTriggeredDelay -= getStateActiveMillis()
         }
+        stateTriggeredTimeMillis = clock.currentTimeMillis()
         updateConnectivityState()
     }
 
@@ -113,20 +107,25 @@ class StoreConnectivity(
             else -> State.CONNECTING
         }
         if (delayedState.state != nextState) {
+            stateTriggeredDelay = nextStateDelay(delayedState.state, nextState)
             stateTriggeredTimeMillis = clock.currentTimeMillis()
-            stateTriggeredDelay = if (nextState == State.CONNECTING) DELAY_EXTENDED else DELAY_NOMINAL
         }
         delayedState = DelayedState(nextState, getStateDelay(stateTriggeredDelay))
+    }
+
+    private fun nextStateDelay(previous: State, next: State): Long {
+        if (next != State.CONNECTING) return DELAY_NOMINAL
+        val wasOffline = previous == State.OFFLINE || previous == State.OFFLINE_AIRPLANE_MODE
+        if (wasOffline && getStateActiveMillis() > DELAY_NOMINAL) return DELAY_NOMINAL
+        if (previous == State.ONLINE) return DELAY_DISCONNECT
+        return DELAY_EXTENDED
     }
 
     private fun getStateActiveMillis(): Long = clock.currentTimeMillis() - stateTriggeredTimeMillis
 
     /** Remaining delay, quantised to [DELAY_INTERVAL] so equal states de-duplicate. */
     private fun getStateDelay(defaultDelay: Long): Long {
-        val remaining = maxOf(
-            defaultDelay - getStateActiveMillis(),
-            earliestVisibleTimeMillis - clock.currentTimeMillis(),
-        )
+        val remaining = defaultDelay - getStateActiveMillis()
         return ((remaining.toFloat() / DELAY_INTERVAL).roundToInt().toLong() * DELAY_INTERVAL)
             .coerceAtLeast(0L)
     }
@@ -141,7 +140,7 @@ class StoreConnectivity(
     companion object {
         const val DELAY_INTERVAL = 100L
         const val DELAY_NOMINAL = 1_000L
-        const val DELAY_EXTENDED = 10_000L
-        const val DELAY_FOREGROUND_COOLOFF = 5_000L
+        const val DELAY_DISCONNECT = 2_500L
+        const val DELAY_EXTENDED = 5_000L
     }
 }

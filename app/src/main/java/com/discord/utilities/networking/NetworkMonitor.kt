@@ -105,8 +105,8 @@ class NetworkMonitor(context: Context) {
 
     private fun readState(context: Context, intent: Intent?): State {
         val state = when {
-            isDeviceConnected(context, intent) -> State.ONLINE
             isAirplaneModeOn(context) -> State.OFFLINE_AIRPLANE_MODE
+            isDeviceConnected(context, intent) -> State.ONLINE
             else -> State.OFFLINE
         }
         runCatching { Log.i(TAG, "network state -> $state (API ${Build.VERSION.SDK_INT})") }
@@ -124,16 +124,9 @@ class NetworkMonitor(context: Context) {
     private fun isDeviceConnected(context: Context, intent: Intent?): Boolean = try {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            connectivityManager.allNetworks.any { network ->
-                val capabilities = connectivityManager.getNetworkCapabilities(network)
-                capabilities != null && (
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
-                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                    )
-            }
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         } else {
             @Suppress("DEPRECATION")
             val candidates: List<NetworkInfo?> = listOf(

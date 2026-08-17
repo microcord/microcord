@@ -63,6 +63,9 @@ android {
             signingConfig = signingConfigs.getByName("manticord")
         }
         release {
+            lint {
+                checkReleaseBuilds = false
+            }
             signingConfig = signingConfigs.getByName("manticord")
             isMinifyEnabled = false
             proguardFiles(

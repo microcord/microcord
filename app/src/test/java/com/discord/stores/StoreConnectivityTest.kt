@@ -22,21 +22,46 @@ class StoreConnectivityTest {
         // the channel loads, and that must not flash the banner.
         store.handleConnectionReady(true)
         store.handleChannelMessagesLoading(true)
-        assertEquals(StoreConnectivity.DelayedState(StoreConnectivity.State.CONNECTING, extended), store.getState())
+        assertEquals(
+            StoreConnectivity.DelayedState(StoreConnectivity.State.CONNECTING, StoreConnectivity.DELAY_DISCONNECT),
+            store.getState(),
+        )
     }
 
-    /** A banner that was already due gets held back again while the connection re-establishes. */
     @Test
-    fun foregroundingHoldsTheBannerBack() {
+    fun disconnectShowsConnectingWithinTwoAndAHalfSeconds() {
+        val store = StoreConnectivity(Dispatcher(TestScheduler()), Clock { 0L }, ObservationDeck())
+        store.handleDeviceNetworkStateUpdated(NetworkMonitor.State.ONLINE)
+        store.handleConnectionReady(true)
+        store.handleConnected(false)
+        assertEquals(
+            StoreConnectivity.DelayedState(StoreConnectivity.State.CONNECTING, StoreConnectivity.DELAY_DISCONNECT),
+            store.getState(),
+        )
+    }
+
+    @Test
+    fun connectingAfterSustainedOfflineUsesTheShortDelay() {
+        var now = 0L
+        val store = StoreConnectivity(Dispatcher(TestScheduler()), Clock { now }, ObservationDeck())
+        store.handleDeviceNetworkStateUpdated(NetworkMonitor.State.OFFLINE_AIRPLANE_MODE)
+        now = 2_000
+        store.handleDeviceNetworkStateUpdated(NetworkMonitor.State.ONLINE)
+        assertEquals(
+            StoreConnectivity.DelayedState(StoreConnectivity.State.CONNECTING, StoreConnectivity.DELAY_NOMINAL),
+            store.getState(),
+        )
+    }
+
+    @Test
+    fun backgroundingPausesTheRemainingDelay() {
         var now = 0L
         val store = StoreConnectivity(Dispatcher(TestScheduler()), Clock { now }, ObservationDeck())
         store.handleDeviceNetworkStateUpdated(NetworkMonitor.State.OFFLINE)
-        assertEquals(StoreConnectivity.DELAY_NOMINAL, store.getState().delay)
-
-        now = 5_000
+        now = 400
         store.handleBackgrounded(true)
         now = 60_000
         store.handleBackgrounded(false)
-        assertEquals(StoreConnectivity.DELAY_FOREGROUND_COOLOFF, store.getState().delay)
+        assertEquals(600L, store.getState().delay)
     }
 }
