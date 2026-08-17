@@ -18,6 +18,7 @@ import com.discord.models.presence.Presence
 import com.discord.api.user.AvatarDecorationData
 import com.discord.models.user.User
 import com.discord.utilities.streams.StreamContext
+import com.discord.utilities.images.MGImages
 import com.discord.views.AvatarDecorationView
 import com.discord.views.StatusView
 import com.discord.views.ThemedColor
@@ -52,6 +53,7 @@ class UserAvatarPresenceView @JvmOverloads constructor(
     private val status: StatusView
     private var cutoutSpacePx = 0
     private var onAvatarBitmapLoadedListener: (Bitmap, String?) -> Unit = { _, _ -> }
+    private val avatarChangeDetector = MGImages.DistinctChangeDetector()
 
     init {
         LayoutInflater.from(context).inflate(R.layout.user_avatar_presence_view, this, true)
@@ -145,9 +147,11 @@ class UserAvatarPresenceView @JvmOverloads constructor(
     }
 
     private fun setAvatar(view: VitoImageView, url: String, animate: Boolean, notify: Boolean) {
-        view.show(
-            listOf(url),
-            autoPlay = animate,
+        MGImages.setImage(
+            view,
+            url,
+            autoPlayAnimations = animate,
+            changeDetector = avatarChangeDetector,
             transform = if (!notify) null else { builder ->
                 builder.postprocessor = object : BasePostprocessor() {
                     override fun process(bitmap: Bitmap) {
