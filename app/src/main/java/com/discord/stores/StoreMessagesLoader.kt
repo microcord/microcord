@@ -148,6 +148,8 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private var pendingJump: PendingJump? = null
     private var lastRequest: LoadRequest? = null
     private var awaitingFreshSessionReady = false
+    private var bottomPageAnchorChannelId: Long? = null
+    private var bottomPageAnchorMessageId: Long? = null
 
     /**
      * Subscribes to the scroll position and the detached-channel set.
@@ -255,6 +257,10 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private fun handleChatInteraction(interactionState: InteractionState) {
         channelLoadedStateUpdate(interactionState.channelId) {
             it.copy(isTouchedSinceLastJump = interactionState.isTouchedSinceLastJump)
+        }
+        if (!interactionState.isAtBottom) {
+            bottomPageAnchorChannelId = null
+            bottomPageAnchorMessageId = null
         }
         this.interactionState = interactionState
         tryLoadMessages(resetRetry = true)
@@ -396,6 +402,11 @@ class StoreMessagesLoader @JvmOverloads constructor(
 
     fun observeChunks(): Observable<ChannelChunk> = channelMessageChunksSubject.filterNull()
     fun get(): Observable<ChannelChunk> = observeChunks()
+
+    @Synchronized
+    fun bottomPageAnchor(channelId: Long): Long? =
+        bottomPageAnchorMessageId.takeIf { bottomPageAnchorChannelId == channelId }
+
     fun observeScrollTo(): Observable<Long> = scrollToSubject.filterNull()
     fun getScrollTo(): Observable<Long> = observeScrollTo()
     fun observeChannelMessagesLoading(): Observable<Boolean> = channelMessagesLoadingSubject.distinctUntilChanged()
@@ -575,6 +586,10 @@ class StoreMessagesLoader @JvmOverloads constructor(
             )
         }
         channelMessagesLoadingSubject.onNext(false)
+        if (isAppendingBottom && !isJump) {
+            bottomPageAnchorChannelId = channelId
+            bottomPageAnchorMessageId = after
+        }
         channelMessageChunksSubject.onNext(
             ChannelChunk(channelId, messages, isInitial, isPresent, isAppendingTop, isJump),
         )

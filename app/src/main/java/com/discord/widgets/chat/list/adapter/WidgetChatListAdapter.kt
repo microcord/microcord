@@ -25,6 +25,7 @@ import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.plugins.PluginUiRegistry
 import com.discord.stores.StoreChat
+import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.time.Clock
@@ -59,7 +60,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     var fragmentManager: FragmentManager,
     val eventHandler: EventHandler,
     val clock: Clock = ClockFactory.get(),
-) : MGRecyclerAdapterSimple<ChatListEntry>(recycler) {
+) : MGRecyclerAdapterSimple<ChatListEntry>(recycler, deferredDiffs = false) {
 
     val botUiComponentProvider = ComponentProvider()
 
@@ -70,6 +71,22 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     var data: Data = EmptyData()
         set(value) {
             val viewerChanged = field.userId != value.userId
+            val anchorId = StoreStream.getMessagesLoader().bottomPageAnchor(value.channelId)
+            if (field.channelId == value.channelId && anchorId != null) {
+                val oldPos = field.list.indexOfFirst { it.highlightMessage?.id == anchorId }
+                val newPos = value.list.indexOfFirst { it.highlightMessage?.id == anchorId }
+                if (oldPos >= 0 && newPos >= 0 && oldPos != newPos) {
+                    val view = layoutManager?.findViewByPosition(oldPos)
+                    pendingScrollAnchor = ScrollAnchor(
+                        anchorId,
+                        if (view != null) recycler.height - view.bottom else 0,
+                    )
+                    if (pausedItemAnimator == null) {
+                        pausedItemAnimator = recycler.itemAnimator
+                        recycler.itemAnimator = null
+                    }
+                }
+            }
             field = value
             setData(value.list)
             if (viewerChanged && itemCount > 0) notifyItemRangeChanged(0, itemCount)
@@ -88,6 +105,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private var isTouchedSinceLastJump: Boolean = false
     private var scrollToWithHighlight: ScrollToWithHighlight? = null
     private var pluginMessageRegistration: PluginRegistration? = null
+    private var pendingScrollAnchor: ScrollAnchor? = null
+    private var pausedItemAnimator: RecyclerView.ItemAnimator? = null
+
+    private data class ScrollAnchor(val messageId: Long, val offset: Int)
 
     val layoutManager: LinearLayoutManager?
         get() = recycler.layoutManager as? LinearLayoutManager
@@ -171,12 +192,25 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             }
         }
         setOnUpdated { _, _ ->
+            restorePendingScrollAnchor()
             recycler.removeCallbacks(handlerOfUpdates)
             recycler.post(handlerOfUpdates)
             recycler.setOnTouchListener(handlerOfTouches)
             recycler.removeOnScrollListener(handlerOfScrolls)
             recycler.addOnScrollListener(handlerOfScrolls)
         }
+    }
+
+    private fun restorePendingScrollAnchor() {
+        val anchor = pendingScrollAnchor ?: return
+        pendingScrollAnchor = null
+        val position = data.list.indexOfFirst { it.highlightMessage?.id == anchor.messageId }
+        if (position >= 0) {
+            layoutManager?.scrollToPositionWithOffset(position, anchor.offset)
+        }
+        val animator = pausedItemAnimator ?: return
+        pausedItemAnimator = null
+        recycler.post { recycler.itemAnimator = animator }
     }
 
     /**
