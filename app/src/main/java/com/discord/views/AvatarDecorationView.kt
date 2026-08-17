@@ -106,6 +106,11 @@ class AvatarDecorationView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // Overlay: layoutToTarget() sizes us. wrap_content parents must not see the image.
+        setMeasuredDimension(0, 0)
+    }
+
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
         image?.layout(0, 0, width, height)

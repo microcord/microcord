@@ -4,8 +4,8 @@ import android.content.Context
 import android.graphics.drawable.ColorDrawable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.ImageSpan
 import androidx.core.content.res.ResourcesCompat
+import com.facebook.widget.text.span.BetterImageSpan
 import com.discord.R
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.simpleast.core.node.TextNode
@@ -82,7 +82,7 @@ class EmojiNode<T : EmojiNode.RenderContext>(
                 val drawable = ResourcesCompat.getDrawable(context.resources, resId, null)?.mutate()
                 if (drawable != null) {
                     drawable.setBounds(0, 0, renderWidth, renderHeight)
-                    builder.setSpan(ImageSpan(drawable, alignment), start, end + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builder.setSpan(BetterImageSpan(drawable, alignment), start, end + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             } else {
                 draweeBuilder.setVitoSpan(
