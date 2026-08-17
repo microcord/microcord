@@ -2,7 +2,6 @@ package com.discord.widgets.user.search
 
 import android.content.Context
 import android.graphics.Typeface
-import android.net.Uri
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
@@ -140,23 +139,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
     }
 
     private fun setPrivateChannelIcon(channel: Channel) {
-        val recipient = channel.recipients?.firstOrNull()
-        val hash = if (channel.type == Channel.GROUP_DM) channel.icon else recipient?.avatar?.value
-        val uri = when {
-            hash != null && channel.type == Channel.GROUP_DM ->
-                "https://cdn.discordapp.com/channel-icons/${channel.id}/$hash.webp"
-            hash != null && recipient != null ->
-                "https://cdn.discordapp.com/avatars/${recipient.id}/$hash.webp"
-            recipient != null -> IconUtils.getDefaultAvatar(
-                IconUtils.getDefaultAvatarIndex(
-                    recipient.id,
-                    recipient.discriminator.toIntOrNull(),
-                    recipient.discriminator == IconUtils.WEBHOOK_DISCRIMINATOR,
-                ),
-            )
-            else -> "asset://asset/images/default_icon.jpg"
-        }
-        icon.setImageURI(Uri.parse(uri))
+        IconUtils.setIcon(icon, IconUtils.getForChannel(channel))
     }
 
     private fun styledRecipients(channel: Channel): CharSequence {
