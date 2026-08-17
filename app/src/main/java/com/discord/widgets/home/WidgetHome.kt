@@ -99,7 +99,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var friendNicknameSubscription: Subscription? = null
     private var dmPresenceSubscription: Subscription? = null
     private var unreadCount = 0
-    private var initialChannelShown = false
+    private var awaitingInitialSelection = true
     private var gestureRegionsListener: PanelsChildGestureRegionObserver.GestureRegionsListener? = null
 
     // Provider only holds a WeakReference, so both this screen and the surfaces that register
@@ -113,6 +113,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = WidgetHomeBinding.bind(view)
+        awaitingInitialSelection = true
         // A restored WidgetChatList needs its container before child restoration advances.
         if (savedInstanceState != null || childFragmentManager.findFragmentById(R.id.widget_chat_list) != null) {
             ensureChatInflated()
@@ -120,6 +121,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         super.onViewCreated(view, savedInstanceState)
         pluginHeaderRegistration = PluginUiRegistry.addHeaderListener { view.post(::refreshChatToolbar) }
         applyPanelInsets()
+        WidgetHomePanelLoading(binding.root).configure(this)
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
@@ -152,8 +154,11 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         GuildsListNavigation.showChannelActions = WidgetChannelsListItemChannelActions::show
         GuildsListNavigation.showNavigationHelp = WidgetNavigationHelp::show
         GuildsListNavigation.showDiscovery = { context -> WidgetGuildDiscovery.launch(context) }
-        val initialSurface = centerSurface(StoreStream.getChannelsSelected().getResolvedSelectedChannel())
-        if (savedInstanceState != null || initialSurface == CenterSurface.NONE) ensureStartPanelFragments()
+        val initialSelection = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+        val initialSurface = centerSurface(initialSelection)
+        if (savedInstanceState != null || (initialSurface == CenterSurface.NONE && initialSelection.isResolved())) {
+            ensureStartPanelFragments()
+        }
         if (savedInstanceState != null) ensureEndPanelFragment()
         if (initialSurface == CenterSurface.FORUM) ensureForumFragment()
         if (childFragmentManager.findFragmentByTag(TOPIC_TAG) == null) {
@@ -204,7 +209,13 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         }
         selectedChannelSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel().subscribe { selected ->
             activity?.runOnUiThread {
+                // A cold start emits `Uninitialized` before the persisted selection resolves. It has
+                // no channel, so deciding the surface from it pins the DM list open at full width and
+                // the real channel then snaps it shut a frame later. Wait for the resolved value.
+                if (!selected.isResolved()) return@runOnUiThread
                 val channel = selected.channelOrParent
+                val closeStartupPanel = awaitingInitialSelection && channel != null
+                awaitingInitialSelection = false
                 val surface = centerSurface(selected)
                 if (surface == CenterSurface.NONE) ensureStartPanelFragments()
                 if (surface == CenterSurface.FORUM) ensureForumFragment()
@@ -231,10 +242,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                     } else if (surface != CenterSurface.DIRECTORY) {
                         configureToolbar(channel)
                     }
-                    if (!initialChannelShown) {
-                        initialChannelShown = true
-                        panels.post(panels::closePanelsImmediately)
-                    }
+                    if (closeStartupPanel) panels.closePanelsImmediately()
                 }
             }
         }
@@ -663,6 +671,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
 
     companion object {
         internal enum class CenterSurface { NONE, CHAT, FORUM, DIRECTORY }
+
+        private fun StoreChannelsSelected.ResolvedSelectedChannel.isResolved() =
+            this !is StoreChannelsSelected.ResolvedSelectedChannel.Uninitialized
 
         internal fun centerSurface(selected: StoreChannelsSelected.ResolvedSelectedChannel): CenterSurface = when {
             selected is StoreChannelsSelected.ResolvedSelectedChannel.Channel &&

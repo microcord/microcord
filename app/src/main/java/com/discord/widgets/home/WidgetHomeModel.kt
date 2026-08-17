@@ -67,17 +67,6 @@ data class WidgetHomeModel(
             .distinctUntilChanged()
 
         /**
-         * Whether the client has hydrated enough to replace the splash panel with the real surface.
-         *
-         * The reference watches `StoreStream`'s own initialised flag; that flag exists here but has
-         * no accessor on the companion, so the closest public equivalent is used — channels being
-         * hydrated for the authenticated user, which is set from the same READY handling.
-         */
-        fun observeInitialized(): Observable<Boolean> =
-            StoreStream.getChannels().observeInitializedForAuthedUser()
-                .delay(INITIALIZED_DELAY_MS, TimeUnit.MILLISECONDS)
-
-        /**
          * A thread's header shows its parent's name as the subtitle, so the parent is resolved for
          * threads and for nothing else.
          */
@@ -128,6 +117,5 @@ data class WidgetHomeModel(
         }
 
         private const val THROTTLE_MS = 350L
-        private const val INITIALIZED_DELAY_MS = 150L
     }
 }

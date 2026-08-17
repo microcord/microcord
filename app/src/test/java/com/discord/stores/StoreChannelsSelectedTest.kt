@@ -120,6 +120,7 @@ class StoreChannelsSelectedTest {
         val dm = channel(55, guildId = 0, type = Channel.DM)
         dispatcher.schedule {
             channels.handleStoreInitTimeout()
+            channelsSelected.handleStoreInitTimeout()
             channelsSelected.handleChannelSelected(0L, 55L)
         }
         drain()
@@ -140,6 +141,7 @@ class StoreChannelsSelectedTest {
     fun aGuildWithNoVisibleChannelResolvesToUnavailableRatherThanNothing() {
         dispatcher.schedule {
             channels.handleStoreInitTimeout()
+            channelsSelected.handleStoreInitTimeout()
             guildSelected.handleGuildSelected(99L)
             channelsSelected.handleGuildSelected()
         }

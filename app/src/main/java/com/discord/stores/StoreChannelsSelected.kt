@@ -158,9 +158,11 @@ class StoreChannelsSelected(
     private var selectedChannel: ResolvedSelectedChannel = ResolvedSelectedChannel.Uninitialized
     private var previouslySelectedChannel: ResolvedSelectedChannel = ResolvedSelectedChannel.Uninitialized
     private var handledReadyPayload = false
+    private var hasRestoredSelectionState = false
     private var initializedForAuthedUser = false
     private var isStoreInitTimedOut = false
     private var validateSelectedChannelSubscription: Subscription? = null
+    private var selectedChannelValidationGeneration = 0L
 
     private var selectedChannelSnapshot: ResolvedSelectedChannel = ResolvedSelectedChannel.Uninitialized
     private var previouslySelectedChannelSnapshot: ResolvedSelectedChannel = ResolvedSelectedChannel.Uninitialized
@@ -170,6 +172,7 @@ class StoreChannelsSelected(
     @StoreThread
     override fun init(context: Context) {
         loadFromCache()
+        hasRestoredSelectionState = true
         validateSelectedChannel()
     }
 
@@ -177,6 +180,7 @@ class StoreChannelsSelected(
     @StoreThread
     internal fun restore() {
         loadFromCache()
+        hasRestoredSelectionState = true
         validateSelectedChannel()
     }
 
@@ -191,10 +195,12 @@ class StoreChannelsSelected(
     internal fun reset() {
         validateSelectedChannelSubscription?.unsubscribe()
         validateSelectedChannelSubscription = null
+        selectedChannelValidationGeneration++
         userChannelSelections.clear()
         selectedChannel = ResolvedSelectedChannel.Uninitialized
         previouslySelectedChannel = ResolvedSelectedChannel.Uninitialized
         handledReadyPayload = false
+        hasRestoredSelectionState = false
         initializedForAuthedUser = false
         isStoreInitTimedOut = false
         selectedChannelIdsCache.clear()
@@ -260,6 +266,7 @@ class StoreChannelsSelected(
         peekParent: Long? = null,
         analyticsLocation: SelectedChannelAnalyticsLocation? = null,
     ) {
+        hasRestoredSelectionState = true
         val current = userChannelSelections[guildId] as? UserChannelSelection.SelectedChannel
         if (current == null || current.channelId != channelId) {
             userChannelSelections[guildId] =
@@ -280,6 +287,7 @@ class StoreChannelsSelected(
         parentMessageId: Long? = null,
         threadStartLocation: String? = null,
     ) {
+        hasRestoredSelectionState = true
         userChannelSelections[guildId] =
             UserChannelSelection.ThreadDraft(parentChannelId, parentMessageId, threadStartLocation)
         validateSelectedChannel()
@@ -305,11 +313,15 @@ class StoreChannelsSelected(
         userChannelSelections.clear()
         userChannelSelections.putAll(retained)
         handledReadyPayload = true
+        hasRestoredSelectionState = true
         validateSelectedChannel()
     }
 
     @StoreThread
-    fun handleGuildSelected() = validateSelectedChannel()
+    fun handleGuildSelected() {
+        hasRestoredSelectionState = true
+        validateSelectedChannel()
+    }
 
     @StoreThread
     fun handleGuildAdd(guildId: Long) {
@@ -358,6 +370,7 @@ class StoreChannelsSelected(
     @StoreThread
     fun handleStoreInitTimeout() {
         isStoreInitTimedOut = true
+        hasRestoredSelectionState = true
         updateInitializationState()
         if (selectedChannel == ResolvedSelectedChannel.Uninitialized) validateSelectedChannel()
     }
@@ -373,6 +386,7 @@ class StoreChannelsSelected(
     @StoreThread
     private fun validateSelectedChannel() {
         validateSelectedChannelSubscription?.unsubscribe()
+        val validationGeneration = ++selectedChannelValidationGeneration
 
         // The intent is fixed for this round; everything derived from store state is re-read on
         // every emission, from published snapshots only — this generator runs off the store thread.
@@ -394,7 +408,14 @@ class StoreChannelsSelected(
             .appSubscribe(
                 StoreChannelsSelected::class.java,
                 subscriptionHandler = { validateSelectedChannelSubscription = it },
-            ) { selected -> dispatcher.schedule { onSelectedChannelResolved(selected) } }
+            ) { selected ->
+                dispatcher.schedule {
+                    // A cancelled computation may already be queued when a persisted selection replaces it.
+                    if (validationGeneration == selectedChannelValidationGeneration) {
+                        onSelectedChannelResolved(selected)
+                    }
+                }
+            }
     }
 
     private fun resolveSelectedChannel(
@@ -405,7 +426,11 @@ class StoreChannelsSelected(
         permissions: Map<Long, Long>,
         storeChannelsInitializedForAuthedUser: Boolean,
     ): ResolvedSelectedChannel = when {
-        !storeChannelsInitializedForAuthedUser -> ResolvedSelectedChannel.Uninitialized
+        !hasRestoredSelectionState || !storeChannelsInitializedForAuthedUser ->
+            ResolvedSelectedChannel.Uninitialized
+        userChannelSelection is UserChannelSelection.SelectedChannel &&
+            resolvedChannel == null && !handledReadyPayload && !isStoreInitTimedOut ->
+            ResolvedSelectedChannel.Uninitialized
         resolvedChannel != null && isValidResolution(resolvedChannel, guildId, permissions) ->
             userChannelSelection?.resolveWithChannel(resolvedChannel) ?: ResolvedSelectedChannel.Unselected
         guildId == PRIVATE_CHANNELS_ID -> ResolvedSelectedChannel.Unselected

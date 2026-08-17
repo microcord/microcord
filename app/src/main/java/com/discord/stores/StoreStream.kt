@@ -3113,6 +3113,7 @@ class StoreStream private constructor(
                     dispatcher.schedule {
                         if (channels.getChannelsByIdInternal().isNotEmpty() || guilds.getGuildsInternal().isNotEmpty()) {
                             channels.handleStoreInitTimeout()
+                            channelsSelected.handleStoreInitTimeout()
                             navigation.updateAuthState(authentication.getAuthState())
                         } else {
                             Log.w("ManticordGateway", "READY timeout with no cached guild/channel state")

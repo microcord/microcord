@@ -5,6 +5,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import com.discord.R
 import com.discord.app.AppFragment
+import com.discord.stores.StoreStream
 import com.discord.utilities.display.getStatusBarHeight
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
@@ -41,7 +42,8 @@ class WidgetHomePanelLoading(root: View) {
     }
 
     fun configure(fragment: AppFragment) {
-        WidgetHomeModel.observeInitialized()
+        // The cache may hydrate before its saved selection resolves; exposing Home in that gap flashes DMs.
+        StoreStream.getChannelsSelected().observeInitializedForAuthedUser()
             .ui(fragment)
             .appSubscribe(WidgetHomePanelLoading::class.java) { setLoadingPanelVisibility(it, animate = true) }
         setLoadingPanelVisibility(panelInitialized, animate = false)
