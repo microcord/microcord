@@ -117,6 +117,19 @@ class MessageHistoryStoreTest {
     }
 
     @Test
+    fun initialUnreadScrollStaysUntilConsumed() {
+        val loader = loader(mutableListOf()) { request ->
+            Result.success((101L until 101L + request.limit).map(::message))
+        }
+        loader.handleAuthToken("test-token")
+        loader.handleConnected(true)
+        loader.handleChannelSelected(7)
+        val late = mutableListOf<Long>()
+        loader.observeScrollTo().subscribe(late::add)
+        assertEquals(listOf(StoreMessagesLoader.SCROLL_TO_LAST_UNREAD), late)
+    }
+
+    @Test
     fun channelSelectionCannotCancelPendingJump() {
         val requests = mutableListOf<LoadRequest>()
         val jumped = CountDownLatch(1)

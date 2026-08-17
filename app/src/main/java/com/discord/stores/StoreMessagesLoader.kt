@@ -600,13 +600,12 @@ class StoreMessagesLoader @JvmOverloads constructor(
         when {
             shouldScrollToNewest -> scrollToSubject.onNext(SCROLL_TO_LATEST)
             isInitial -> scrollToSubject.onNext(SCROLL_TO_LAST_UNREAD)
+            isJump -> {
+                val target = messages.firstOrNull { it.id == messageId }
+                if (target != null) scrollToSubject.onNext(target.id) else onJumpTargetMissing(channelId)
+            }
+            else -> clearScrollTo()
         }
-
-        if (isJump) {
-            val target = messages.firstOrNull { it.id == messageId }
-            if (target != null) scrollToSubject.onNext(target.id) else onJumpTargetMissing(channelId)
-        }
-        if (!isJump && !shouldScrollToNewest) clearScrollTo()
 
         log("Loaded ${messages.size} messages for channel [$channelId], all loaded: $isAllLoaded.")
         tryLoadMessages(delay = RETRY_DELAY_DEFAULT)

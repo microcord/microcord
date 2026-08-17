@@ -76,6 +76,12 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             ) {
                 captureVisibleMessageAnchor(field.list, value.list)
             }
+            val newestGrew = field.channelId == value.channelId &&
+                (value.list.newestMessage()?.id ?: 0L) > (field.list.newestMessage()?.id ?: 0L)
+            val atBottom = StoreChat.InteractionState.getScrollState(layoutManager)
+                .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
+            pendingStickToBottom = newestGrew &&
+                (atBottom || value.list.newestMessage()?.author?.id == value.userId)
             field = value
             setData(value.list)
             if (viewerChanged && itemCount > 0) notifyItemRangeChanged(0, itemCount)
@@ -96,8 +102,28 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private var pluginMessageRegistration: PluginRegistration? = null
     private var pendingScrollAnchor: ScrollAnchor? = null
     private var pausedItemAnimator: RecyclerView.ItemAnimator? = null
+    private var pendingStickToBottom = false
+    private var atBottomBeforeResize = true
+
+    private val handlerOfResize = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+        val oldHeight = oldBottom - oldTop
+        val newHeight = bottom - top
+        if (oldHeight > newHeight && itemCount > 0 && atBottomBeforeResize) {
+            layoutManager?.scrollToPosition(itemCount - 1)
+        }
+        atBottomBeforeResize = StoreChat.InteractionState.getScrollState(layoutManager)
+            .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
+    }
 
     private data class ScrollAnchor(val messageId: Long, val offset: Int)
+
+    private fun List<ChatListEntry>.newestMessage(): Message? {
+        for (i in lastIndex downTo 0) {
+            val message = this[i].highlightMessage ?: continue
+            if (message.id > 0L) return message
+        }
+        return null
+    }
 
     val layoutManager: LinearLayoutManager?
         get() = recycler.layoutManager as? LinearLayoutManager
@@ -187,6 +213,8 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             recycler.setOnTouchListener(handlerOfTouches)
             recycler.removeOnScrollListener(handlerOfScrolls)
             recycler.addOnScrollListener(handlerOfScrolls)
+            recycler.removeOnLayoutChangeListener(handlerOfResize)
+            recycler.addOnLayoutChangeListener(handlerOfResize)
         }
     }
 
@@ -237,6 +265,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         recycler.removeCallbacks(handlerOfUpdates)
         recycler.setOnTouchListener(null)
         recycler.removeOnScrollListener(handlerOfScrolls)
+        recycler.removeOnLayoutChangeListener(handlerOfResize)
         eventHandler.onInteractionStateUpdated(
             StoreChat.InteractionState(data.channelId, 0L, isTouchedSinceLastJump, null),
         )
@@ -589,8 +618,9 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     /**
      * Runs once per list update, off the diff callback.
      *
-     * Switching channel re-pins the list to the newest message and clears the touched flag; a new
-     * oldest message is reported so the host can prefetch further back.
+     * Switching channel — including the first bind after process start — re-pins the list to the
+     * unread marker (or newest if caught up) and clears the touched flag; a new oldest message is
+     * reported so the host can prefetch further back.
      */
     private inner class HandlerOfUpdates : Runnable {
         private var channelId: Long = 0L
@@ -598,10 +628,14 @@ class WidgetChatListAdapter @JvmOverloads constructor(
 
         override fun run() {
             if (channelId != data.channelId) {
-                val hadPreviousChannel = channelId != 0L
                 channelId = data.channelId
-                if (hadPreviousChannel) scrollToMessageId(0L) {}
+                scrollToMessageId(0L) {}
                 isTouchedSinceLastJump = false
+                pendingStickToBottom = false
+            } else if (pendingStickToBottom) {
+                pendingStickToBottom = false
+                val last = data.list.lastIndex
+                if (last >= 0) layoutManager?.scrollToPosition(last)
             }
             if (oldestMessageId != data.oldestMessageId) {
                 oldestMessageId = data.oldestMessageId
@@ -636,7 +670,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         override fun run() {
             val model = adapter.data as? WidgetChatListModel
             if (model != null && model.isLoadingMessages) {
-                scheduleRetry()
+                adapter.recycler.postDelayed(this, RETRY_DELAY_MS)
                 return
             }
             val index = adapter.data.list.newMessageEntryIndex()

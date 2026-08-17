@@ -25,6 +25,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.widget.ImageViewCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.appcompat.app.AlertDialog
@@ -302,6 +305,15 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         view.post {
             if (isAdded && this.view === view) bindFlexInput()
         }
+        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
+            val bottom = insets.getInsets(
+                WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.navigationBars(),
+            ).bottom
+            view.rootView.findViewById<View>(R.id.widget_chat_bottom_space)
+                ?.updateLayoutParams { height = bottom }
+            insets
+        }
+        ViewCompat.requestApplyInsets(view)
     }
 
     override fun onViewBoundOrOnResume() {
