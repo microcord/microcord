@@ -123,7 +123,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
                     root.contentDescription = guild.name
                     root.findViewById<SimpleDraweeView>(R.id.user_profile_adapter_item_friend_mutual_image).apply {
                         visibility = if (guild.icon == null) View.GONE else View.VISIBLE
-                        setImageURI(guild.icon?.let { Uri.parse("https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=64") })
+                        setImageURI(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=64" })
                     }
                     root.findViewById<TextView>(R.id.user_profile_adapter_item_friend_mutual_text).apply {
                         visibility = if (guild.icon == null) View.VISIBLE else View.GONE; text = guild.shortName
@@ -141,8 +141,8 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
         }
     }
 
-    private fun avatarUrl(user: User): Uri? = user.avatar?.let {
-        Uri.parse("https://cdn.discordapp.com/avatars/${user.id}/$it.webp?size=128")
+    private fun avatarUrl(user: User): String? = user.avatar?.let {
+        "https://cdn.discordapp.com/avatars/${user.id}/$it.webp?size=128"
     }
 
     companion object {

@@ -57,13 +57,13 @@ class GuildRoleSubscriptionBenefitItemView @JvmOverloads constructor(
 
     fun configureUI(title: String, @DrawableRes imageRes: Int, description: String?) {
         configureTitleAndDescription(title, description)
-        image.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER_INSIDE
+        image.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.CENTER_INSIDE)
         image.setActualImageResource(imageRes)
     }
 
     fun configureUI(benefit: Benefit) {
         configureTitleAndDescription(benefit.name, benefit.description)
-        image.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER
+        image.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.CENTER)
         MGImages.setImage(
             image,
             benefit.emoji.getImageUri(
@@ -78,7 +78,7 @@ class GuildRoleSubscriptionBenefitItemView @JvmOverloads constructor(
 
     fun configureUI(title: String, imageUri: String, imageContentDescription: String, description: String?) {
         configureTitleAndDescription(title, description)
-        image.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER
+        image.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.CENTER)
         image.setImageURI(imageUri)
         image.contentDescription = imageContentDescription
     }

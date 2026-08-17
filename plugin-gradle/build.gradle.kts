@@ -16,7 +16,7 @@ gradlePlugin {
 }
 
 dependencies {
-    compileOnly("com.android.tools.build:gradle:9.2.1")
+    compileOnly(libs.android.gradle.plugin)
 }
 
 publishing {

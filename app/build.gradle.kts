@@ -26,9 +26,7 @@ android {
         noCompress += "kw"
     }
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(37)
     }
 
     defaultConfig {
@@ -55,7 +53,11 @@ android {
     sourceSets {
         // Checked-in protoc output: no protobuf Gradle plugin supports this AGP yet, so the
         // generated Java is vendored alongside the .proto it came from. See src/main/proto.
-        getByName("main").java.srcDir("src/main/generated-proto")
+        getByName("main").java.directories.add("src/main/generated-proto")
+    }
+
+    packaging {
+        jniLibs.keepDebugSymbols += "**/*.so"
     }
 
     buildTypes {
@@ -107,6 +109,7 @@ android {
 
 dependencies {
     implementation(project(":plugin-api"))
+    compileOnly(libs.infer.annotation)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.apng)
     implementation(libs.photoeditor)
@@ -184,3 +187,5 @@ dependencies {
     baselineProfile(project(":baselineprofile"))
     //debugImplementation(libs.leakcanary)
 }
+
+

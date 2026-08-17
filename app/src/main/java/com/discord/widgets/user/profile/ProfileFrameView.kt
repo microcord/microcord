@@ -123,7 +123,7 @@ class ProfileFrameView @JvmOverloads constructor(
 
         init {
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-            hierarchy.actualImageScaleType = com.facebook.drawee.drawable.ScalingUtils.ScaleType.FIT_XY
+            hierarchy.setActualImageScaleType(com.facebook.drawee.drawable.ScalingUtils.ScaleType.FIT_XY)
         }
 
         fun load(skuId: Long, layer: ProfileFrameLayer) {

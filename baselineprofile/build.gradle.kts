@@ -6,9 +6,7 @@ plugins {
 android {
     namespace = "dev.mantikafasi.manticord.baselineprofile"
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(37)
     }
     targetProjectPath = ":app"
 

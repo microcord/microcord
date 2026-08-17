@@ -20,9 +20,8 @@ class GrayscalePostprocessor : BasePostprocessor() {
 
     override fun getPostprocessorCacheKey(): CacheKey = SimpleCacheKey(getName())
 
-    override fun process(destBitmap: Bitmap?, sourceBitmap: Bitmap?) {
+    override fun process(destBitmap: Bitmap, sourceBitmap: Bitmap) {
         super.process(destBitmap, sourceBitmap)
-        if (destBitmap == null || sourceBitmap == null) return
         val colorMatrix = ColorMatrix().apply { setSaturation(0f) }
         val paint = Paint().apply { colorFilter = ColorMatrixColorFilter(colorMatrix) }
         Canvas(destBitmap).drawBitmap(sourceBitmap, 0f, 0f, paint)

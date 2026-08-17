@@ -7,7 +7,7 @@ plugins {
     `maven-publish`
 }
 
-val pluginSdkJar by tasks.registering(Jar::class) {
+val pluginSdkJar = tasks.register<Jar>("pluginSdkJar") {
     dependsOn(":app:bundleDebugClassesToCompileJar", ":app:processDebugResources", ":plugin-api:bundleLibCompileToJarDebug")
     archiveBaseName.set("manticord-plugin-api")
     archiveVersion.set("1.0.5")

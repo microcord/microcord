@@ -38,7 +38,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
         editImage = requireNotNull(findViewById(R.id.guild_subscription_edit_image))
 
         context.obtainStyledAttributes(attrs, R.styleable.GuildSubscriptionRoleImageUploadView).run {
-            image.hierarchy.actualImageScaleType = if (
+            image.hierarchy.setActualImageScaleType(if (
                 getBoolean(
                     R.styleable.GuildSubscriptionRoleImageUploadView_use_center_scale_type,
                     false,
@@ -47,7 +47,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
                 ScalingUtils.ScaleType.CENTER
             } else {
                 ScalingUtils.ScaleType.CENTER_CROP
-            }
+            })
             when (getInt(R.styleable.GuildSubscriptionRoleImageUploadView_image_style, 0)) {
                 0 -> image.setBackgroundResource(themedResource(R.attr.primary_700_circle))
                 1 -> image.setBackgroundResource(R.drawable.drawable_rect_rounded_bg_tertiary)

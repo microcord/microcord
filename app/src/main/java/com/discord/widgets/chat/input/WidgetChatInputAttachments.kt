@@ -693,7 +693,7 @@ class WidgetChatInputAttachments(
                 val isVideo = item.data == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
                 videoIndicator.visibility = if (isVideo) View.VISIBLE else View.GONE
                 if (isVideo) {
-                    preview.setImageURI(null as Uri?)
+                    preview.setImageURI(null as String?)
                     preview.hierarchy.setPlaceholderImage(ColorDrawable(Color.DKGRAY))
                     thumbnailJob = scope.launch {
                         val bitmap = withContext(Dispatchers.IO) {

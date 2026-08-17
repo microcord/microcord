@@ -76,7 +76,7 @@ class StickerView @JvmOverloads constructor(
         imageView.visibility = View.VISIBLE
         placeholder.visibility = View.GONE
         imageView.contentDescription = contentDescription(sticker)
-        imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
+        imageView.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.FIT_CENTER)
         MGImages.setImage(imageView, StickerUtils.getCDNAssetUrl(sticker), useSmallCache = true)
     }
 
@@ -142,7 +142,7 @@ class StickerView @JvmOverloads constructor(
             }
         } else {
             imageView.contentDescription = contentDescription(sticker)
-            imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
+            imageView.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.FIT_CENTER)
             showAnimatedRaster(sticker, setting)
         }
     }
@@ -165,7 +165,7 @@ class StickerView @JvmOverloads constructor(
                             }
                             placeholder.visibility = View.GONE
                             imageView.contentDescription = contentDescription(sticker)
-                            imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
+                            imageView.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.FIT_CENTER)
                             apngDrawable?.recycle()
                             apngDrawable = drawable
                             imageView.setImageDrawable(drawable)
@@ -187,7 +187,7 @@ class StickerView @JvmOverloads constructor(
     private fun showAnimatedRaster(sticker: BaseSticker, setting: Int) {
         placeholder.visibility = View.GONE
         imageView.contentDescription = contentDescription(sticker)
-        imageView.hierarchy.actualImageScaleType = ScalingUtils.ScaleType.FIT_CENTER
+        imageView.hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.FIT_CENTER)
         val animatedUrl = StickerUtils.getCDNAssetUrl(sticker)
         when (setting) {
             StickerUtils.ALWAYS_ANIMATE ->

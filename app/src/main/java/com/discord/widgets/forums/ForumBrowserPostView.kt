@@ -214,17 +214,17 @@ class ForumBrowserPostView @JvmOverloads constructor(
                     val source = "${attachment.proxyUrl}?width=640&height=360&format=webp"
                     if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
                         tile.addView(SimpleDraweeView(context).apply {
-                            hierarchy.actualImageScaleType = ScalingUtils.ScaleType.CENTER_CROP
+                            hierarchy.setActualImageScaleType(ScalingUtils.ScaleType.CENTER_CROP)
                             alpha = 0.2f
                             setImageURI(source)
                         }, FrameLayout.LayoutParams(-1, -1))
                     }
                     tile.addView(SimpleDraweeView(context).apply {
-                        hierarchy.actualImageScaleType = if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
+                        hierarchy.setActualImageScaleType(if ((attachment.height ?: 0) > (attachment.width ?: 0)) {
                             ScalingUtils.ScaleType.FIT_CENTER
                         } else {
                             ScalingUtils.ScaleType.CENTER_CROP
-                        }
+                        })
                         setImageURI(source)
                     }, FrameLayout.LayoutParams(-1, -1))
                     if (attachment.type == MessageAttachmentType.VIDEO) {

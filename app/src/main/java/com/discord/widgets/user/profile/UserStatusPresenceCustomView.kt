@@ -64,7 +64,7 @@ class UserStatusPresenceCustomView(context: Context, attrs: AttributeSet) : Line
             )
             else -> null
         }
-        emoji.setImageURI(url?.let(Uri::parse))
+        emoji.setImageURI(url)
         emoji.visibility = if (url == null) View.GONE else View.VISIBLE
     }
 }

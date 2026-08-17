@@ -6,11 +6,11 @@ import com.discord.models.guild.Guild
 import com.discord.utilities.icon.IconUtils
 import com.facebook.drawee.view.SimpleDraweeView
 
-class GuildIcon @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0,
-) : SimpleDraweeView(context, attrs, defStyleAttr) {
+class GuildIcon : SimpleDraweeView {
+    constructor(context: Context) : super(context)
+    constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
+    constructor(context: Context, attrs: AttributeSet, defStyleAttr: Int) : super(context, attrs)
+
     fun updateView(guild: Guild) {
         if (!guild.hasIcon()) return
         val size = IconUtils.getMediaProxySize(layoutParams.width)

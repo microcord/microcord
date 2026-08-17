@@ -180,7 +180,7 @@ class UserProfileWidgetsView @JvmOverloads constructor(
             ?: application.artwork()?.url
         if (hero != null) addView(SimpleDraweeView(context).apply {
             layoutParams = LayoutParams(MATCH_PARENT, dp(156))
-            hierarchy.actualImageScaleType = com.facebook.drawee.drawable.ScalingUtils.ScaleType.CENTER_CROP
+            hierarchy.setActualImageScaleType(com.facebook.drawee.drawable.ScalingUtils.ScaleType.CENTER_CROP)
             MGImages.setRoundingParams(this, cornerRadius = dp(8).toFloat(), circle = false)
             setImageURI(hero)
         })
@@ -249,11 +249,11 @@ class UserProfileWidgetsView @JvmOverloads constructor(
     private fun cover(record: Game?, widthDp: Int, heightDp: Int, crop: Boolean) = SimpleDraweeView(context).apply {
         layoutParams = LayoutParams(if (widthDp == 0) 0 else dp(widthDp), dp(heightDp))
         val artwork = record?.artwork()
-        hierarchy.actualImageScaleType = if (crop && artwork?.isIcon != true) {
+        hierarchy.setActualImageScaleType(if (crop && artwork?.isIcon != true) {
             com.facebook.drawee.drawable.ScalingUtils.ScaleType.CENTER_CROP
         } else {
             com.facebook.drawee.drawable.ScalingUtils.ScaleType.FIT_CENTER
-        }
+        })
         if (artwork?.isIcon == true) setPadding(dp(10), dp(10), dp(10), dp(10))
         MGImages.setRoundingParams(this, cornerRadius = dp(8).toFloat(), circle = false)
         setImageURI(artwork?.url)
