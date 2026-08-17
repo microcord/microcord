@@ -781,6 +781,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(gallery[position])
 
         override fun onViewRecycled(holder: Holder) {
+            holder.binding.mediaGalleryImage.getZoomableController().reset()
+            bound.mediaGallery.isUserInputEnabled = true
             MGImages.cancelImageRequests(holder.binding.mediaGalleryImage)
             super.onViewRecycled(holder)
         }
@@ -796,6 +798,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 val image = binding.mediaGalleryImage
                 image.setIsLongpressEnabled(false)
                 image.getZoomableController().setZoomTransitionDuration(ZOOM_ANIMATION_DURATION_MS)
+                image.onZoomChanged = { zoomed -> bound.mediaGallery.isUserInputEnabled = !zoomed }
                 image.setTapListener(object : GestureDetector.SimpleOnGestureListener() {
                     override fun onSingleTapConfirmed(e: MotionEvent): Boolean { onMediaClick(); return true }
                     override fun onDoubleTap(e: MotionEvent): Boolean {
