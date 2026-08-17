@@ -129,7 +129,8 @@ class StoreVoiceStates(
 
     /** Batched entry point for `VOICE_STATE_UPDATE`; see `StoreGatewayConnection.voiceStateUpdate`. */
     @StoreThread
-    fun handleVoiceStateUpdates(voiceStates: List<VoiceState>) = voiceStates.forEach(::updateVoiceState)
+    fun handleVoiceStateUpdates(voiceStates: List<VoiceState>, guildId: Long? = null) =
+        voiceStates.forEach { updateVoiceState(it, guildId) }
 
     fun observe(guildId: Long): Observable<Map<Long, VoiceState>> =
         observationDeck.connectRx(this) { voiceStatesSnapshot[guildId].orEmpty() }

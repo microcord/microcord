@@ -43,6 +43,22 @@ class VoiceStoresTest {
     }
 
     @Test
+    fun supplementalVoiceStatesUseParentGuildWhenWireGuildIdIsMissing() {
+        val harness = Harness()
+        val store = StoreVoiceStates({ _, _, _ -> }, harness.deck)
+        harness.register(store)
+
+        harness.dispatch {
+            store.handleVoiceStateUpdates(
+                listOf(voiceState(userId = 1, guildId = 0, channelId = 50)),
+                guildId = 5,
+            )
+        }
+        assertEquals(setOf(1L), store.get()[5L]?.keys)
+        assertNull(store.get()[0L])
+    }
+
+    @Test
     fun voiceStatesNotifyCarriesThePreviousChannelSoBothSidesRecompute() {
         val harness = Harness()
         val notifications = mutableListOf<Triple<Long, Long, Long>>()

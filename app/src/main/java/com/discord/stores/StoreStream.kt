@@ -3508,17 +3508,20 @@ class StoreStream private constructor(
         if (AppGatewaySocketLogger.isLifecycleEnabled()) {
             Log.d(GATEWAY_TAG, "READY_SUPPLEMENTAL guilds=${payload.guilds?.size ?: 0}")
         }
-        val users = readySupplementalUsers.orEmpty()
+        val readyUsers = readySupplementalUsers.orEmpty()
         readySupplementalUsers = null
 
         val supplementalGuilds = payload.guilds.orEmpty()
         supplementalGuilds.forEachIndexed { index, guild ->
             payload.mergedMembers?.getOrNull(index)?.forEach { member ->
-                val user = runCatching { member.user }.getOrNull()
-                    ?: member.userId?.let(users::get) ?: return@forEach
-                guilds.handleGuildMember(member.copy(user = user), guild.id, isFullGuildMember = true)
+                val user = runCatching { member.user }.getOrNull()?.takeIf { it.id != 0L }
+                    ?: member.userId?.let(readyUsers::get)
+                    ?: return@forEach
+                val hydrated = member.copy(user = user)
+                users.handleGuildMemberAdd(hydrated)
+                guilds.handleGuildMember(hydrated, guild.id, isFullGuildMember = true)
             }
-            guild.voiceStates?.let { voiceStates.handleVoiceStateUpdates(it) }
+            guild.voiceStates?.let { voiceStates.handleVoiceStateUpdates(it, guild.id) }
             guild.activityInstances?.let(embeddedActivities::handleConnectionOpenSupplemental)
         }
 
@@ -3529,7 +3532,7 @@ class StoreStream private constructor(
             }.toMap(),
         )
         gameParty.handleConnectionOpenSupplemental(payload.mergedPresences?.friends.orEmpty())
-        channels.handleConnectionOpenSupplemental(payload.lazyPrivateChannels.orEmpty(), users)
+        channels.handleConnectionOpenSupplemental(payload.lazyPrivateChannels.orEmpty(), readyUsers)
         updateSortedGuilds()
     }
 
