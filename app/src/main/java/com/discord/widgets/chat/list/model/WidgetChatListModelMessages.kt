@@ -188,7 +188,7 @@ data class WidgetChatListModelMessages(
                     a.metadata.messageState[messageId], a.metadata.messageReplyState, false, false,
                     null, a.animateEmojis, b.autoPlayGifs, b.renderEmbeds, b.meUserId, false,
                     emptyMap(), b.inviteResolver, false, b.userUpdates,
-                ).asReversed()
+                )
             }
         }
 
@@ -297,14 +297,13 @@ data class WidgetChatListModelMessages(
                 }
             }
 
-            items.items.reverse()
             return WidgetChatListModelMessages(
                 items = items.items,
                 oldestMessageId = metadata.messages.firstOrNull()?.id ?: 0L,
                 newestKnownMessageId = metadata.messages.lastOrNull()?.id ?: 0L,
                 guildMembers = guildMembers,
                 newMessagesMarkerMessageId = newMessagesMarkerMessageId,
-                newestSentByUserMessageId = metadata.messages.firstOrNull { it.author?.id == meUserId }?.id,
+                newestSentByUserMessageId = metadata.messages.lastOrNull { it.author?.id == meUserId }?.id,
             )
         }
 

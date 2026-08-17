@@ -71,21 +71,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     var data: Data = EmptyData()
         set(value) {
             val viewerChanged = field.userId != value.userId
-            val anchorId = StoreStream.getMessagesLoader().bottomPageAnchor(value.channelId)
-            if (field.channelId == value.channelId && anchorId != null) {
-                val oldPos = field.list.indexOfFirst { it.highlightMessage?.id == anchorId }
-                val newPos = value.list.indexOfFirst { it.highlightMessage?.id == anchorId }
-                if (oldPos >= 0 && newPos >= 0 && oldPos != newPos) {
-                    val view = layoutManager?.findViewByPosition(oldPos)
-                    pendingScrollAnchor = ScrollAnchor(
-                        anchorId,
-                        if (view != null) recycler.height - view.bottom else 0,
-                    )
-                    if (pausedItemAnimator == null) {
-                        pausedItemAnimator = recycler.itemAnimator
-                        recycler.itemAnimator = null
-                    }
-                }
+            if (field.channelId == value.channelId &&
+                StoreStream.getMessagesLoader().hasTopPageUpdate(value.channelId)
+            ) {
+                captureVisibleMessageAnchor(field.list, value.list)
             }
             field = value
             setData(value.list)
@@ -198,6 +187,29 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             recycler.setOnTouchListener(handlerOfTouches)
             recycler.removeOnScrollListener(handlerOfScrolls)
             recycler.addOnScrollListener(handlerOfScrolls)
+        }
+    }
+
+    private fun captureVisibleMessageAnchor(oldList: List<ChatListEntry>, newList: List<ChatListEntry>) {
+        val layout = layoutManager ?: return
+        val first = layout.findFirstVisibleItemPosition()
+        val last = layout.findLastVisibleItemPosition()
+        if (first < 0) return
+        for (position in first..last) {
+            val messageId = oldList.getOrNull(position)?.highlightMessage?.id ?: continue
+            if (messageId <= 0L) continue
+            val newPosition = newList.indexOfFirst { it.highlightMessage?.id == messageId }
+            if (newPosition < 0 || newPosition == position) continue
+            val view = layout.findViewByPosition(position) ?: continue
+            pendingScrollAnchor = ScrollAnchor(
+                messageId,
+                layout.getDecoratedTop(view) - recycler.paddingTop,
+            )
+            if (pausedItemAnimator == null) {
+                pausedItemAnimator = recycler.itemAnimator
+                recycler.itemAnimator = null
+            }
+            return
         }
     }
 
@@ -673,22 +685,21 @@ class WidgetChatListAdapter @JvmOverloads constructor(
          * wins so the user sees the boundary rather than the message under it.
          */
         private fun List<ChatListEntry>.newMessageEntryIndex(): Int {
-            if (messageId == SCROLL_TO_NEWEST) return 0
+            if (messageId == SCROLL_TO_NEWEST) return lastIndex
             val isScrollToUnread = messageId == SCROLL_TO_UNREAD
             val targetId = if (isScrollToUnread) {
-                adapter.data.newMessagesMarkerMessageId.takeIf { it > 0L } ?: return 0
+                adapter.data.newMessagesMarkerMessageId.takeIf { it > 0L } ?: return lastIndex
             } else {
                 messageId
             }
             if (targetId <= 0L) return -1
 
-            var index = indexOfFirst { it is MessageEntry && it.message.id <= targetId }
+            val unreadDivider = indexOfFirst { it is NewMessagesEntry && it.messageId == targetId }
+            if (unreadDivider >= 0) return unreadDivider
+            var index = indexOfFirst { it is MessageEntry && it.message.id >= targetId }
             if (index < 0 && isScrollToUnread) {
-                index = findBestNewMessagesPosition(lastIndex)
-            }
-            for (candidate in index downTo 0) {
-                val entry = getOrNull(candidate)
-                if (entry is NewMessagesEntry && entry.messageId == targetId) return candidate
+                val back = findBestNewMessagesPosition(lastIndex)
+                index = if (back < 0) lastIndex else (lastIndex - back).coerceAtLeast(0)
             }
             return index
         }

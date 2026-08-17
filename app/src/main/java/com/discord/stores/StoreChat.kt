@@ -53,10 +53,10 @@ class StoreChat @JvmOverloads constructor(
      * Where the chat list is scrolled, for [channelId], as of the last scroll or layout pass.
      *
      * [scrollState] is a bit set rather than an enum because "at the bottom" and "near the
-     * bottom" are not mutually exclusive. The chat list is laid out in reverse — adapter
-     * position 0 is the newest message, at the bottom of the screen — which is why
-     * [Companion.getScrollState] reads *first* visible position to decide "at bottom" and
-     * *last* visible position to decide "at top".
+     * bottom" are not mutually exclusive. The chat list is oldest-first — adapter position 0
+     * is the start of chat, at the top of the screen — which is why [Companion.getScrollState]
+     * reads *last* visible position to decide "at bottom" and *first* visible position to
+     * decide "at top".
      *
      * [isAtTop] and [isAtBottom] are additionally gated on [isTouchedSinceLastJump]: right after
      * a jump-to-message the list is programmatically positioned, and auto-loading from that
@@ -79,6 +79,7 @@ class StoreChat @JvmOverloads constructor(
 
         val isAtTop: Boolean = isTouchedSinceLastJump && isAtTopIgnoringTouch()
         val isAtBottom: Boolean = isTouchedSinceLastJump && isAtBottomIgnoringTouch()
+        val isNearBottom: Boolean = isTouchedSinceLastJump && isNearBottomIgnoringTouch()
 
         fun isAtBottomIgnoringTouch(): Boolean = (scrollState and SCROLLED_BOTTOM) != 0
         fun isAtTopIgnoringTouch(): Boolean = (scrollState and SCROLLED_TOP) != 0
@@ -94,16 +95,7 @@ class StoreChat @JvmOverloads constructor(
             const val SCROLLED_NEAR_BOTTOM = 4
 
             /**
-             * Derives the bit set from a reverse-laid-out [LinearLayoutManager].
-             *
-             * JADX rendered this method's predicates as tautologies (`(a || b) ? true : true`);
-             * the shape below is taken from the Vineflower decompile of the DEX, where the three
-             * branches are distinct:
-             *
-             * * first visible position `<= 0` → the newest message is on screen → bottom.
-             * * last visible position at, or within [NEAR_EDGE_THRESHOLD] of, the last index →
-             *   the oldest loaded message is on screen → top.
-             * * first visible position in `1..NEAR_EDGE_THRESHOLD` → near the bottom.
+             * Oldest-first list: first visible at 0 is the top, last visible at the end is the bottom.
              */
             @JvmStatic
             fun getScrollState(layoutManager: LinearLayoutManager?): Int {
@@ -111,11 +103,13 @@ class StoreChat @JvmOverloads constructor(
                 val lastIndex = layoutManager.itemCount - 1
                 val firstVisible = layoutManager.findFirstVisibleItemPosition()
                 val lastVisible = layoutManager.findLastVisibleItemPosition()
-                val topThreshold = maxOf(0, lastIndex - NEAR_EDGE_THRESHOLD)
+                val bottomThreshold = maxOf(0, lastIndex - NEAR_EDGE_THRESHOLD)
 
-                var state = if (firstVisible <= 0) SCROLLED_BOTTOM else SCROLLED
-                if (lastVisible == lastIndex || lastVisible >= topThreshold) state = state or SCROLLED_TOP
-                if (firstVisible in 1..NEAR_EDGE_THRESHOLD) state = state or SCROLLED_NEAR_BOTTOM
+                var state = if (lastVisible >= lastIndex) SCROLLED_BOTTOM else SCROLLED
+                if (firstVisible <= 0) state = state or SCROLLED_TOP
+                if (lastVisible >= bottomThreshold && lastVisible < lastIndex) {
+                    state = state or SCROLLED_NEAR_BOTTOM
+                }
                 return state
             }
         }

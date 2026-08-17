@@ -120,7 +120,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
             WidgetChatListAdapter(recycler, this, parentFragmentManager, eventHandler),
         )
         recycler.addItemDecoration(ThreadSpineItemDecoration(requireContext(), created))
-        created.layoutManager?.reverseLayout = true
+        created.layoutManager?.reverseLayout = false
         created.stateRestorationPolicy = RecyclerView.Adapter.StateRestorationPolicy.PREVENT_WHEN_EMPTY
         adapter = created
     }
@@ -129,7 +129,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
         adapter.fragmentManager = parentFragmentManager
         adapter.recycler = recycler
         MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(adapter)
-        adapter.layoutManager?.reverseLayout = true
+        adapter.layoutManager?.reverseLayout = false
     }
 
     private fun configureUI(model: WidgetChatListModel?) {

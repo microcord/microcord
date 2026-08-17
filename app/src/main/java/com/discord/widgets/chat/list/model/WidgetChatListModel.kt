@@ -143,12 +143,7 @@ data class WidgetChatListModel(
         ): WidgetChatListModel {
             val shouldGreet = shouldShowStickerGreet(loadingState, messages, channel, relationships)
             val items = ArrayList<ChatListEntry>(messages.items.size + 3)
-            if (chatListState == ChatListState.DETACHED) {
-                items += LoadingEntry()
-            } else {
-                items += SpacerEntry(channel.id)
-                if (shouldGreet) (greetItem ?: getGreetMessageItem(messages, channel))?.let(items::add)
-            }
+            items += top.item
             items += messages.items.map { entry ->
                 when {
                     entry is MessageEntry && entry.message.id == pendingReplyMessageId ->
@@ -172,7 +167,12 @@ data class WidgetChatListModel(
                     else -> entry
                 }
             }
-            items += top.item
+            if (chatListState == ChatListState.DETACHED) {
+                items += LoadingEntry()
+            } else {
+                if (shouldGreet) (greetItem ?: getGreetMessageItem(messages, channel))?.let(items::add)
+                items += SpacerEntry(channel.id)
+            }
             return WidgetChatListModel(
                 userId = myId,
                 channelId = channel.id,

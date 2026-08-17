@@ -148,8 +148,8 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private var pendingJump: PendingJump? = null
     private var lastRequest: LoadRequest? = null
     private var awaitingFreshSessionReady = false
-    private var bottomPageAnchorChannelId: Long? = null
-    private var bottomPageAnchorMessageId: Long? = null
+    private var topPageLatchChannelId: Long? = null
+    private var pendingTopPageChannelId: Long? = null
 
     /**
      * Subscribes to the scroll position and the detached-channel set.
@@ -258,9 +258,9 @@ class StoreMessagesLoader @JvmOverloads constructor(
         channelLoadedStateUpdate(interactionState.channelId) {
             it.copy(isTouchedSinceLastJump = interactionState.isTouchedSinceLastJump)
         }
-        if (!interactionState.isAtBottom) {
-            bottomPageAnchorChannelId = null
-            bottomPageAnchorMessageId = null
+        if (!interactionState.isAtTop) {
+            topPageLatchChannelId = null
+            pendingTopPageChannelId = null
         }
         this.interactionState = interactionState
         tryLoadMessages(resetRetry = true)
@@ -404,8 +404,7 @@ class StoreMessagesLoader @JvmOverloads constructor(
     fun get(): Observable<ChannelChunk> = observeChunks()
 
     @Synchronized
-    fun bottomPageAnchor(channelId: Long): Long? =
-        bottomPageAnchorMessageId.takeIf { bottomPageAnchorChannelId == channelId }
+    fun hasTopPageUpdate(channelId: Long): Boolean = pendingTopPageChannelId == channelId
 
     fun observeScrollTo(): Observable<Long> = scrollToSubject.filterNull()
     fun getScrollTo(): Observable<Long> = observeScrollTo()
@@ -495,8 +494,11 @@ class StoreMessagesLoader @JvmOverloads constructor(
     private fun loadAdjacentPage(channelId: Long, state: ChannelLoadedState) {
         val interaction = interactionState ?: return
         if (interaction.channelId != channelId) return
-        val shouldRequestOlder = interaction.isAtTop && !state.isOldestMessagesLoaded
-        val shouldRequestNewer = interaction.isAtBottom && channelId in detachedChannels
+        val shouldRequestOlder = interaction.isAtTop &&
+            !state.isOldestMessagesLoaded &&
+            topPageLatchChannelId != channelId
+        val shouldRequestNewer =
+            (interaction.isAtBottom || interaction.isNearBottom) && channelId in detachedChannels
         if (!shouldRequestOlder && !shouldRequestNewer) return
 
         val observeChannelMessages = dependencies?.observeChannelMessages ?: return
@@ -586,9 +588,9 @@ class StoreMessagesLoader @JvmOverloads constructor(
             )
         }
         channelMessagesLoadingSubject.onNext(false)
-        if (isAppendingBottom && !isJump) {
-            bottomPageAnchorChannelId = channelId
-            bottomPageAnchorMessageId = after
+        if (isAppendingTop && !isJump) {
+            topPageLatchChannelId = channelId
+            pendingTopPageChannelId = channelId
         }
         channelMessageChunksSubject.onNext(
             ChannelChunk(channelId, messages, isInitial, isPresent, isAppendingTop, isJump),

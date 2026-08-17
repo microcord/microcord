@@ -45,7 +45,8 @@ class WidgetChatListModelTest {
             chatListState = WidgetChatListModel.ChatListState.DETACHED,
         )
 
-        assertTrue(model.list.first() is LoadingEntry)
+        assertTrue(model.list.first() is SpacerEntry)
+        assertTrue(model.list.last() is LoadingEntry)
         assertEquals(1L, model.oldestMessageId)
         assertEquals(2L, model.newestKnownMessageId)
         assertEquals(3L, model.newMessagesMarkerMessageId)
