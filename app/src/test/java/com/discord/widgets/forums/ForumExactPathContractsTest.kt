@@ -53,6 +53,13 @@ class ForumExactPathContractsTest {
         assertEquals("channels/{channelId}/threads/search", endpoint.value)
     }
 
+    @Test
+    fun `embedded forum only owns its selected toolbar`() {
+        assertTrue(ownsForumToolbar(embeddedInHome = true, selectedChannelId = 7L, forumChannelId = 7L))
+        assertFalse(ownsForumToolbar(embeddedInHome = true, selectedChannelId = 8L, forumChannelId = 7L))
+        assertTrue(ownsForumToolbar(embeddedInHome = false, selectedChannelId = 8L, forumChannelId = 7L))
+    }
+
     private fun post(channel: Channel, ownerId: Long, myUserId: Long) = PostData(
         channel = channel,
         owner = com.discord.models.user.CoreUser(id = ownerId, username = "owner", discriminator = 1),

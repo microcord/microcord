@@ -3496,6 +3496,10 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Ponytail cleanup removed the unused fetched-user callback, changed the serial transport from singleton sets to one user ID, folded
   repeated feature-flag preference access into two helpers, passed one `UserUpdates` value through chat row construction, and removed
   the embed-only pending-ID change token. Focused mention/store tests and debug assembly pass.
+- Forum browsing now adopts `forum_toolbar` rather than leaving the activity bound to another surface. Its title, icon, menu,
+  subtitle, and presence mutations run only while that forum is selected, so a hidden forum state update cannot overwrite a DM
+  opened from a notification or member list. `assembleDebug` passes; the focused contract test is blocked before compilation by
+  the unrelated stale `WidgetVoiceSettingsBottomSheetViewModelTest` API errors, and device verification awaits A065 reconnecting.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

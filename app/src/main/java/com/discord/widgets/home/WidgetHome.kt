@@ -238,7 +238,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                     if (surface == CenterSurface.DIRECTORY) View.VISIBLE else View.GONE
                 if (channel != null) {
                     if (surface == CenterSurface.FORUM) {
-                        (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)?.bindToolbar()
+                        (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)?.refreshToolbar()
                     } else if (surface != CenterSurface.DIRECTORY) {
                         configureToolbar(channel)
                     }

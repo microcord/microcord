@@ -4,12 +4,15 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.view.View
 import android.widget.ImageView
+import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.api.channel.Channel
+import com.discord.api.channel.getDisplayNameOrDefault
+import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.widgets.channels.list.WidgetChannelsListItemThreadActions
 import com.discord.databinding.WidgetForumBrowserBinding
 import com.discord.stores.SelectedChannelAnalyticsLocation
@@ -97,19 +100,7 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                 ?.takeIf { it.channelId == channelId }
                 ?.let(::configure)
         }
-        val home = parentFragment as? WidgetHome
-        val toolbar = if (home == null) {
-            setActionBarDisplayHomeAsUpEnabled()
-        } else {
-            setActionBarDisplayHomeAsUpEnabled(
-                iconRes = R.drawable.ic_menu_24dp,
-                iconAccessibilityLabel = R.string.toggle_drawer,
-            )
-        }
-        toolbar?.setNavigationOnClickListener {
-            if (home == null) requireActivity().onBackPressedDispatcher.onBackPressed()
-            else home.handleCenterPanelBack()
-        }
+        refreshToolbar()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -121,7 +112,6 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
     }
 
     private fun configure(state: WidgetForumBrowserViewModel.ViewState) {
-        bindToolbar()
         nsfwPanel.configureUI(
             state.nsfwPanelState.guildId,
             state.nsfwPanelState.isChannelNsfw,
@@ -146,18 +136,8 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
             }
             is WidgetForumBrowserViewModel.ViewState.Loaded -> {
                 binding.loadingView.root.visibility = View.GONE
-                setActionBarTitle(
-                    state.channelName,
-                    leadingDrawableRes = if (state.isMediaChannel) {
-                        R.drawable.ic_image_library_24dp
-                    } else {
-                        R.drawable.ic_discord_forum_filled_tinted
-                    },
-                )
-                actionBarTitleLayout?.findViewById<ImageView>(R.id.toolbar_icon)?.imageTintList =
-                    ColorStateList.valueOf(ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal))
+                configureToolbar(state.channelId)
                 configureButtons(state)
-                configureSearchMenu(state)
                 val channel = StoreStream.getChannels().getChannel(state.channelId)
                 adapter.layout = ForumUtils.getLayout(state.channelId, channel)
                 val items = sortForumItems(
@@ -193,6 +173,58 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
         }
     }
 
+    override fun bindToolbar(view: View?) {
+        val toolbar = view?.findViewById<Toolbar>(R.id.forum_toolbar) ?: return
+        appActivity?.let { activity ->
+            if (activity.toolbar !== toolbar) activity.setToolbar(toolbar)
+        }
+    }
+
+    internal fun refreshToolbar() {
+        val selected = StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+            as? com.discord.stores.StoreChannelsSelected.ResolvedSelectedChannel.Channel
+            ?: return
+        if (selected.channel.isThreadOnlyChannel()) configureToolbar(selected.channel.id)
+    }
+
+    private fun configureToolbar(channelId: Long) {
+        if (!ownsForumToolbar(parentFragment is WidgetHome, selectedChannelId(), channelId)) return
+        val channel = StoreStream.getChannels().getChannel(channelId) ?: return
+        bindToolbar()
+        val home = parentFragment as? WidgetHome
+        val toolbar = if (home == null) {
+            setActionBarDisplayHomeAsUpEnabled()
+        } else {
+            setActionBarDisplayHomeAsUpEnabled(
+                iconRes = R.drawable.ic_menu_24dp,
+                iconAccessibilityLabel = R.string.toggle_drawer,
+            )
+        }
+        toolbar?.setNavigationOnClickListener {
+            if (home == null) requireActivity().onBackPressedDispatcher.onBackPressed()
+            else home.handleCenterPanelBack()
+        }
+        setActionBarTitle(
+            channel.getDisplayNameOrDefault(requireContext(), includePrefix = false),
+            leadingDrawableRes = if (channel.type == Channel.GUILD_MEDIA) {
+                R.drawable.ic_image_library_24dp
+            } else {
+                R.drawable.ic_discord_forum_filled_tinted
+            },
+        )
+        setActionBarSubtitle(null)
+        actionBarTitleLayout?.setPresence(null, false)
+        actionBarTitleLayout?.findViewById<ImageView>(R.id.toolbar_icon)?.imageTintList =
+            ColorStateList.valueOf(ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveNormal))
+        toolbar?.visibility = View.VISIBLE
+        configureSearchMenu(channel)
+    }
+
+    private fun selectedChannelId(): Long? =
+        (StoreStream.getChannelsSelected().getResolvedSelectedChannel()
+            as? com.discord.stores.StoreChannelsSelected.ResolvedSelectedChannel.Channel)
+            ?.channel?.id
+
     private fun openForumPostActions(channel: Channel) {
         WidgetChannelsListItemThreadActions.show(parentFragmentManager, channel.id)
     }
@@ -202,12 +234,15 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
      * paged in; results replace the listing until the query is cleared.
      */
     /** The reference only offers search to someone who may read the post history. */
-    private fun configureSearchMenu(state: WidgetForumBrowserViewModel.ViewState.Loaded) {
+    private fun configureSearchMenu(channel: Channel) {
         val canSearch = PermissionUtils.can(
             Permission.READ_MESSAGE_HISTORY,
-            StoreStream.getPermissions().getPermissionsByChannel()[state.channelId],
+            StoreStream.getPermissions().getPermissionsByChannel()[channel.id],
         )
-        if (!canSearch) return
+        if (!canSearch) {
+            appActivity?.toolbar?.menu?.clear()
+            return
+        }
         setActionBarOptionsMenu(
             R.menu.menu_search,
             onSelected = { if (it.itemId == R.id.search) toggleSearch() },
@@ -369,3 +404,6 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
         }
     }
 }
+
+internal fun ownsForumToolbar(embeddedInHome: Boolean, selectedChannelId: Long?, forumChannelId: Long): Boolean =
+    !embeddedInHome || selectedChannelId == forumChannelId
