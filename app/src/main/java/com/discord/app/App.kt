@@ -24,6 +24,7 @@ import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notices.NoticeBuilders
 import com.discord.widgets.guilds.list.GuildsListStoreHooks
 import com.discord.widgets.notice.NoticePopupChannel
+import com.discord.utilities.systemlog.SystemLogUtils
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import com.discord.rtcconnection.mediaengine.KrispAssetPack
@@ -60,6 +61,8 @@ class App : Application() {
             FirebaseApp.initializeApp(this)
             return
         }
+        SystemLogUtils.initSystemLogCapture(filesDir)
+        installCrashLogHandler()
         // The reference's UriHandler enqueues the masked-link notice itself; ours has no dependency
         // on the widget tree, so the confirmation dialog installs itself here instead. Without this
         // an untrusted masked link is dropped with no user-visible confirmation.
@@ -93,6 +96,14 @@ class App : Application() {
         getProcessName()
     } else {
         runCatching { File("/proc/self/cmdline").readText().trimEnd('\u0000') }.getOrNull()
+    }
+
+    private fun installCrashLogHandler() {
+        val delegate = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching { SystemLogUtils.recordCrash(throwable) }
+            delegate?.uncaughtException(thread, throwable)
+        }
     }
 
     companion object {

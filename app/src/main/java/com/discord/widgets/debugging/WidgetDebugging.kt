@@ -1,7 +1,10 @@
 package com.discord.widgets.debugging
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -13,6 +16,7 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
+import com.discord.app.AppToast
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
@@ -21,8 +25,10 @@ import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.rx.ui
+import com.discord.utilities.systemlog.SystemLogUtils
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import rx.Observable
+import rx.schedulers.Schedulers
 import rx.subjects.BehaviorSubject
 
 /**
@@ -40,9 +46,14 @@ import rx.subjects.BehaviorSubject
 class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 
     private val filterSubject: BehaviorSubject<Boolean> = BehaviorSubject.create(true)
+    private val showSystemLogsSubject: BehaviorSubject<Boolean> = BehaviorSubject.create(false)
     private var logsAdapter: Adapter? = null
 
-    private data class Model(val logs: List<LogRow>, val isFiltered: Boolean)
+    private data class Model(
+        val logs: List<LogRow>,
+        val isFiltered: Boolean,
+        val showSystemLogs: Boolean,
+    )
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -63,8 +74,13 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
         Observable.combineLatest(
             AppLog.observeLogs().distinctUntilChanged(),
             filterSubject.distinctUntilChanged(),
-        ) { logs, isFiltered ->
-            Model(filterDebugLogs(logs, isFiltered).map(::LogRow), isFiltered)
+            showSystemLogsSubject.distinctUntilChanged(),
+        ) { logs, isFiltered, showSystemLogs ->
+            Model(
+                filterDebugLogs(logs, isFiltered, showSystemLogs).map(::LogRow),
+                isFiltered,
+                showSystemLogs,
+            )
         }
             .computationBuffered()
             .ui(this)
@@ -76,16 +92,53 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
         setActionBarOptionsMenu(
             menuResId = R.menu.menu_debugging,
             onSelected = { menuItem ->
-                if (menuItem.itemId == R.id.menu_debugging_filter) {
-                    val checked = !menuItem.isChecked
-                    menuItem.isChecked = checked
-                    filterSubject.onNext(checked)
+                when (menuItem.itemId) {
+                    R.id.menu_debugging_filter -> {
+                        val checked = !menuItem.isChecked
+                        menuItem.isChecked = checked
+                        filterSubject.onNext(checked)
+                    }
+                    R.id.menu_debugging_system_logs -> {
+                        val checked = !menuItem.isChecked
+                        menuItem.isChecked = checked
+                        showSystemLogsSubject.onNext(checked)
+                    }
+                    R.id.menu_debugging_save -> startActivityForResult(
+                        Intent(Intent.ACTION_CREATE_DOCUMENT)
+                            .addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType("text/plain")
+                            .putExtra(Intent.EXTRA_TITLE, "manticord-debug-${System.currentTimeMillis()}.txt"),
+                        REQUEST_SAVE_LOGS,
+                    )
                 }
             },
             onConfigured = { menu ->
                 menu.findItem(R.id.menu_debugging_filter).isChecked = model.isFiltered
+                menu.findItem(R.id.menu_debugging_system_logs).isChecked = model.showSystemLogs
             },
         )
+    }
+
+    @Deprecated("Uses the existing fragment activity-result contract")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SAVE_LOGS || resultCode != Activity.RESULT_OK) return
+        saveLogs(data?.data ?: return)
+    }
+
+    private fun saveLogs(uri: Uri) {
+        val resolver = requireContext().contentResolver
+        val output = debugLogExport(AppLog.getLogs(), SystemLogUtils.fetchPreviousSessionLogs())
+        Observable.fromCallable {
+            resolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(output) }
+                ?: error("Unable to open debug log destination")
+        }
+            .subscribeOn(Schedulers.io())
+            .ui(this)
+            .subscribe(
+                { AppToast.show(this, R.string.debug_logs_saved) },
+                { AppToast.show(this, R.string.default_failure_to_perform_action_message) },
+            )
     }
 
     /**
@@ -169,6 +222,7 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
     companion object {
         private const val COLLAPSED_MAX_LINES = 2
         private const val VIEW_TYPE_LOG = 0
+        private const val REQUEST_SAVE_LOGS = 6_201
 
         fun launch(context: Context) {
             AppScreenRouter.launch(context, WidgetDebugging::class.java)
@@ -193,8 +247,28 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 internal fun logRowText(item: AppLog.LoggedItem): String =
     AppLog.redactSecrets(item.message + (item.throwable?.let { "\n$it" } ?: ""))
 
-/** Reference filter: checked means hide priority 2 (VERBOSE); tags remain in `tag -> message`. */
+internal fun debugLogExport(
+    logs: List<AppLog.LoggedItem>,
+    previousSessionLogs: String = "",
+): String = buildString {
+    appendLine("Manticord debug log")
+    logs.forEach { item ->
+        appendLine(logRowText(item))
+    }
+    if (previousSessionLogs.isNotBlank()) {
+        appendLine()
+        appendLine("Previous session captured logcat tail")
+        append(AppLog.redactSecrets(previousSessionLogs))
+    }
+}
+
+/** Checked hides verbose rows and Android/platform noise; exports always retain every captured row. */
 internal fun filterDebugLogs(
     logs: List<AppLog.LoggedItem>,
     isFiltered: Boolean,
-): List<AppLog.LoggedItem> = if (isFiltered) logs.filter { it.priority > Log.VERBOSE } else logs
+    showSystemLogs: Boolean = false,
+): List<AppLog.LoggedItem> = if (isFiltered) {
+    logs.filter { it.priority > Log.VERBOSE && (showSystemLogs || !it.isSystem) }
+} else {
+    logs
+}

@@ -194,7 +194,9 @@ class StoreMessagesLoader @JvmOverloads constructor(
         if (!awaitingFreshSessionReady) return emptySet()
         awaitingFreshSessionReady = false
         val staleChannels = channelLoadedStates.keys.filterTo(HashSet()) { channelId ->
-            serverLastMessageIds[channelId]?.let { it != (localLastMessageId(channelId) ?: 0L) } == true
+            // READY omits channels that were not included in its partial guild payload. Missing is
+            // therefore unknown, not evidence that our cached history is current.
+            serverLastMessageIds[channelId] != (localLastMessageId(channelId) ?: 0L)
         }
         staleChannels.forEach { channelId ->
             channelLoadedStates[channelId] = requireNotNull(channelLoadedStates[channelId]).let {

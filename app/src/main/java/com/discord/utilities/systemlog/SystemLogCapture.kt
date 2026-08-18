@@ -1,5 +1,8 @@
 package com.discord.utilities.systemlog
 
+import android.os.Process as AndroidProcess
+import android.util.Log
+import com.discord.app.AppLog
 import com.discord.utilities.collections.FixedSizeLineBuffer
 import java.io.BufferedReader
 import java.io.File
@@ -11,7 +14,8 @@ import kotlin.concurrent.thread
  *
  * Android's own log ring is small and shared with every other app on the device, so by the time a
  * user files a bug report the interesting lines have usually been evicted. This keeps the app's own
- * rolling window in memory, ready to attach.
+ * rolling window in memory, ready to attach. The same window is periodically persisted so a JVM or
+ * native crash can be gathered on the next launch.
  *
  * Two buffers, not one: tombstone lines (native crash traces) go into a second, smaller buffer that
  * is emitted *first*, so a native crash survives even after half a megabyte of ordinary logging has
@@ -21,6 +25,22 @@ class SystemLogCapture {
 
     private val buffer = FixedSizeLineBuffer(MAX_BUFFER_CHARACTERS)
     private val tombstoneBuffer = FixedSizeLineBuffer(MAX_TOMBSTONE_BUFFER_CHARACTERS)
+    private val persistenceLock = Any()
+    private var currentLogFile: File? = null
+    private var previousLogFile: File? = null
+    private var linesSincePersist = 0
+
+    fun init(filesDir: File) {
+        synchronized(persistenceLock) {
+            val current = File(filesDir, CURRENT_LOG_FILE)
+            val previous = File(filesDir, PREVIOUS_LOG_FILE)
+            if (current.exists()) current.copyTo(previous, overwrite = true)
+            current.delete()
+            currentLogFile = current
+            previousLogFile = previous
+            linesSincePersist = 0
+        }
+    }
 
     /**
      * Starts the tail on a daemon thread.
@@ -45,6 +65,15 @@ class SystemLogCapture {
         append(buffer.getString())
     }
 
+    fun getPreviousOutput(): String = synchronized(persistenceLock) {
+        runCatching { previousLogFile?.takeIf(File::exists)?.readText().orEmpty() }.getOrDefault("")
+    }
+
+    fun recordCrash(throwable: Throwable) {
+        buffer.addLine(AppLog.redactSecrets(Log.getStackTraceString(throwable)))
+        persist()
+    }
+
     /**
      * Reads `logcat` until it dies, then waits a second and starts it again.
      *
@@ -61,11 +90,13 @@ class SystemLogCapture {
         while (true) {
             var process: Process? = null
             try {
-                process = ProcessBuilder(LOGCAT_PATH).redirectErrorStream(true).start()
+                process = ProcessBuilder(LOGCAT_PATH, "--pid=${AndroidProcess.myPid()}", "-v", "brief")
+                    .redirectErrorStream(true)
+                    .start()
                 BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8)).use { reader ->
                     while (true) {
                         val line = reader.readLine() ?: break
-                        if (shouldIncludeLogLine(line)) buffer.addLine(line)
+                        captureLine(line)
                         if (SystemLogUtils.regexExtractTombstone.matches(line)) {
                             tombstoneBuffer.addLine(line)
                         }
@@ -82,6 +113,28 @@ class SystemLogCapture {
         }
     }
 
+    private fun captureLine(line: String) {
+        if (!shouldIncludeLogLine(line)) return
+        val safeLine = AppLog.redactSecrets(line)
+        buffer.addLine(safeLine)
+        LOG_LINE.matchEntire(line)?.let { match ->
+            val priority = priority(match.groupValues[1])
+            if (match.groupValues[2] != APP_LOG_TAG) {
+                AppLog.captureLogcat(priority, safeLine, isSystem = true)
+            }
+            linesSincePersist++
+            if (priority >= Log.ERROR || linesSincePersist == 1 || linesSincePersist >= PERSIST_LINE_COUNT) persist()
+        }
+    }
+
+    private fun persist() {
+        val file = synchronized(persistenceLock) {
+            linesSincePersist = 0
+            currentLogFile
+        } ?: return
+        runCatching { file.writeText(getOutput()) }
+    }
+
     companion object {
         private const val LOGCAT_PATH = "/system/bin/logcat"
         private const val MAX_BUFFER_CHARACTERS = 524_288
@@ -92,6 +145,23 @@ class SystemLogCapture {
          * Drops the kernel's "chatty" rate-limit notices, which are pure noise and can outnumber
          * the real lines during a burst.
          */
-        internal fun shouldIncludeLogLine(line: String): Boolean = !line.contains("chatty  : uid=")
+        internal fun shouldIncludeLogLine(line: String): Boolean =
+            !line.contains("chatty  : uid=") && LOG_LINE.matches(line)
+
+        private val LOG_LINE = Regex("^([VDIWE])/([^(:]+)\\(\\s*\\d+\\):\\s?(.*)$")
+
+        private const val APP_LOG_TAG = "Discord"
+        private const val CURRENT_LOG_FILE = "debug-log-current.txt"
+        private const val PREVIOUS_LOG_FILE = "debug-log-previous.txt"
+        private const val PERSIST_LINE_COUNT = 25
+
+        private fun priority(value: String): Int = when (value) {
+            "V" -> Log.VERBOSE
+            "D" -> Log.DEBUG
+            "I" -> Log.INFO
+            "W" -> Log.WARN
+            else -> Log.ERROR
+        }
+
     }
 }

@@ -1,6 +1,7 @@
 package com.discord.utilities.logging
 
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class StartupMetricsTest {
@@ -18,5 +19,15 @@ class StartupMetricsTest {
         assertTrue(report.contains("READY wait: 100.000 ms"))
         assertTrue(report.contains("READY parse: 20.000 ms"))
         assertTrue(report.contains("Ordinary parse avg: 2.000 ms"))
+    }
+
+    @Test
+    fun gatewayFramesStopAfterReady() {
+        StartupMetrics.beginProcess("test")
+        StartupMetrics.recordGatewayFrame("READY", 0L, null, 0L, 0L)
+        StartupMetrics.recordGatewayFrame("MESSAGE_CREATE", 0L, null, 0L, 0L)
+
+        assertTrue(StartupMetrics.snapshot().any { it.name == "READY" })
+        assertFalse(StartupMetrics.snapshot().any { it.name == "MESSAGE_CREATE" })
     }
 }

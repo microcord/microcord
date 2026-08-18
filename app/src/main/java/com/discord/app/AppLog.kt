@@ -20,6 +20,7 @@ object AppLog {
         val priority: Int,
         val message: String,
         val throwable: Throwable?,
+        val isSystem: Boolean = false,
     ) {
         val key: String = UUID.randomUUID().toString()
     }
@@ -98,16 +99,16 @@ object AppLog {
         recordBreadcrumb("Navigation [$from] > [$to]", "navigation")
     }
 
+    /** Records an already-formatted line captured from this process's logcat stream. */
+    internal fun captureLogcat(priority: Int, message: String, isSystem: Boolean) {
+        if (!initialized || priority < minimumPriority) return
+        append(priority, redactSecrets(message), null, isSystem)
+    }
+
     private fun log(priority: Int, message: String, throwable: Throwable?, metadata: Map<String, String>?) {
         if (priority < minimumPriority) return
         val safeMessage = redactSecrets(message)
-        synchronized(logLock) {
-            // ponytail: copying is simple and bounded; use a ring buffer only if logging throughput
-            // makes this measurable.
-            logSnapshot = (logSnapshot + LoggedItem(priority, safeMessage, throwable))
-                .takeLast(MAX_BUFFERED_LOGS)
-            logs.onNext(logSnapshot)
-        }
+        append(priority, safeMessage, throwable)
 
         val sink = sink
         if (sink != null) {
@@ -124,6 +125,19 @@ object AppLog {
         // message routinely quotes what failed — a malformed auth response, a request URL with a
         // token query parameter — so printing it raw would have defeated [redactSecrets].
         throwable?.let { println(priority, redactSecrets(Log.getStackTraceString(it))) }
+    }
+
+    private fun append(
+        priority: Int,
+        message: String,
+        throwable: Throwable?,
+        isSystem: Boolean = false,
+    ) {
+        synchronized(logLock) {
+            logSnapshot = (logSnapshot + LoggedItem(priority, message, throwable, isSystem))
+                .takeLast(MAX_BUFFERED_LOGS)
+            logs.onNext(logSnapshot)
+        }
     }
 
     private fun println(priority: Int, message: String) {

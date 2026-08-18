@@ -45,11 +45,20 @@ object SystemLogUtils {
 
     private val systemLogCapture = SystemLogCapture()
 
-    /** Starts the rolling in-memory logcat tail. Call once, at app start. */
-    fun initSystemLogCapture(): Thread = systemLogCapture.startThread()
+    /** Starts the rolling, crash-persistent logcat tail. Call once, at app start. */
+    fun initSystemLogCapture(filesDir: File): Thread {
+        systemLogCapture.init(filesDir)
+        return systemLogCapture.startThread()
+    }
 
     /** The captured window, tombstone lines first. */
     fun fetch(): String = buildString { systemLogCapture.appendOutput(this) }
+
+    /** Sanitized process logs gathered before the previous process died or was restarted. */
+    fun fetchPreviousSessionLogs(): String = systemLogCapture.getPreviousOutput()
+
+    /** Persists the current tail and JVM stack before Android terminates the crashing process. */
+    fun recordCrash(throwable: Throwable) = systemLogCapture.recordCrash(throwable)
 
     /**
      * Runs `logcat -d` on a fresh thread and returns the lines matching [filter] (all lines when

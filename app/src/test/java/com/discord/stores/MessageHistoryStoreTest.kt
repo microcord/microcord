@@ -260,6 +260,20 @@ class MessageHistoryStoreTest {
     }
 
     @Test
+    fun freshGatewayReadyRefetchesChannelsMissingFromPartialReady() {
+        val requests = mutableListOf<LoadRequest>()
+        val loader = loader(requests) { Result.success(emptyList()) }
+        loader.handleAuthToken("token")
+        loader.handleConnected(true)
+        loader.handleChannelSelected(12)
+
+        loader.handleFreshSession()
+
+        assertTrue(loader.handleFreshSessionReady(emptyMap()) { 1L }.contains(12L))
+        assertEquals(listOf(12L, 12L), requests.map(LoadRequest::channelId))
+    }
+
+    @Test
     fun forumParentSelectionDoesNotLoadMessageHistoryButItsPostDoes() {
         val requests = mutableListOf<LoadRequest>()
         val loader = loader(requests) { Result.success(emptyList()) }

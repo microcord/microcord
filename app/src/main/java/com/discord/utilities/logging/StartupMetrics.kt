@@ -21,11 +21,13 @@ object StartupMetrics {
     private val entries = ArrayDeque<Entry>(MAX_ENTRIES)
     private val listeners = LinkedHashSet<(List<Entry>) -> Unit>()
     private var processStartNanos = SystemClock.elapsedRealtimeNanos()
+    private var collectingGatewayFrames = true
 
     fun beginProcess(name: String) {
         synchronized(this) {
             processStartNanos = SystemClock.elapsedRealtimeNanos()
             entries.clear()
+            collectingGatewayFrames = true
         }
         markBoot(name)
     }
@@ -43,6 +45,15 @@ object StartupMetrics {
         decodeNanos: Long,
         parseNanos: Long,
     ) {
+        val finishesStartup = type == "READY" || type == "RESUMED"
+        if (synchronized(this) {
+                if (!collectingGatewayFrames) true
+                else {
+                    if (finishesStartup) collectingGatewayFrames = false
+                    false
+                }
+            }
+        ) return
         val entry = Entry(
             kind = Kind.GATEWAY,
             name = type,

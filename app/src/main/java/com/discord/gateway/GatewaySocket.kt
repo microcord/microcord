@@ -3,6 +3,7 @@ package com.discord.gateway
 import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
+import com.discord.app.AppLog
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
 import com.discord.gateway.io.CreateStream
@@ -660,7 +661,9 @@ class GatewaySocket(
 
     private fun logInfo(message: String) { runCatching { Log.i(TAG, message) } }
     private fun logWarn(message: String) { runCatching { Log.w(TAG, message) } }
-    private fun logDebug(message: String) { runCatching { Log.d(TAG, message) } }
+    private fun logDebug(message: String) {
+        if (gatewaySocketLogger.logLevel == GatewaySocketLogger.LogLevel.VERBOSE) AppLog.d(TAG, message)
+    }
     private fun logError(message: String, error: Throwable) { runCatching { Log.e(TAG, message, error) } }
 
     private companion object {

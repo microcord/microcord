@@ -69,4 +69,24 @@ class WidgetDebuggingRowTextTest {
         assertEquals(logs, filterDebugLogs(logs, isFiltered = false))
     }
 
+    @Test
+    fun `saved logs use the same secret-safe row rendering`() {
+        val exported = debugLogExport(
+            listOf(item("request failed", IllegalStateException("token=$secret"))),
+        )
+
+        assertTrue(exported.startsWith("Manticord debug log\n"))
+        assertFalse(exported.contains(secret))
+        assertTrue(exported.contains(AppLog.REDACTED))
+    }
+
+    @Test
+    fun `filtered view hides system rows but export retains them`() {
+        val system = AppLog.LoggedItem(android.util.Log.WARN, "OpenGLRenderer warning", null, isSystem = true)
+
+        assertTrue(filterDebugLogs(listOf(system), isFiltered = true).isEmpty())
+        assertEquals(listOf(system), filterDebugLogs(listOf(system), isFiltered = true, showSystemLogs = true))
+        assertTrue(debugLogExport(listOf(system)).contains("OpenGLRenderer warning"))
+    }
+
 }
