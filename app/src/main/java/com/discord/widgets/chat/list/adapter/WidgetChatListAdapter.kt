@@ -80,8 +80,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
                 (value.list.newestMessage()?.id ?: 0L) > (field.list.newestMessage()?.id ?: 0L)
             val atBottom = StoreChat.InteractionState.getScrollState(layoutManager)
                 .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
-            pendingStickToBottom = newestGrew &&
-                (atBottom || value.list.newestMessage()?.author?.id == value.userId)
+            pendingStickToBottom = newestGrew && atBottom
             field = value
             setData(value.list)
             if (viewerChanged && itemCount > 0) notifyItemRangeChanged(0, itemCount)
@@ -108,7 +107,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private val handlerOfResize = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
         val oldHeight = oldBottom - oldTop
         val newHeight = bottom - top
-        if (oldHeight > newHeight && itemCount > 0 && atBottomBeforeResize) {
+        if (oldHeight != newHeight && itemCount > 0 && atBottomBeforeResize) {
             layoutManager?.scrollToPosition(itemCount - 1)
         }
         atBottomBeforeResize = StoreChat.InteractionState.getScrollState(layoutManager)
