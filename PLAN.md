@@ -3500,6 +3500,13 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   subtitle, and presence mutations run only while that forum is selected, so a hidden forum state update cannot overwrite a DM
   opened from a notification or member list. `assembleDebug` passes; the focused contract test is blocked before compilation by
   the unrelated stale `WidgetVoiceSettingsBottomSheetViewModelTest` API errors, and device verification awaits A065 reconnecting.
+- Fullscreen gallery videos now give their fitted player an opaque black surface, so the gallery poster cannot show through the
+  letterbox while video frames are playing. `installDebug` passes on A065 after one transient Gradle resource-packaging heap retry.
+- Video poster URLs now preserve supplied attachment/embed dimensions within the existing 1280x720 proxy cap instead of forcing
+  every preview to 16:9. This fixes portrait and square gallery posters; `installDebug` passes on A065.
+- Gallery video posters now remain visible while an alpha-zero player surface decodes. The handoff occurs from ExoPlayer's
+  `onRenderedFirstFrame`, rather than `STATE_READY`, avoiding the one-frame black gap before the first composited frame.
+  `installDebug` passes on A065.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

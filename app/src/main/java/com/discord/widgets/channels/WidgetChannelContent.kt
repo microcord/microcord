@@ -189,14 +189,14 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
                 message.attachments.orEmpty().forEach { attachment ->
                     if (attachment.type != com.discord.api.message.attachment.MessageAttachmentType.FILE) {
                         val video = attachment.type == com.discord.api.message.attachment.MessageAttachmentType.VIDEO
-                        add(Item(attachment.url, if (video) mediaVideoPreviewUrl(attachment.proxyUrl) else attachment.proxyUrl, attachment.filename, video = video, attachment = attachment, channelId = message.channelId, messageId = message.id, metadata = metadata))
+                        add(Item(attachment.url, if (video) mediaVideoPreviewUrl(attachment.proxyUrl, attachment.width, attachment.height) else attachment.proxyUrl, attachment.filename, video = video, attachment = attachment, channelId = message.channelId, messageId = message.id, metadata = metadata))
                     }
                 }
                 message.embeds.orEmpty().forEach { embed ->
                     embed.video?.let { video ->
                         val stream = video.proxyUrl ?: video.url ?: return@forEach
                         if (!isDirectVideoUrl(stream)) return@forEach
-                        val poster = embed.thumbnail?.proxyUrl ?: embed.thumbnail?.url ?: mediaVideoPreviewUrl(stream)
+                        val poster = embed.thumbnail?.proxyUrl ?: embed.thumbnail?.url ?: mediaVideoPreviewUrl(stream, video.width, video.height)
                         add(Item(stream, poster, embed.title, video = true, attachment = MessageAttachment(stream, 0, 0, stream, "video.${Uri.parse(stream).path?.substringAfterLast('.', "mp4")}", video.width, video.height, contentType = "video/mp4"), channelId = message.channelId, messageId = message.id, metadata = metadata))
                         return@forEach
                     }

@@ -90,7 +90,15 @@ class WidgetMediaLaunchTest {
 
         assertEquals(MediaType.VIDEO, args.mediaType)
         assertEquals("https://media.discordapp.net/proxied", args.progressiveMediaUri)
-        assertEquals("https://media.discordapp.net/proxied?format=webp&width=1280&height=720", args.previewImageUri)
+        assertEquals("https://media.discordapp.net/proxied?format=webp&width=800&height=600", args.previewImageUri)
+    }
+
+    @Test
+    fun `video poster preserves the stream aspect ratio`() {
+        assertEquals(
+            "https://media.discordapp.net/proxied?format=webp&width=405&height=720",
+            mediaVideoPreviewUrl("https://media.discordapp.net/proxied", 1080, 1920),
+        )
     }
 
     @Test

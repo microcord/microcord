@@ -265,7 +265,9 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         bound.mediaBottomChrome.visibility = if (isVideo()) View.VISIBLE else View.GONE
 
         if (!galleryPage) configureMediaImage()
-        bound.mediaPlayerView.visibility = if (galleryPage) View.GONE else bound.mediaPlayerView.visibility
+        val isVideo = mediaSource != null
+        bound.mediaPlayerView.visibility = if (isVideo) View.VISIBLE else View.GONE
+        bound.mediaPlayerView.alpha = if (galleryPage && isVideo) 0f else 1f
         showControls()
 
         playerPausedByFragmentLifecycle = false
@@ -401,7 +403,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             PlayerEvent.Ready -> {
                 // The first real frame is on screen, so the cover frame can come down for good.
                 bound.mediaImage.visibility = View.GONE
-                if (gallery.isNotEmpty()) bound.mediaPlayerView.visibility = View.VISIBLE
+                bound.mediaPlayerView.alpha = 1f
                 viewModel.showCoverFrame = false
                 hideLoadingIndicator()
             }
@@ -438,7 +440,6 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 when (playbackState) {
                     Player.STATE_BUFFERING -> handlePlayerEvent(PlayerEvent.Buffering)
                     Player.STATE_READY -> {
-                        handlePlayerEvent(PlayerEvent.Ready)
                         startPositionPolling()
                     }
                     Player.STATE_ENDED -> {
@@ -448,6 +449,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                     }
                 }
             }
+
+            override fun onRenderedFirstFrame() = handlePlayerEvent(PlayerEvent.Ready)
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 handlePlayerEvent(if (isPlaying) PlayerEvent.Playing else PlayerEvent.Paused)
@@ -957,7 +960,7 @@ internal fun launchArgs(imageUrl: String, title: String?): MediaLaunchArgs {
 
 internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
     val isVideo = attachment.type == MessageAttachmentType.VIDEO
-    val preview = if (isVideo) mediaVideoPreviewUrl(attachment.proxyUrl) else attachment.proxyUrl
+    val preview = if (isVideo) mediaVideoPreviewUrl(attachment.proxyUrl, attachment.width, attachment.height) else attachment.proxyUrl
     return MediaLaunchArgs(
         title = attachment.filename,
         uri = attachment.proxyUrl,
@@ -970,9 +973,14 @@ internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
     )
 }
 
-internal fun mediaVideoPreviewUrl(url: String): String {
+internal fun mediaVideoPreviewUrl(url: String, width: Int? = null, height: Int? = null): String {
     val proxied = url.replace("https://cdn.discordapp.com/", "https://media.discordapp.net/")
-    return "$proxied${if ('?' in proxied) '&' else '?'}format=webp&width=1280&height=720"
+    val dimensions = if (width != null && height != null && width > 0 && height > 0) {
+        fitWithin(width, height, 1280, 720)
+    } else {
+        1280 to 720
+    }
+    return "$proxied${if ('?' in proxied) '&' else '?'}format=webp&width=${dimensions.first}&height=${dimensions.second}"
 }
 
 internal fun launchArgs(embed: MessageEmbed): MediaLaunchArgs {
