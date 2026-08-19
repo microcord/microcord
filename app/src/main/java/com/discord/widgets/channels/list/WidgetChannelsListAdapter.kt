@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import android.text.format.DateUtils
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Typeface
@@ -47,7 +48,10 @@ import com.discord.models.guild.Guild
 import com.discord.models.guild.UserGuildMember
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
+import com.discord.stores.StoreStream
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.drawable.getThemedDrawableRes
+import com.discord.utilities.feature.DmListCustomization
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
@@ -921,6 +925,8 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_list_item_private_mentions)
         private val name: TextView = itemView.findViewById(R.id.channels_list_item_private_name)
         private val tag: TextView = itemView.findViewById(R.id.channels_list_item_private_tag)
+        private val timestamp: TextView =
+            itemView.findViewById(R.id.channels_list_item_private_timestamp)
         private val guildTag: GuildTagView = itemView.findViewById(R.id.channels_list_item_private_guild_tag)
         private val nameplate: NameplateView =
             itemView.findViewById(R.id.channels_list_item_private_nameplate)
@@ -968,17 +974,36 @@ class WidgetChannelsListAdapter(
             )
             pin.setColorFilter(textColor(item))
             guildTag.bind(channel.getDMRecipient()?.primaryGuild)
+            if (!DmListCustomization.visible(DmListCustomization.Component.GUILD_TAG)) {
+                guildTag.visibility = View.GONE
+            }
             tag.visibility = if (channel.isSystemDM()) View.VISIBLE else View.GONE
 
             IconUtils.setIcon(avatar, channel, R.dimen.avatar_size_standard)
             avatarDecoration.bind(item.avatarDecoration ?: channel.getDMRecipient()?.avatarDecoration)
 
-            status.visibility =
-                if (channel.isDMStatusVisible(item.presence)) View.VISIBLE else View.GONE
+            status.visibility = if (
+                DmListCustomization.visible(DmListCustomization.Component.STATUS_DOT) &&
+                channel.isDMStatusVisible(item.presence)
+            ) View.VISIBLE else View.GONE
             status.setPresence(item.presence)
             status.setBackgroundColor(presenceBackground(item.selected))
 
+            // The preview comes from the synced message cache, so it exists only for channels the
+            // client has loaded; everything else keeps the status line.
+            val preview = StoreStream.getMessages().getMessages(channel.id)
+                .lastOrNull { !it.content.isNullOrBlank() }?.content
+                ?.takeIf {
+                    DmListCustomization.previewReplacesStatus(
+                        DmListCustomization.visible(DmListCustomization.Component.MESSAGE),
+                        channel.isDM(),
+                        it,
+                    )
+                }
             when {
+                preview != null -> desc.text = preview
+                !DmListCustomization.visible(DmListCustomization.Component.STATUS) ->
+                    desc.setTextAndVisibilityBy(null as CharSequence?)
                 channel.isSystemDM() ->
                     desc.setTextAndVisibilityBy(desc.context.getString(R.string.system_dm_activity_text))
                 channel.isMultiUserDM() ->
@@ -989,6 +1014,15 @@ class WidgetChannelsListAdapter(
                     desc,
                 )
             }
+
+            val showTimestamp = DmListCustomization.visible(DmListCustomization.Component.TIMESTAMP) &&
+                channel.lastMessageId > 0L
+            timestamp.text = if (showTimestamp) {
+                DateUtils.getRelativeTimeSpanString(SnowflakeUtils.toTimestamp(channel.lastMessageId))
+            } else {
+                ""
+            }
+            timestamp.visibility = if (showTimestamp) View.VISIBLE else View.GONE
 
             mentions.text = minOf(MAX_MENTION_COUNT, item.mentionCount).toString()
             mentions.visibility = if (item.mentionCount > 0) View.VISIBLE else View.GONE

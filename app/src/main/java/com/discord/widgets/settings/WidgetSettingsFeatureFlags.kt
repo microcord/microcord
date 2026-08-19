@@ -77,6 +77,9 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         binding.settingsFeatureCustomizeHeader.setOnClickListener {
             WidgetSettingsHeaderCustomization.launch(requireContext())
         }
+        binding.settingsFeatureCustomizeDmList.setOnClickListener {
+            WidgetSettingsDmListCustomization.launch(requireContext())
+        }
         binding.settingsFeatureCustomizeBottomTabs.setOnClickListener {
             WidgetSettingsPluginSurfaceCustomization.launch(requireContext(), Surface.BOTTOM_TABS)
         }

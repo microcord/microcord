@@ -83,6 +83,20 @@ class GuildTagView @JvmOverloads constructor(
         visibility = View.VISIBLE
     }
 
+    /**
+     * A text-only tag for previews where no real guild supplies the badge image.
+     *
+     * The badge is hidden rather than given a placeholder drawable: a missing image would leave
+     * a blank gap, and inventing a fake guild icon is worse than the label alone.
+     */
+    fun setSampleTag(text: String) {
+        label.text = text
+        contentDescription = text
+        badge.visibility = View.GONE
+        setOnClickListener(null)
+        visibility = View.VISIBLE
+    }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
     private fun sp(value: Float) =
         (TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, resources.displayMetrics) + 0.5f).toInt()

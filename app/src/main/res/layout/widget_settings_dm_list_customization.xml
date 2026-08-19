@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="@dimen/list_bottom_padding" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/dm_list_customization_preview" android:textColor="?attr/colorTextNormal" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp" style="@style/UiKit.TextView.Subtext"/>
+            <FrameLayout android:id="@+id/dm_list_customization_preview_card" android:background="?attr/colorBackgroundSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_marginEnd="12dp" android:layout_marginTop="8dp">
+                <include android:id="@+id/dm_list_customization_preview_row" android:layout_width="match_parent" android:layout_height="wrap_content" layout="@layout/widget_channels_list_item_channel_private"/>
+            </FrameLayout>
+            <TextView android:text="@string/dm_list_customization_components" android:textColor="?attr/colorTextNormal" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp" style="@style/UiKit.TextView.Subtext"/>
+            <com.discord.views.CheckedSetting android:id="@+id/dm_list_customization_status_dot" app:cs_text="@string/dm_list_customization_status_dot" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/dm_list_customization_status" app:cs_text="@string/dm_list_customization_status" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/dm_list_customization_guild_tag" app:cs_text="@string/dm_list_customization_guild_tag" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/dm_list_customization_message_preview" app:cs_text="@string/dm_list_customization_message_preview" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/dm_list_customization_timestamp" app:cs_text="@string/dm_list_customization_timestamp" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <TextView android:text="@string/dm_list_customization_description" android:textColor="?attr/colorTextMuted" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="8dp" android:paddingBottom="8dp" style="@style/UiKit.TextView.Subtext"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

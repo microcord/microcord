@@ -3518,6 +3518,19 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   the immediate selection, the init-gated route replay, and `deferForAccountSwitch` no longer
   comparing against an unrestored (id 0) me-user on cold start — it defers routing until
   `StoreUser.observeMe` emits the restored account and re-runs `consumeIntent` unchanged.
+- DM list customization added: `DmListCustomization` (prefs-backed, read at row-bind so changes
+  apply without restart) toggles the private-channel row's status dot, status text, and server tag,
+  and adds two opt-in components — a last-message preview in the description line (from the synced
+  message cache, so only for channels the client has loaded) and a relative last-message timestamp
+  (from the `lastMessageId` snowflake). `WidgetSettingsDmListCustomization` is reachable from
+  Feature Flags under the header-customization section. The row layout re-chains mentions/timestamp
+  anchoring in `widget_channels_list_item_channel_private.xml`. Focused
+  `DmListCustomizationTest` covers defaults, round-trip, and the preview predicate;
+  `installDebug` passes on A065. The Customize DM List screen shows a live preview row (the real
+  `widget_channels_list_item_channel_private` layout bound to the first cached one-to-one DM,
+  falling back to a fixed sample), re-bound on every toggle flip. Enabled-but-dataless components
+  get placeholders — sample message text, "1m ago", and a text-only `GuildTagView.setSampleTag` —
+  so every toggle is visible in the preview.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
