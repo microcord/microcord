@@ -1699,6 +1699,7 @@ class StoreStream private constructor(
             userSettings.handleUserSettingsProto(userSettingsProto.init())
             handleFrecencyProtoInternal(frecencyProto.init())
             unreadSettingNotice.restore()
+            messagesMostRecent.restore()
             messages.restore()
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()

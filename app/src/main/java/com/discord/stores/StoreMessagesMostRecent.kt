@@ -38,6 +38,16 @@ class StoreMessagesMostRecent @JvmOverloads constructor(
     private val mostRecentIds = HashMap<Long, Long>()
     private var snapshot: Map<Long, Long> = emptyMap()
 
+    /**
+     * Restores the previous process's ids, so the DM list is ordered correctly *before* the
+     * gateway connects — without this the sort key is empty until the first READY.
+     */
+    @StoreThread
+    fun restore() {
+        mostRecentIds.putAll(cache.get())
+        markChanged()
+    }
+
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         mostRecentIdsUpdateFromChannels(payload.privateChannels.orEmpty())

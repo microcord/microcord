@@ -3549,6 +3549,12 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   source (two nested combines; RxJava 1 caps at nine) so the DM list rebuilds the moment preloads
   land, and rows read `previewMessage` from the item, falling back to the synced cache for opened
   channels. `installDebug` passes on A065; live preview verification is pending.
+- DM ordering was unordered before the gateway connected because `StoreMessagesMostRecent` had a
+  Persister but never restored from it — it only wrote in `snapshotData` and only filled from
+  READY/gateway events, so the DM list's recency sort key was empty until the first READY arrived.
+  A `restore()` that replays the persisted ids was added and wired into the boot cache-restore
+  block alongside `messages.restore()`, so the list is ordered from the previous process's data
+  immediately. `installDebug` passes on A065.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
