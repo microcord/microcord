@@ -399,8 +399,22 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     private fun deferForAccountSwitch(intent: Intent): Boolean {
         val receivingUserId = intent.getLongExtra(NotificationRenderer.EXTRA_RECEIVING_USER_ID, 0L)
         if (receivingUserId == 0L) return false
+        val meId = StoreStream.getUsers().getMe().id
+        if (meId == 0L) {
+            // Cold start: the me-user cache restore is still queued on the store thread, so
+            // comparing now would run against an empty user and misroute this tap into an
+            // account switch for the account that is already signed in. The extra stays on the
+            // intent so the retry decides with the restored id.
+            StoreStream.getUsers().observeMe()
+                .map { it.id }
+                .filter { it != 0L }
+                .take(1)
+                .bindToComponentLifecycle(this)
+                .subscribe { runOnUiThread { consumeIntent(intent) } }
+            return true
+        }
         intent.removeExtra(NotificationRenderer.EXTRA_RECEIVING_USER_ID)
-        if (receivingUserId == StoreStream.getUsers().getMe().id) return false
+        if (receivingUserId == meId) return false
         if (StoreStream.getMultiAccount().getAccount(receivingUserId) == null) return false
         val deferred = Intent(intent)
         StoreStream.getMultiAccountSwitch().observeResults()

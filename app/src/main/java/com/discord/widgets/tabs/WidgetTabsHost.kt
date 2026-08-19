@@ -421,11 +421,20 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                 StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
             DeepLinkRoute.Friends -> StoreStream.getTabsNavigation().selectTab(NavigationTab.FRIENDS, true)
             // Handled here rather than at intent time: a cold start routes the intent before the
-            // stores have restored, and the restored selection would overwrite it.
+            // stores have restored, and the restored selection would overwrite it. Deferring until
+            // the store graph is initialized keeps [ChannelSelector]'s recorded selection after
+            // `StoreChannelsSelected.restore()` has reloaded the persisted selections.
             is DeepLinkRoute.Channel -> {
-                StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
-                ChannelSelector.getInstance().selectChannel(route.guildId ?: 0L, route.channelId)
-                route.messageId?.let { StoreStream.getMessagesLoader().jumpToMessage(route.channelId, it) }
+                StoreStream.getChannelsSelected().observeInitializedForAuthedUser()
+                    .filter { it }
+                    .take(1)
+                    .ui(this)
+                    .appSubscribe(WidgetTabsHost::class.java) {
+                        StoreStream.getTabsNavigation()
+                            .selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
+                        ChannelSelector.getInstance().selectChannel(route.guildId ?: 0L, route.channelId)
+                        route.messageId?.let { StoreStream.getMessagesLoader().jumpToMessage(route.channelId, it) }
+                    }
             }
             is DeepLinkRoute.Settings -> StoreStream.getTabsNavigation().selectTab(NavigationTab.SETTINGS, true)
             else -> return

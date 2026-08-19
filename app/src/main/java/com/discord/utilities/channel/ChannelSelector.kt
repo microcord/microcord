@@ -218,15 +218,15 @@ class ChannelSelector(
     /**
      * Select [channelId] in [guildId].
      *
-     * The channel is resolved first because the decision depends on its type:
+     * The selection is recorded immediately, because `StoreChannelsSelected` already holds a
+     * pending selection until the channel appears from cache restore or READY — waiting here
+     * instead made a notification tap race that restore and silently drop on timeout.
      *
-     * * a **stage** channel, or a **voice** channel while text-in-voice is off for the guild, is a
-     *   *vocal* selection — the voice channel is joined and the text selection is set to the guild
-     *   id rather than the channel id, which `StoreChannelsSelected` resolves back to the guild's
-     *   last text channel;
-     * * anything else is an ordinary text selection.
+     * A **stage** channel is also a vocal selection: its text selection is invalid by
+     * [com.discord.stores.StoreChannelsSelected.isValidResolution], so it resolves to the guild's
+     * first available channel while the stage itself is joined as voice once the channel is known.
      *
-     * A zero guild or channel id skips resolution entirely and goes straight through, which is how
+     * A zero guild or channel id skips the channel entirely and goes straight through, which is how
      * "close the current channel" (`0, 0`) and DM selection (`guildId == 0`) are expressed.
      */
     @JvmOverloads
@@ -239,19 +239,14 @@ class ChannelSelector(
         IdleTracker.markUsed()
         StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
 
-        if (guildId == 0L || channelId == 0L) {
-            gotoChannel(guildId, channelId, peekParent, analyticsLocation)
-            return
-        }
+        gotoChannel(guildId, channelId, peekParent, analyticsLocation)
 
+        if (guildId == 0L || channelId == 0L) return
         StoreStream.getChannels().observeChannel(channelId)
             .filterNull()
             .takeSingleUntilTimeout()
             .appSubscribe(ChannelSelector::class.java) { channel ->
-                val isVocalSelection = channel.isStageVoiceChannel()
-                val textChannelId = if (isVocalSelection) guildId else channelId
-                gotoChannel(guildId, textChannelId, peekParent, analyticsLocation)
-                if (isVocalSelection) {
+                if (channel.isStageVoiceChannel()) {
                     StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId)
                 }
             }

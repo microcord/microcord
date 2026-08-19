@@ -3507,6 +3507,17 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
 - Gallery video posters now remain visible while an alpha-zero player surface decodes. The handoff occurs from ExoPlayer's
   `onRenderedFirstFrame`, rather than `STATE_READY`, avoiding the one-frame black gap before the first composited frame.
   `installDebug` passes on A065.
+- Notification taps no longer race store restoration. `ChannelSelector.selectChannel(guildId, channelId)` previously gated the
+  selection on the channel object appearing within the shared 5-second `takeSingleUntilTimeout` window, so a cold-start tap whose
+  Kryo cache restore or READY hydration exceeded it was silently dropped. The selection is now recorded immediately —
+  `StoreChannelsSelected` already holds a pending selection until the channel resolves — and the retained observation only adds
+  the stage-channel voice join. `WidgetTabsHost` also defers the channel route until
+  `StoreChannelsSelected.observeInitializedForAuthedUser`, because a cold-start tap consumed before the scheduled
+  `channelsSelected.restore()` ran had its just-recorded selection overwritten by the persisted one. `installDebug` passes on
+  A065; the user device-verified cold notification taps land in the channel after the third fix:
+  the immediate selection, the init-gated route replay, and `deferForAccountSwitch` no longer
+  comparing against an unrestored (id 0) me-user on cold start — it defers routing until
+  `StoreUser.observeMe` emits the restored account and re-runs `consumeIntent` unchanged.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
