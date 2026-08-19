@@ -149,6 +149,9 @@ object RestAPIParams {
         val flags: Int? = null,
     )
 
+    /** `POST channels/preload-messages` body: the DMs whose latest messages should be fetched. */
+    data class PreloadMessages(val channelIds: List<Long>)
+
     /**
      * `PUT channels/{channelId}/permissions/{targetId}` body. `id` is serialized as a string and
      * `type` as the numeric [PermissionOverwrite.Type] ordinal, matching the reference factories.

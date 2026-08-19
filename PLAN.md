@@ -3531,6 +3531,24 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   falling back to a fixed sample), re-bound on every toggle flip. Enabled-but-dataless components
   get placeholders — sample message text, "1m ago", and a text-only `GuildTagView.setSampleTag` —
   so every toggle is visible in the preview.
+- The message-previews component now bulk-preloads DM messages the way the RN client does, per a
+  hermes-dec audit of `MessagePreviewManager`/`MessagePreviewStore` in the live RN bundle. A new
+  `StoreMessagePreviews` (registered in `storesV2`, cleared on pre-logout, dropped per channel on
+  real MESSAGE_CREATE/channel delete) mirrors RN's *separate* preview cache — previews never enter
+  `StoreMessages`, so they cannot detach, trim, or evict channels from the persist cache; the
+  earlier `loadPreloadedMessages` merge path was deleted as dead code. `StoreDmMessagePreload`
+  does not snapshot the DM ordering at boot (a `lastMessageId` sort drifted from the live list the
+  moment the gateway connected and reordered it, requesting previews for the wrong channels);
+  instead it reactively derives "wants" from the same sources the DM list renders — channels,
+  `StoreMessagesMostRecent`, the pinned bucket from guild settings, and the preview cache — in the
+  exact visible ordering (pinned first, then recency), debounced 250 ms, requesting 30-id batches
+  until every visible row has a preview, once armed per auth generation after READY when the
+  component is enabled. The RN response is a **flat message array** (each message carries
+  `channel_id`) — an earlier map-shaped parse failed silently, which is why preloads never reached
+  the list. `WidgetChannelListModel.privateChannelList` combines the preview store as a tenth
+  source (two nested combines; RxJava 1 caps at nine) so the DM list rebuilds the moment preloads
+  land, and rows read `previewMessage` from the item, falling back to the synced cache for opened
+  channels. `installDebug` passes on A065; live preview verification is pending.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

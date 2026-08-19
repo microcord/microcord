@@ -724,6 +724,17 @@ interface RestAPIInterface {
         @Query("limit") limit: Int? = null,
     ): Observable<List<Message>>
 
+    /**
+     * Bulk-fetches the newest messages of several DMs in one call.
+     *
+     * The response is a flat array of message objects, each carrying its own `channel_id` —
+     * verified against the RN client's `MessagePreviewManager`, which groups them client-side.
+     */
+    @POST("channels/preload-messages")
+    fun preloadMessages(
+        @Body body: RestAPIParams.PreloadMessages,
+    ): Observable<List<Message>>
+
     @GET("channels/{channelId}/messages")
     fun getChannelMessagesAround(
         @Path("channelId") channelId: Long,

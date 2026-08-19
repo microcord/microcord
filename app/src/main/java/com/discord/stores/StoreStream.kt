@@ -103,6 +103,7 @@ import com.discord.utilities.notifications.NotificationKind
 import com.discord.utilities.notifications.NotificationSource
 import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.fcm.PushDeviceSync
+import com.discord.utilities.feature.DmListCustomization
 import com.discord.widgets.settings.NotificationStore
 import com.discord.widgets.phone.PhoneCountryCodes
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemCallMessage
@@ -564,6 +565,16 @@ class StoreStream private constructor(
         restApi = { if (::restApi.isInitialized) restApi else null },
         handleThreadCreateOrUpdate = { thread -> handleThreadCreateOrUpdateInternal(thread) },
         forumApi = RestAPI::apiOrNull,
+    )
+    /** Bulk DM-list message preload; see [StoreDmMessagePreload]. */
+    private val messagePreviews = StoreMessagePreviews()
+    private val dmMessagePreload = StoreDmMessagePreload(
+        dispatcher,
+        messagePreviews,
+        channels,
+        messagesMostRecent,
+        guildSettings,
+        api = { if (::restApi.isInitialized) restApi else null },
     )
     /** Mention counting and automatic acknowledgement feed the authoritative read-state ledger. */
     private val messageAck: StoreMessageAck = StoreMessageAck(
@@ -1083,6 +1094,7 @@ class StoreStream private constructor(
         usersTyping,
         messages,
         messagesMostRecent,
+        messagePreviews,
         pendingReplies,
         pinnedMessages,
         safetyHub,
@@ -2513,6 +2525,7 @@ class StoreStream private constructor(
             },
         )
         messagesMostRecent.handleMessageCreate(domain)
+        messagePreviews.handleMessageCreate(message)
         messageAck.handleMessageCreate(message)
         if (message.author?.id == users.getMeInternal().id) {
             unreadSettingNotice.handleMessageSent(message.channelId)
@@ -3190,6 +3203,7 @@ class StoreStream private constructor(
         friendSuggestions.handlePreLogout()
         userAffinities.handlePreLogout()
         messages.handlePreLogout()
+        messagePreviews.handlePreLogout()
         applicationInteractions.handlePreLogout()
         pendingReplies.handlePreLogout()
         pinnedMessages.handlePreLogout()
@@ -3454,6 +3468,10 @@ class StoreStream private constructor(
         forumPostMessages.handleConnectionOpen(payload)
         forumPostReadStates.handleConnectionOpen(payload)
         archivedThreads.handleConnectionOpen()
+        dmMessagePreload.preloadIfEnabled(
+            DmListCustomization.visible(DmListCustomization.Component.MESSAGE),
+            authGeneration.toLong(),
+        )
         connectionOpen.handleConnectionOpen()
         updateSortedGuilds()
         // The flag rides on the pre-hydration envelope and does not survive into Guild, so the
@@ -3752,6 +3770,7 @@ class StoreStream private constructor(
         threadMessages.handleChannelDelete(channel)
         stageChannels.handleChannelDelete(channel)
         mentions.handleChannelOrThreadDelete(channel)
+        messagePreviews.handleChannelOrThreadDelete(channel.id)
         voiceChannelSelected.handleChannelOrThreadDelete()
     }
 
@@ -3982,6 +4001,7 @@ class StoreStream private constructor(
         @JvmStatic fun getMessages() = requireInstance().messages
         @JvmStatic fun getMessagesLoader() = requireInstance().messagesLoader
         @JvmStatic fun getMessagesMostRecent() = requireInstance().messagesMostRecent
+        @JvmStatic fun getMessagePreviews() = requireInstance().messagePreviews
         @JvmStatic fun getPendingReplies() = requireInstance().pendingReplies
         @JvmStatic fun getPinnedMessages() = requireInstance().pinnedMessages
         @JvmStatic fun getSafetyHub() = requireInstance().safetyHub

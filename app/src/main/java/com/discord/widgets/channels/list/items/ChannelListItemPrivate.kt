@@ -17,6 +17,8 @@ data class ChannelListItemPrivate(
     val nameplate: Nameplate? = null,
     val avatarDecoration: AvatarDecorationData? = null,
     val displayName: String? = null,
+    /** Preloaded newest message from [com.discord.stores.StoreMessagePreviews], if any. */
+    val previewMessage: com.discord.models.message.Message? = null,
 ) : ChannelListItem, WidgetChannelListUnreads.UnreadItem {
     override val type: Int = ChannelListItem.TYPE_CHANNEL_PRIVATE
     override val key: String = "$type${channel.id}"

@@ -330,8 +330,10 @@ data class WidgetChannelListModel(
                 }
                 .computationLatest()
 
-        private fun privateChannelList(): Observable<WidgetChannelListModel> = Observable
-            .combineLatest(
+        // Two nested combines rather than one: RxJava 1 only overloads `combineLatest` up to
+        // nine sources, and this list needs ten.
+        private fun privateChannelList(): Observable<WidgetChannelListModel> {
+            val listState = Observable.combineLatest(
                 StoreStream.getChannels().observeChannelsForGuild(PRIVATE_CHANNELS_GUILD_ID),
                 StoreStream.getChannelsSelected().observeId(),
                 StoreStream.getPresences().observeAllPresences(),
@@ -343,24 +345,47 @@ data class WidgetChannelListModel(
                 StoreStream.getUserRelationships().observeNicknames(),
             ) { channels, selectedChannelId, presences, mentionCounts, streamingUserIds, settings,
                 mostRecentIds, users, friendNicknames ->
-                val pinnedIds = settings.channelOverrides.filter { it.isFavorite }
+                PrivateListState(
+                    channels, selectedChannelId, presences, mentionCounts, streamingUserIds,
+                    settings, mostRecentIds, users, friendNicknames,
+                )
+            }
+            return Observable.combineLatest(
+                listState,
+                StoreStream.getMessagePreviews().observePreviews(),
+            ) { state, previewMessages ->
+                val pinnedIds = state.settings.channelOverrides.filter { it.isFavorite }
                     .map { it.channelId }
                     .toSet()
                 privateListBuilder(
-                    channels = channels.values.sortedWith(
+                    channels = state.channels.values.sortedWith(
                         // Pinned DMs are their own bucket above the rest, each ordered by recency.
                         compareBy<Channel> { it.id !in pinnedIds }
-                            .then(Channel.getSortByMostRecent(mostRecentIds)),
+                            .then(Channel.getSortByMostRecent(state.mostRecentIds)),
                     ),
-                    selectedChannelId = selectedChannelId,
-                    presences = presences,
-                    mentionCounts = mentionCounts,
-                    streamingUserIds = streamingUserIds,
-                    notificationSettings = settings,
-                    users = users,
-                    friendNicknames = friendNicknames,
+                    selectedChannelId = state.selectedChannelId,
+                    presences = state.presences,
+                    mentionCounts = state.mentionCounts,
+                    streamingUserIds = state.streamingUserIds,
+                    notificationSettings = state.settings,
+                    users = state.users,
+                    friendNicknames = state.friendNicknames,
+                    previewMessages = previewMessages,
                 )
             }.leadingEdgeThrottle(250L, TimeUnit.MILLISECONDS)
+        }
+
+        private data class PrivateListState(
+            val channels: Map<Long, Channel>,
+            val selectedChannelId: Long,
+            val presences: Map<Long, com.discord.models.presence.Presence>,
+            val mentionCounts: Map<Long, Int>,
+            val streamingUserIds: Set<Long>,
+            val settings: ModelNotificationSettings,
+            val mostRecentIds: Map<Long, Long>,
+            val users: Map<Long, com.discord.models.user.User>,
+            val friendNicknames: Map<Long, String>,
+        )
 
         private fun guildChannelList(guildId: Long): Observable<WidgetChannelListModel> {
             val rows = Observable.combineLatest(
@@ -527,6 +552,7 @@ data class WidgetChannelListModel(
             notificationSettings: ModelNotificationSettings,
             users: Map<Long, com.discord.models.user.User> = emptyMap(),
             friendNicknames: Map<Long, String> = emptyMap(),
+            previewMessages: Map<Long, com.discord.models.message.Message> = emptyMap(),
         ): WidgetChannelListModel {
             val requestCount = channels.count(Channel::isPendingMessageRequestChannel)
             val rows = channels.filterNot(Channel::isPendingMessageRequestChannel).map { channel ->
@@ -561,6 +587,7 @@ data class WidgetChannelListModel(
                     },
                     displayName = channel.name?.takeUnless(String::isBlank)
                         ?: recipientDisplayNames.joinToString().takeUnless(String::isBlank),
+                    previewMessage = previewMessages[channel.id],
                 )
             }
             return WidgetChannelListModel(

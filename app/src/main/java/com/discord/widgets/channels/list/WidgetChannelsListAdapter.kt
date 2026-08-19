@@ -989,11 +989,12 @@ class WidgetChannelsListAdapter(
             status.setPresence(item.presence)
             status.setBackgroundColor(presenceBackground(item.selected))
 
-            // The preview comes from the synced message cache, so it exists only for channels the
-            // client has loaded; everything else keeps the status line.
-            val preview = StoreStream.getMessages().getMessages(channel.id)
-                .lastOrNull { !it.content.isNullOrBlank() }?.content
-                ?.takeIf {
+            // The preloaded preview from StoreMessagePreviews, falling back to the synced message
+            // cache for channels the client has actually opened.
+            val preview = (item.previewMessage
+                ?: StoreStream.getMessages().getMessages(channel.id)
+                    .lastOrNull { !it.content.isNullOrBlank() })
+                ?.content?.takeIf {
                     DmListCustomization.previewReplacesStatus(
                         DmListCustomization.visible(DmListCustomization.Component.MESSAGE),
                         channel.isDM(),
