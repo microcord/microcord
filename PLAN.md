@@ -3638,3 +3638,14 @@ Resumable task: `app/src/main/java/com/discord/stores/StoreStream.kt` | referenc
 `StoreRtcConnection.kt` | on an approved live voice session, disconnect/reconnect Gateway and verify the active voice guild is
 retained and replayed; unit coverage proves provider installation and retention semantics separately but cannot create native RTC.
 
+- 2026-08-25: Fixed search-filter insertion so top-level filter options always append instead of consuming existing search text. This
+  also corrects chained insertion after modern discriminatorless usernames, whose rendered value reparses as `FilterNode +
+  ContentNode`. The regression covers plain text and completed modern usernames in both
+  implementations. Production Kotlin compiles and `installDebug --offline` succeeds on Android 16 A065. The focused JVM test remains
+  blocked before execution by unrelated compilation errors in `DmListCustomizationTest` and
+  `WidgetVoiceSettingsBottomSheetViewModelTest`; `git diff --check` passes.
+
+Resumable task: `app/src/main/java/com/discord/stores/StoreSearchInput.kt` and
+`app/src/main/java/com/discord/widgets/search/DefaultSearchStore.kt` | open message search on A065, select a modern `from:` user, then
+select `in:` and confirm the input retains `from:<user> in:`; rerun `SearchGifExpressionStoresTest` after the shared test sources compile.
+

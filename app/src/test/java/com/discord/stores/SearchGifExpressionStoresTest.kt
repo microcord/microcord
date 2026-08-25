@@ -15,7 +15,11 @@ import com.discord.utilities.search.SearchTarget
 import com.discord.utilities.search.network.SearchFetcher
 import com.discord.utilities.search.network.SearchQuery
 import com.discord.utilities.search.network.state.QueryFetchState
+import com.discord.utilities.search.query.FilterType
+import com.discord.utilities.search.query.parsing.QueryParser
 import com.discord.utilities.search.strings.SearchStringProvider
+import com.discord.widgets.search.DefaultSearchInputStore
+import com.discord.widgets.search.SearchInputStore
 import com.discord.widgets.chat.input.expression.ExpressionTrayTab
 import java.lang.reflect.Proxy
 import java.util.concurrent.CopyOnWriteArrayList
@@ -94,6 +98,28 @@ class SearchGifExpressionStoresTest {
         }
 
         assertEquals(true, validity.last())
+    }
+
+    @Test
+    fun filterOptionsAlwaysAppendToSearchText() {
+        listOf<SearchInputStore>(StoreSearchInput(), DefaultSearchInputStore()).forEach { input ->
+            val rendered = mutableListOf<List<String>>()
+            input.forcedInput.subscribe { nodes -> rendered += nodes.map { it.text.toString() } }
+
+            input.onFilterClicked(
+                FilterType.IN,
+                SEARCH_STRINGS,
+                QueryParser(SEARCH_STRINGS).parse("hello", Unit).toMutableList(),
+            )
+            input.onFilterClicked(
+                FilterType.IN,
+                SEARCH_STRINGS,
+                QueryParser(SEARCH_STRINGS).parse("from:manti", Unit).toMutableList(),
+            )
+
+            assertEquals(listOf("hello", "in:"), rendered[0])
+            assertEquals(listOf("from:", "manti", "in:"), rendered[1])
+        }
     }
 
     @Test

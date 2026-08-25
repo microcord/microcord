@@ -90,15 +90,7 @@ class StoreSearchInput : SearchInputStore {
                 FilterType.PINNED -> searchStringProvider.pinnedFilterString
             },
         )
-        replaceAndPublish(
-            when {
-                query.isEmpty() -> 0
-                query.last() is ContentNode -> query.lastIndex
-                else -> query.size
-            },
-            listOf(filter),
-            query,
-        )
+        replaceAndPublish(query.size, listOf(filter), query)
     }
 
     override fun onFromUserClicked(

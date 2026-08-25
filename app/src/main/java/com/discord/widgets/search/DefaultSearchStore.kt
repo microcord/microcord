@@ -247,13 +247,7 @@ class DefaultSearchInputStore : SearchInputStore {
                 FilterType.PINNED -> searchStringProvider.pinnedFilterString
             },
         )
-        // A filter tapped while the user is mid-word replaces that word; otherwise it is appended.
-        val replacementIndex = when {
-            query.isEmpty() -> 0
-            query.last() is ContentNode -> query.lastIndex
-            else -> query.size
-        }
-        replaceAndPublish(replacementIndex, listOf(filterNode), query)
+        replaceAndPublish(query.size, listOf(filterNode), query)
     }
 
     override fun onFromUserClicked(
