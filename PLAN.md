@@ -3563,6 +3563,14 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   focused unit task is blocked by unrelated concurrent `DmListCustomizationTest` and
   `WidgetVoiceSettingsBottomSheetViewModelTest` compile errors. The affected reply still needs a
   visual device check.
+- Reply sends no longer suppress ordinary user, role, or everyone mentions. The coordinator had
+  emitted an `allowed_mentions` object containing only `replied_user` for every reply; Discord then
+  treated normal mention parsing as disabled. Matching the Vineflower-recovered 126.21 path, an
+  enabled reply-author mention now omits `allowed_mentions` so Discord applies default parsing,
+  while disabling the reply-author mention sends all three parse categories plus
+  `replied_user=false`. Offline `installDebug` passes on Android 16 A065. Regression assertions cover
+  both payload shapes, but the shared unit task remains blocked by unrelated concurrent
+  `DmListCustomizationTest` and `WidgetVoiceSettingsBottomSheetViewModelTest` compile errors.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each

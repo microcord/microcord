@@ -119,7 +119,25 @@ class MessageSendCoordinatorTest {
         val body = restApi.sendCalls.single().body
         assertEquals(12L, body?.messageReference?.messageId)
         assertEquals(CHANNEL_ID, body?.messageReference?.channelId)
+        assertEquals(listOf("users", "roles", "everyone"), body?.allowedMentions?.parse)
         assertEquals(false, body?.allowedMentions?.repliedUser)
+    }
+
+    @Test
+    fun enabledReplyMentionLeavesDefaultMentionParsingEnabled() {
+        coordinator.send(
+            MessageSendCoordinator.Send(
+                channelId = CHANNEL_ID,
+                content = "reply <@42>",
+                reply = StorePendingReplies.PendingReply(
+                    MessageReference(GUILD_ID, CHANNEL_ID, 12L),
+                    Message(id = 12L, channelId = CHANNEL_ID),
+                    shouldMention = true,
+                ),
+            ),
+        )
+
+        assertNull(restApi.sendCalls.single().body?.allowedMentions)
     }
 
     @Test

@@ -454,8 +454,12 @@ class MessageSendCoordinator @JvmOverloads constructor(
     private fun allowedMentionsFor(input: Send): MessageAllowedMentions? {
         val base = input.allowedMentions?.toApiModel()
         val reply = input.reply ?: return base
-        return base?.copy(repliedUser = reply.shouldMention)
-            ?: MessageAllowedMentions(repliedUser = reply.shouldMention)
+        if (base != null) return base.copy(repliedUser = reply.shouldMention)
+        return if (reply.shouldMention) {
+            null
+        } else {
+            MessageAllowedMentions(parse = MessageAllowedMentionsTypes.entries, repliedUser = false)
+        }
     }
 
     companion object {
