@@ -144,8 +144,11 @@ open class VitoImageView : AppCompatImageView {
 
     private fun applyAttrs(attrs: AttributeSet?) {
         if (attrs == null) return
-        context.obtainStyledAttributes(attrs, intArrayOf(DraweeR.attr.viewAspectRatio)).use {
-            aspectRatio = it.getFloat(0, 0f)
+        val typedArray = context.obtainStyledAttributes(attrs, intArrayOf(DraweeR.attr.viewAspectRatio))
+        try {
+            aspectRatio = typedArray.getFloat(0, 0f)
+        } finally {
+            typedArray.recycle()
         }
         imageOptions = inflateOptions(context, attrs).build()
     }

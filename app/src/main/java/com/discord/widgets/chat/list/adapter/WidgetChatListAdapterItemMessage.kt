@@ -824,9 +824,13 @@ class WidgetChatListAdapterItemMessage(
                 configureReplyContentWithResourceId(R.string.reply_quote_sticker_mobile)
             repliedMessage.hasAttachments() ||
                 repliedMessage.shouldShowReplyPreviewAsAttachment() ||
-                repliedMessage.hasEmbeds() ->
+                repliedMessage.hasEmbeds() ||
+                !repliedMessage.components.isNullOrEmpty() ->
                 configureReplyContentWithResourceId(R.string.reply_quote_no_text_content_mobile)
-            else -> Log.e(TAG, "Unhandled reply preview: $repliedEntry")
+            else -> {
+                configureReplyContentWithResourceId(R.string.reply_quote_no_text_content_mobile)
+                Log.e(TAG, "Unhandled reply preview: $repliedEntry")
+            }
         }
     }
 

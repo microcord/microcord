@@ -3555,6 +3555,14 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   A `restore()` that replays the persisted ids was added and wired into the boot cache-restore
   block alongside `messages.restore()`, so the list is ordered from the previous process's data
   immediately. `installDebug` passes on A065.
+- Replies to empty-content Components V2 messages no longer retain text from an unrelated recycled
+  message row. The reply binder now treats non-empty components as the normal no-text-content case,
+  and its unknown empty-content fallback also writes that placeholder before logging, so every
+  visible reply bind replaces the previous holder text. Production Kotlin compilation and offline
+  install pass on Android 16 A065, and launch produces no `AndroidRuntime` crash; the
+  focused unit task is blocked by unrelated concurrent `DmListCustomizationTest` and
+  `WidgetVoiceSettingsBottomSheetViewModelTest` compile errors. The affected reply still needs a
+  visual device check.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
