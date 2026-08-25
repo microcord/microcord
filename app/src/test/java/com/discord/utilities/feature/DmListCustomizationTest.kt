@@ -35,12 +35,11 @@ class DmListCustomizationTest {
 
     @Test
     fun `preview replaces status only for a loaded one-to-one dm`() {
-        val predicate = DmListCustomization::previewReplacesStatus
-        assertTrue(predicate(messageEnabled = true, isDirectMessage = true, preview = "hello"))
-        assertFalse(predicate(messageEnabled = false, isDirectMessage = true, preview = "hello"))
-        assertFalse(predicate(messageEnabled = true, isDirectMessage = false, preview = "hello"))
-        assertFalse(predicate(messageEnabled = true, isDirectMessage = true, preview = null))
-        assertFalse(predicate(messageEnabled = true, isDirectMessage = true, preview = "  "))
+        assertTrue(DmListCustomization.previewReplacesStatus(messageEnabled = true, isDirectMessage = true, preview = "hello"))
+        assertFalse(DmListCustomization.previewReplacesStatus(messageEnabled = false, isDirectMessage = true, preview = "hello"))
+        assertFalse(DmListCustomization.previewReplacesStatus(messageEnabled = true, isDirectMessage = false, preview = "hello"))
+        assertFalse(DmListCustomization.previewReplacesStatus(messageEnabled = true, isDirectMessage = true, preview = null))
+        assertFalse(DmListCustomization.previewReplacesStatus(messageEnabled = true, isDirectMessage = true, preview = "  "))
     }
 
     private class InMemoryPreferences : SharedPreferences {
@@ -48,6 +47,7 @@ class DmListCustomizationTest {
 
         override fun getAll() = values
         override fun getString(key: String, defValue: String?) = values[key] as String? ?: defValue
+        override fun getStringSet(key: String, defValues: MutableSet<String>?) = values[key] as Set<String>? ?: defValues
         override fun getInt(key: String, defValue: Int) = values[key] as Int? ?: defValue
         override fun getLong(key: String, defValue: Long) = values[key] as Long? ?: defValue
         override fun getFloat(key: String, defValue: Float) = values[key] as Float? ?: defValue

@@ -121,7 +121,9 @@ class WidgetVoiceSettingsBottomSheetViewModel(
                 isDeafened = model.isDeafenedByAnySource,
                 showSelfVideo = !model.voiceSettings.selfVideoHidden,
                 showVoiceParticipantsToggle = true,
-                showInviteItem = model.canInvite() && !isStage,
+                // Short-circuit keeps stage channels off CallModel.canInvite(), which consults the
+                // stage-instance store — an eager global this sheet does not need when hiding invites.
+                showInviteItem = !isStage && model.canInvite(),
                 noiseProcessing = model.voiceSettings.noiseProcessing,
                 isEndToEndEncrypted = model.isConnected && storeState.daveProtocolVersion > 0,
                 privacyCode = when {

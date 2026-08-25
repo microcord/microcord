@@ -31,15 +31,12 @@ class FCMMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        if ((getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses.orEmpty().any {
-            it.processName == packageName && it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-        }) {
-            AppLog.d("Dropping FCM because the main app is foreground")
-            return
-        }
+        val isMainProcessAlive = (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
+            .runningAppProcesses.orEmpty()
+            .any { it.processName == packageName }
         AppLog.d(
             "FCM message received. type=${message.data["type"]} fields=${message.data.size} " +
-                "notification=${message.notification != null}",
+                "notification=${message.notification != null} mainAlive=$isMainProcessAlive",
         )
         // An ack with no watermark of its own falls back to Firebase's own send time.
         val data = message.data.toMutableMap()
@@ -52,12 +49,23 @@ class FCMMessagingService : FirebaseMessagingService() {
             return
         }
         // A dismissal retracts what is already showing rather than adding to it: the account read
-        // the channel, or answered the call, somewhere else.
+        // the channel, or answered the call, somewhere else. This runs even while the main app is
+        // alive — skipping it here is what left this process's cache with messages that were
+        // already read, so a later push re-rendered them into the tray.
         if (payload.pushType?.isDismissal == true) {
             payload.ackChannelIds.forEach {
                 NotificationClient.clear(it, applicationContext, isAckRequest = true, ackMessageId = payload.ackMessageId)
             }
             AppLog.d("FCM dismissal type=${payload.type} channels=${payload.ackChannelIds.size}")
+            return
+        }
+        if (isMainProcessAlive) {
+            // Single-writer rule, as the reference's one-process design guarantees implicitly:
+            // while the main process exists its Gateway connection renders every notification from
+            // live store state — avatars and nickname-resolved names this process cannot compute.
+            // Rendering here too produced the letter-tile/username flash before the real render
+            // replaced it. Only when the main process is dead is this the notifier.
+            AppLog.d("Dropping FCM render because the main process owns notifications")
             return
         }
         val delivery = NotificationClient.handlePushNotification(payload.toNotificationData(), applicationContext)

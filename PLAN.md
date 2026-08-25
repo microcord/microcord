@@ -3658,3 +3658,35 @@ Resumable task: `app/src/main/java/com/discord/widgets/chat/pins/WidgetChannelPi
 `discord-jadx/app/src/main/java/com/discord/widgets/chat/pins/WidgetChannelPinnedMessages.java` | open a channel with more than one page
 of pins on A065 and verify it starts at the top, preserves position while paging, and does not affect ordinary chat bottom anchoring.
 
+
+- 2026-08-26: Notification campaign (backgrounding/parity). Root causes fixed, all verified against
+  Vineflower/JADX 126.21: (1) invented StoreMessageAck.handleAppForegrounded acked the selected
+  channel on every unlock before render; removed. (2) Invented MESSAGE_ACK -> StoreNotifications
+  tray-clear route retracted notifications seconds after our own background auto-ack's server echo;
+  route now exists foreground-only, so an in-app read clears the tray (the CHANNEL_ACK push is not
+  reliably echoed to the acking device) while background echoes cannot retract unseen notifications.
+  (3) :fcm parsed pushes AFTER its foreground drop, discarding CHANNEL_ACK dismissals and leaving
+  its cache with read messages; dismissals now always process and the service renders only when the
+  main process is not running (single-writer; the reference is single-process) - this also killed
+  the letter-tile/username flash that appeared when both processes rendered. (4) The 10s freshness
+  gate ate RESUME-replayed backlog (first message after backgrounding); it now guards foreground
+  banners only, matching INAPP_MESSAGE_WINDOW_MS/displayPopup. (5) The banner path verifies real
+  process foreground via ActivityManager, closing the ~2s Backgrounded debounce hole where a
+  message went to an invisible banner while the live socket suppressed the push. (6) DM titles
+  resolve through NicknameUtils.getName so nicknames never flip against the sender line. (7) The
+  renderer now makes exactly ONE notify() per render: it waits for the avatar fetch (disk cache =
+  tens of ms) with a 2s timeout/error fallback posting avatarless - a deliberate deviation from the
+  reference's 250ms race, which flashed letters then upgraded on every cold-process render
+  (every debug install). Also: fresh-READY staleness scan ignores the phantom channel-id 0 seeded
+  by selection; stage sheets short-circuit showInviteItem before CallModel.canInvite touches
+  the StoreStream singleton under JUnit; repaired the two long-broken test sources
+  (DmListCustomizationTest, WidgetVoiceSettingsBottomSheetViewModelTest) that had blocked all
+  JVM test execution. Focused tests across StoreNotifications/StoreMessageAck/MessageHistory/
+  DmList/voice-settings/notifications pass; offline installDebug succeeds on Android 16 A065;
+  git diff --check passes.
+
+Resumable task: A065 notification matrix - backgrounded DM appears once with avatar and nickname
+title and never swaps; message within 2s of backgrounding reaches the tray; long-background
+RESUME replay notifies; foreground in-app read clears the tray immediately while a backgrounded
+notification persists untouched; three DMs across a fresh process each render exactly once;
+main-process-dead push still renders via :fcm (avatarless only if offline).

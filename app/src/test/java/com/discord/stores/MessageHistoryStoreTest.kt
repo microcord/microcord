@@ -255,7 +255,7 @@ class MessageHistoryStoreTest {
         assertTrue(states.count { it.isLoadingMessages } >= 2)
 
         loader.handleFreshSession()
-        assertTrue(loader.handleFreshSessionReady(mapOf(12L to 2L)) { 2L }.isEmpty())
+        assertEquals(emptySet<Long>(), loader.handleFreshSessionReady(mapOf(12L to 2L)) { 2L })
         assertEquals(2, requests.size)
     }
 

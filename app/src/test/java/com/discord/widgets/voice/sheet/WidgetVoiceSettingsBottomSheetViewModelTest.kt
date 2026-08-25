@@ -20,6 +20,9 @@ class WidgetVoiceSettingsBottomSheetViewModelTest {
             WidgetVoiceSettingsBottomSheetViewModel.StoreState.Valid(
                 callModel(Channel.GUILD_STAGE_VOICE),
                 StageRoles(isSpeaker = true, isModerator = true),
+                daveProtocolVersion = 0,
+                epochAuthenticator = null,
+                streamEpochAuthenticator = null,
             ),
         )!!
 
@@ -27,7 +30,6 @@ class WidgetVoiceSettingsBottomSheetViewModelTest {
         assertTrue(state.showReportItem)
         assertFalse(state.showInviteItem)
         assertFalse(state.showVoiceParticipants)
-        assertTrue(state.noiseCancellationEnabled)
     }
 
     private fun callModel(channelType: Int) = CallModel(

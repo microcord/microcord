@@ -27,6 +27,7 @@ import com.discord.utilities.fcm.NotificationClient
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImagesBitmap
 import rx.Observable
+import java.util.concurrent.TimeUnit
 
 class NotificationRenderer(private val cache: NotificationCache = NotificationCache()) {
     @SuppressLint("MissingPermission", "NotificationPermission")
@@ -98,34 +99,40 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         } else {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(data.body))
         }
-        displayNotification(context, snapshot.notificationId, builder)
-        loadNotificationBitmaps(snapshot.messages, data).subscribe({ bitmaps ->
-            val adaptiveBitmaps = bitmaps.mapValues { ShareUtils.toAdaptiveIconBitmap(context, it.value) }
-            if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {
-                builder.setStyle(messageStyle(context, snapshot.messages, adaptiveBitmaps))
-                data.iconUrl?.let(adaptiveBitmaps::get)?.let { shortcutIcon ->
-                    ShareUtils.pushConversationShortcut(
-                        context,
-                        ShareUtils.ConversationShortcut(
-                            channelId = data.channelId,
-                            label = data.title,
-                            persons = snapshot.messages.distinctBy(NotificationData::senderKey).map {
-                                ShareUtils.ShortcutPerson(it.senderKey.substringBefore(':').toLongOrNull() ?: 0L, it.sender)
-                            },
-                            icon = shortcutIcon,
-                        ),
-                    )
-                    builder.setShortcutId(data.channelId.toString())
-                }
-            }
-            displayNotification(context, snapshot.notificationId, builder)
-        }, { })
-        data.iconUrl?.let { iconUrl ->
-            MGImagesBitmap.getBitmap(iconUrl, imageIsCircle = true).subscribe({ bitmap ->
-                builder.setLargeIcon(bitmap)
-                displayNotification(context, snapshot.notificationId, builder)
-            }, { })
-        }
+        // Exactly one post per render: avatars are usually in Fresco's disk cache (tens of ms), so
+        // the fetch result itself is the first and only notification. A hard timeout keeps a hung
+        // network from swallowing the notification — it posts without avatars rather than never.
+        // Racing an early timer post instead produced a letter-tile post that was visibly
+        // re-rendered when the fetch finished, on every message after a cold process start.
+        loadNotificationBitmaps(snapshot.messages, data)
+            .timeout(NOTIFICATION_ICON_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS, Observable.just(emptyMap()))
+            .subscribe(
+                { resolved ->
+                    val adaptiveBitmaps = resolved.mapValues { ShareUtils.toAdaptiveIconBitmap(context, it.value) }
+                    if (data.kind == NotificationKind.MESSAGE || data.kind == NotificationKind.DIRECT_MESSAGE) {
+                        builder.setStyle(messageStyle(context, snapshot.messages, adaptiveBitmaps))
+                        data.iconUrl?.let(adaptiveBitmaps::get)?.let { shortcutIcon ->
+                            ShareUtils.pushConversationShortcut(
+                                context,
+                                ShareUtils.ConversationShortcut(
+                                    channelId = data.channelId,
+                                    label = data.title,
+                                    persons = snapshot.messages.distinctBy(NotificationData::senderKey).map {
+                                        ShareUtils.ShortcutPerson(it.senderKey.substringBefore(':').toLongOrNull() ?: 0L, it.sender)
+                                    },
+                                    icon = shortcutIcon,
+                                ),
+                            )
+                            builder.setShortcutId(data.channelId.toString())
+                        }
+                    }
+                    resolved[data.iconUrl]?.let(builder::setLargeIcon)
+                    displayNotification(context, snapshot.notificationId, builder)
+                },
+                {
+                    displayNotification(context, snapshot.notificationId, builder)
+                },
+            )
         return true
     }
 
@@ -418,6 +425,9 @@ class NotificationRenderer(private val cache: NotificationCache = NotificationCa
         private const val EXTRA_LATEST_MESSAGE_ID = "manticord.latestMessageId"
         private const val LIGHT_PERIOD_MS = 1_500
         private const val REPLY_STATUS_TIMEOUT_MS = 3_000L
+
+        /** Ceiling on waiting for avatars before posting without them; see render. */
+        private const val NOTIFICATION_ICON_FETCH_TIMEOUT_MS = 2_000L
 
         private val NotificationKind.channelId: String get() = when (this) {
             NotificationKind.MESSAGE -> CHANNEL_MESSAGES

@@ -102,17 +102,19 @@ class StoreNotificationsTest {
             store.handleChannelSelected(CHANNEL)
             store.handleMessageCreate(input(message = message(timestamp = now - 9_999)), true)
             store.handleMessageCreate(input(message = message(timestamp = now - 10_000)), true)
+            // The 10s window guards foreground banners only; a stale backgrounded message is the
+            // RESUME-replay case and must still reach the tray.
+            store.handleMessageCreate(input(message = message(timestamp = now - 10_000)), false)
             store.handleMessageCreate(input(message = message(timestamp = now - 1)), false)
         }
         scheduler.triggerActions()
 
         assertEquals(listOf("secret" to "push"), registrations)
         assertEquals(listOf(CHANNEL), cleared)
-        // The fresh foregrounded message banners, the stale one is dropped, and the fresh
+        // The fresh foregrounded message banners, the stale one is dropped, and both backgrounded
+        // ones go to the system tray rather than being discarded.
 
-        // backgrounded one goes to the system tray rather than being discarded.
-
-        assertEquals(2, candidates.size)
+        assertEquals(3, candidates.size)
         assertTrue(store.getSettings().isDisableSound)
         assertTrue(store.toString().contains("secret").not())
 

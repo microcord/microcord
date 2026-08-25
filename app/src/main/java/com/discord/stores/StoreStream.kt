@@ -1478,13 +1478,7 @@ class StoreStream private constructor(
             {},
         )
         com.discord.utilities.lifecycle.Backgrounded.observe().subscribe(
-            { backgrounded ->
-                val returnedToForeground = isBackgrounded && !backgrounded
-                isBackgrounded = backgrounded
-                if (returnedToForeground) {
-                    messageAck.handleAppForegrounded(channelsSelected.getId())
-                }
-            },
+            { backgrounded -> isBackgrounded = backgrounded },
             {},
         )
         Observable.interval(
@@ -1853,11 +1847,22 @@ class StoreStream private constructor(
         )
     }
 
+    /** Whether this process is the visible app right now, independent of the debounced [isBackgrounded]. */
+    private fun isProcessForeground(): Boolean =
+        (applicationContext.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+            as android.app.ActivityManager)
+            .runningAppProcesses.orEmpty()
+            .any { it.processName == applicationContext.packageName && it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND }
+
     /** Renders a notification the policy accepted. */
     private fun deliverNotification(message: DomainMessage, delivery: NotificationPolicy.Delivery) {
         if (!::applicationContext.isInitialized) return
         val channel = channels.getChannel(message.channelId) ?: return
-        if (delivery == NotificationPolicy.Delivery.FOREGROUND) {
+        // `Backgrounded` debounces for ~2s, so a message landing right after the user leaves the
+        // app is classified "foreground" and would only enqueue a banner nobody can see — while
+        // the connected socket keeps the server from pushing. The banner therefore requires the
+        // process to actually be foreground; otherwise the message falls through to the tray.
+        if (delivery == NotificationPolicy.Delivery.FOREGROUND && isProcessForeground()) {
             val popupContext = notifications.getContext() ?: return
             NoticePopupChannel.enqueue(
                 popupContext,
@@ -1877,7 +1882,11 @@ class StoreStream private constructor(
         val author = message.author
         val authorAvatar = (author?.avatar as? com.discord.nullserializable.NullSerializable.Value<String>)?.value
         val title = when (channel.type) {
-            Channel.DM -> author?.username ?: channel.getDisplayName()
+            // Nickname-resolved like the sender line below, so the conversation header and the
+            // person row never disagree about who is talking.
+            Channel.DM ->
+                NicknameUtils.getName(null, channel.id, author)
+                    .ifEmpty { author?.username ?: channel.getDisplayName() }
             Channel.GROUP_DM -> channel.getDisplayName()
             else -> listOfNotNull(guild?.name, channel.name).joinToString(" #")
         }
@@ -2292,9 +2301,10 @@ class StoreStream private constructor(
         dispatchSubscribe(events.messageAck, "streamMessageAck") { readState ->
             mentions.handleMessageAck(readState)
             messageAck.handleMessageAck(readState)
-            // The ack may have come from another device, so the notification this one raised is
-            // now for a channel the user has already read.
-            notifications.handleMessageAck(readState.channelId)
+            // Only while the app is in front: reading the channel on screen (or on another device
+            // while we are open) means the tray copy is stale, and the reference clears it here.
+            // Backgrounded, our own auto-ack echo would retract unseen notifications.
+            if (!isBackgrounded) notifications.handleMessageAck(readState.channelId)
             forumPostReadStates.handleMessageAck(readState)
             clientDataState.handleMessageAck(readState)
         }

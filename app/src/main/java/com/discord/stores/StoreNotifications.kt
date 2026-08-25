@@ -222,10 +222,12 @@ class StoreNotifications(
     @StoreThread
     fun handleChannelSelected(channelId: Long) = clearChannelNotifications(channelId)
 
-
-
+    /**
+     * Clears the tray when the user has genuinely read the channel *in this app*. Callers must
+     * gate on foreground: a backgrounded client's own auto-ack echo must not retract notifications
+     * nobody has seen yet.
+     */
     @StoreThread
-
     fun handleMessageAck(channelId: Long) = clearChannelNotifications(channelId)
 
     /**
@@ -235,7 +237,11 @@ class StoreNotifications(
      */
     @StoreThread
     fun handleMessageCreate(input: NotificationPolicy.Input, isForeground: Boolean) {
-        if (!isFresh(input.message)) return
+        // The reference's 10s window (`INAPP_MESSAGE_WINDOW_MS` → `displayPopup`) guards only the
+        // in-app banner. System-tray deliveries here are the backgrounded Gateway path, which must
+        // still notify for messages replayed by RESUME after a backgrounded socket drop — the push
+        // that would have carried them is suppressed while this process owns notifications.
+        if (isForeground && !isFresh(input.message)) return
         val evaluated = NotificationPolicy.evaluate(
             input.copy(isForeground = isForeground, appSettings = settings),
         )

@@ -455,19 +455,6 @@ class StoreMessageAck @JvmOverloads constructor(
         )
     }
 
-    /**
-     * Acks the channel the viewer is looking at when the app comes back to the foreground.
-     *
-     * Messages that arrive while backgrounded leave the channel unread even though it is on
-     * screen; the reference acks on the same transition.
-     */
-    fun handleAppForegrounded(channelId: Long) {
-        if (channelId <= 0L) return
-        postPendingAck(
-            getPendingAck(Observable.just(channelId)).takeSingleUntilTimeout(emitError = false),
-        )
-    }
-
     @StoreThread
     fun handlePreLogout() {
         threadSyncSubscription?.unsubscribe()
