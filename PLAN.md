@@ -3701,3 +3701,14 @@ equestRatingModal builder in
   StoreStreamWiringTest drops the review analytics leg). Recovered rating strings and the
   modal-image layout remain as resources per the resource rules. NoticeStoresTest,
   StoreStreamWiringTest, compileDebugKotlin and offline installDebug pass on Android 16 A065.
+
+- 2026-08-26 (c): Fixed GIF sends ignoring a pending reply. GifMessageSender called
+  StoreMessages.sendMessage with content only, so picking a GIF while a reply was armed sent a
+  plain message and left the reply dangling. It now goes through MessageSendCoordinator.send
+  directly (the same submission path as the composer's own submit and voice-message finish),
+  passing the channel's PendingReply so the reply reference, the optimistic reply marker, and
+  the ""ping the author"" toggle all ride along, and deletes the pending reply once the
+  submission is accepted. Covers both GIF entry points (search sheet and category page), which
+  share the sender. compileDebugKotlin and offline installDebug pass on Android 16 A065;
+  device-check by arming a reply, sending a GIF, and confirming the sent row renders as a reply
+  and the composer's reply banner clears.
