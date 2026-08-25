@@ -26,6 +26,7 @@ import com.discord.widgets.chat.input.applicationcommands.SelectedApplicationCom
 import com.discord.widgets.chat.input.autocomplete.adapter.ChatInputAutocompleteAdapter
 import com.discord.widgets.chat.input.models.ApplicationCommandData
 import com.lytefast.flexinput.model.Attachment
+import rx.Observable
 
 /**
  * Binds one composer to one [AutocompleteViewModel]: it feeds edits in, renders the resulting
@@ -136,6 +137,14 @@ class InputAutocomplete(
         viewModel.observeSelectedCommandState()
             .ui(appComponent)
             .subscribe({ configureSelectedCommand(it) }, { /* keep the composer usable */ })
+        Observable.merge(
+            StoreStream.getUsers().observeAllUsers().map { Unit },
+            StoreStream.getChannels().observeNames().map { Unit },
+            StoreStream.getGuilds().observeRoles().map { Unit },
+        ).ui(appComponent).subscribe(
+            { replaceMentionPills() },
+            { /* unresolved pills remain as their safe wire tokens */ },
+        )
     }
 
     fun onDestroyView() {
@@ -247,7 +256,7 @@ class InputAutocomplete(
 
     companion object {
         private const val REMOTE_LOADING_ITEMS = 4
-        private val MENTION_TOKEN = Regex("<@!?(\\d+)>")
+        private val MENTION_TOKEN = Regex("<(@&|@!?|#)(\\d+)>")
 
         /** A shortcode as the composer leaves it once an emoji has been picked. */
         private val EMOJI_TOKEN = Regex(":([a-zA-Z0-9_+~-]+):")
@@ -264,6 +273,21 @@ class InputAutocomplete(
             !state.isLoading && state.autocompletables.isEmpty() ->
                 R.string.application_command_autocomplete_no_options
             else -> null
+        }
+
+        internal fun mentionDisplay(
+            token: String,
+            userName: (Long) -> String?,
+            channelName: (Long) -> String?,
+            roleName: (Long) -> String?,
+        ): String? {
+            val match = MENTION_TOKEN.matchEntire(token) ?: return null
+            val id = match.groupValues[2].toLongOrNull() ?: return null
+            return when (match.groupValues[1]) {
+                "#" -> channelName(id)?.let { "#$it" }
+                "@&" -> roleName(id)?.let { "@$it" }
+                else -> userName(id)?.let { "@$it" }
+            }
         }
     }
 
@@ -440,13 +464,21 @@ class InputAutocomplete(
                 )
             }
             MENTION_TOKEN.findAll(editable).forEach { match ->
-                val userId = match.groupValues[1].toLongOrNull() ?: return@forEach
-                val username = StoreStream.getUsers().getUsers()[userId]?.username ?: return@forEach
+                val display = mentionDisplay(
+                    match.value,
+                    userName = { StoreStream.getUsers().getUsers()[it]?.username },
+                    channelName = { StoreStream.getChannels().getChannel(it)?.name },
+                    roleName = { roleId ->
+                        StoreStream.getGuilds().getRoles().values.asSequence()
+                            .mapNotNull { it[roleId]?.name }
+                            .firstOrNull()
+                    },
+                ) ?: return@forEach
                 put(
                     match.range,
                     listOf(
                         ComposerMentionSpan(
-                            display = "@$username",
+                            display = display,
                             textColor = ColorCompat.getThemedColor(editText, R.attr.colorInteractiveActive),
                             backgroundColor = ColorCompat.getThemedColor(editText, R.attr.theme_chat_mention_background),
                             density = editText.resources.displayMetrics.density,

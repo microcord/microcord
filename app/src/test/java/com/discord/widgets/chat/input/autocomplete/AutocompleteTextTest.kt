@@ -81,6 +81,25 @@ class AutocompleteTextTest {
     }
 
     @Test
+    fun composerPillsResolveUserChannelAndRoleWireTokens() {
+        val users = mapOf(1L to "user")
+        val channels = mapOf(2L to "general")
+        val roles = mapOf(3L to "mods")
+        fun display(token: String) = InputAutocomplete.mentionDisplay(
+            token,
+            users::get,
+            channels::get,
+            roles::get,
+        )
+
+        assertEquals("@user", display("<@1>"))
+        assertEquals("@user", display("<@!1>"))
+        assertEquals("#general", display("<#2>"))
+        assertEquals("@mods", display("<@&3>"))
+        assertNull(display("<#99>"))
+    }
+
+    @Test
     fun anOutOfBoundsRangeIsSkippedRatherThanThrowing() {
         val input = "hi"
         val map = mapOf(IntRange(50, 60) to channelAutocompletable(1L, "general"))

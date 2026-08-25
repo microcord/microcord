@@ -3571,6 +3571,17 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   `replied_user=false`. Offline `installDebug` passes on Android 16 A065. Regression assertions cover
   both payload shapes, but the shared unit task remains blocked by unrelated concurrent
   `DmListCustomizationTest` and `WidgetVoiceSettingsBottomSheetViewModelTest` compile errors.
+- FlexInput now renders all completed mention wire tokens as readable pills. Its span pass previously
+  recognized only user forms (`<@id>`/`<@!id>`), leaving channel `<#id>` and role `<@&id>` tokens as
+  raw IDs. It now resolves channel names through `StoreChannels` and role names through the guild
+  role snapshots while preserving the exact underlying token sent to Discord. Regression coverage
+  pins all four token forms plus unresolved fallback; offline `installDebug` passes on Android 16
+  A065, while the shared unit task remains blocked by the unrelated test-source errors above.
+- Restored FlexInput drafts now repaint mention pills as identity stores hydrate. Draft text can be
+  restored before users, channel names, and guild roles are available, and the old one-shot pass
+  left safe wire tokens visible for the rest of the session. A lifecycle-scoped merge of those three
+  existing store streams now reapplies spans whenever names arrive without changing cached or sent
+  text. Offline `installDebug` passes on Android 16 A065.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
