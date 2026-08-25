@@ -409,14 +409,6 @@ class StoreStream private constructor(
     private val notices = StoreNotices(clock, sessionDurablePreferences)
     private val nux = StoreNux(dispatcher)
     private val guildOnboarding = StoreGuildOnboarding(dispatcher)
-    private val reviewRequest = StoreReviewRequest(
-        clock,
-        notices,
-        sessionDurablePreferences,
-        trackReviewRequestTriggered = AnalyticsTracker::reviewRequestTriggered,
-        trackReviewRequestAccepted = AnalyticsTracker::reviewRequestAccepted,
-        trackReviewRequestDismissed = AnalyticsTracker::reviewRequestDismissed,
-    )
     private val emojiCustom = StoreEmojiCustom(guilds)
     private val emoji = StoreEmoji(
         emojiCustom,
@@ -1136,7 +1128,7 @@ class StoreStream private constructor(
         messageReactions,
         messageAck,
         mentions,
-        // Emoji and stickers. `emoji`, `notices`, `nux`, `reviewRequest` and `changeLog` are plain
+        // Emoji and stickers. `emoji`, `notices`, `nux` and `changeLog` are plain
         // `Store`s and must NOT be listed here.
         emojiCustom,
         emojiGuild,
@@ -1459,7 +1451,6 @@ class StoreStream private constructor(
         // unicode emoji render as literal text app-wide, with no error anywhere.
         notices.init(context)
         nux.init(context)
-        reviewRequest.init(context)
         changeLog.init(context.applicationContext as Application)
         emoji.initBlocking(context)
         mediaFavorites.installEmojiResolvers(
@@ -3455,7 +3446,6 @@ class StoreStream private constructor(
         stageChannels.handleConnectionOpen()
         emojiCustom.handleConnectionOpen(payload)
         guildStickers.handleConnectionOpen(payload)
-        reviewRequest.handleConnectionOpen(payload)
         contactSync.handleConnectionOpen()
         changeLog.handleConnectionOpen()
         voiceStates.handleConnectionOpen(payload)
@@ -4130,7 +4120,6 @@ class StoreStream private constructor(
         @JvmStatic fun getNux() = requireInstance().nux
         @JvmStatic fun getGuildOnboarding() = requireInstance().guildOnboarding
         @JvmStatic fun getGuildRoleMemberCounts() = requireInstance().guildRoleMemberCounts
-        @JvmStatic fun getReviewRequest() = requireInstance().reviewRequest
         @JvmStatic fun getChangeLog() = requireInstance().changeLog
 
         // Voice

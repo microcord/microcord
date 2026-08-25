@@ -3,18 +3,13 @@ package com.discord.stores
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
-import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
-import com.discord.models.domain.ModelPayload
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
-import com.google.gson.FieldNamingPolicy
-import com.google.gson.GsonBuilder
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -144,13 +139,13 @@ class NoticeStoresTest {
 
     @Test fun markDialogSeenFallsBackToTreatingTheStringAsAPlainNoticeName() {
         val notices = newNoticeStore()
-        notices.requestToShow(notice(StoreNotices.Dialog.Type.REQUEST_RATING_MODAL.name, persist = true))
+        notices.requestToShow(notice(StoreNotices.Dialog.Type.DELETE_CONNECTION_MODAL.name, persist = true))
         notices.requestToShow(notice("https://example.invalid/masked", persist = true))
 
-        notices.markDialogSeen(StoreNotices.Dialog.Type.REQUEST_RATING_MODAL.name)
+        notices.markDialogSeen(StoreNotices.Dialog.Type.DELETE_CONNECTION_MODAL.name)
         notices.markDialogSeen("https://example.invalid/masked")
 
-        assertTrue(notices.hasSeen(StoreNotices.Dialog.Type.REQUEST_RATING_MODAL.name))
+        assertTrue(notices.hasSeen(StoreNotices.Dialog.Type.DELETE_CONNECTION_MODAL.name))
         assertTrue(notices.hasSeen("https://example.invalid/masked"))
     }
 
@@ -210,52 +205,6 @@ class NoticeStoresTest {
 
     // endregion
 
-    // region StoreReviewRequest
-
-    @Test fun theReviewPromptWaitsForAVerifiedAccountInARealGuildOnAnOldInstall() {
-        val notices = newNoticeStore()
-        val store = StoreReviewRequest(clock, notices, preferences)
-        // Mint the install timestamp now, so "ten days old" is measured from here.
-        assertEquals(START_TIME_MS, notices.firstUseTimestamp)
-
-        store.handleConnectionOpen(readyPayload(verified = true, memberCount = 50))
-        assertNull(queuedReviewNotice(notices))
-
-        now += ELEVEN_DAYS_MS
-        store.handleConnectionOpen(readyPayload(verified = false, memberCount = 50))
-        assertNull(queuedReviewNotice(notices))
-
-        store.handleConnectionOpen(readyPayload(verified = true, memberCount = 2))
-        assertNull(queuedReviewNotice(notices))
-
-        store.handleConnectionOpen(readyPayload(verified = true, memberCount = 50))
-        assertNotNull(queuedReviewNotice(notices))
-    }
-
-    @Test fun acceptingTheReviewRequestSilencesItForever() {
-        val notices = newNoticeStore()
-        val accepted = mutableListOf<Unit>()
-        val store = StoreReviewRequest(
-            clock, notices, preferences,
-            trackReviewRequestAccepted = { accepted += Unit },
-        )
-        assertEquals(START_TIME_MS, notices.firstUseTimestamp)
-        now += ELEVEN_DAYS_MS
-
-        store.onUserAcceptedRequest()
-        store.handleConnectionOpen(readyPayload(verified = true, memberCount = 50))
-
-        assertEquals(1, accepted.size)
-        assertNull(queuedReviewNotice(notices))
-        // A fresh process reads the same durable preference and stays silent.
-        val reloaded = StoreReviewRequest(clock, notices, preferences)
-        reloaded.init(STUB_CONTEXT)
-        reloaded.handleConnectionOpen(readyPayload(verified = true, memberCount = 50))
-        assertNull(queuedReviewNotice(notices))
-    }
-
-    // endregion
-
     // region fixtures
 
     private fun newNoticeStore() = StoreNotices(clock, preferences)
@@ -291,31 +240,11 @@ class NoticeStoresTest {
         return latest
     }
 
-    private fun queuedReviewNotice(notices: StoreNotices): StoreNotices.Notice? {
-        notices.processNextNotice()
-        return latestNotice(notices)
-            ?.takeIf { it.name == StoreNotices.Dialog.Type.REQUEST_RATING_MODAL.name }
-    }
-
     private fun currentNux(store: StoreNux): StoreNux.NuxState {
         lateinit var state: StoreNux.NuxState
         store.getNuxState().take(1).subscribe { state = it }
         return state
     }
-
-    private fun readyPayload(verified: Boolean, memberCount: Int): ModelPayload = gson.fromJson(
-        """
-        {
-          "user": {"id": 7, "username": "me", "discriminator": "0000", "verified": $verified},
-          "private_channels": [],
-          "guilds": [{
-            "id": $GUILD_ID, "name": "Guild", "owner_id": 9, "unavailable": false,
-            "features": [], "member_count": $memberCount
-          }]
-        }
-        """.trimIndent(),
-        ModelPayload::class.java,
-    )
 
     private fun memoryPreferences(): SharedPreferences {
         val values = linkedMapOf<String, Any?>()
@@ -357,17 +286,11 @@ class NoticeStoresTest {
         private const val START_TIME_MS = 1_700_000_000_000L
         private const val DAY_MS = 86_400_000L
         private const val WEEK_MS = 604_800_000L
-        private const val ELEVEN_DAYS_MS = 11 * DAY_MS
 
         /**
          * `Store.init` ignores its context entirely and these stores read their preferences from
          * the constructor, so an unwrapped stub is enough to drive the reload path.
          */
         private val STUB_CONTEXT: Context = ContextWrapper(null)
-
-        private val gson = GsonBuilder()
-            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-            .registerDiscordApiTypeAdapters()
-            .create()
     }
 }

@@ -279,7 +279,6 @@ class StoreNotices(
     data class Dialog(val type: Type, val metadata: Map<String, Any>? = null) {
 
         enum class Type {
-            REQUEST_RATING_MODAL,
             DELETE_CONNECTION_MODAL,
             ;
 

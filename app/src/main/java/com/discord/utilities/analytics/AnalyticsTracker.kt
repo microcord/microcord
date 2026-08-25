@@ -286,14 +286,6 @@ object AnalyticsTracker {
         )
     }
 
-    fun reviewRequestTriggered() = openModal("App Store Ratings Prompt", "auto")
-
-    fun reviewRequestAccepted() =
-        dismissModal("App Store Ratings Prompt", "auto", "accepted")
-
-    fun reviewRequestDismissed() =
-        dismissModal("App Store Ratings Prompt", "auto", "dismissed")
-
     /** The gift-acceptance modal. */
     @JvmStatic
     fun openGiftModal(gift: ModelGift, channel: Channel?, location: String) {

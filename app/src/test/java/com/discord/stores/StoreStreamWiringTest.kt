@@ -111,18 +111,12 @@ class StoreStreamWiringTest {
             StoreStream.selectChannel(1L, 10L)
             StoreStream.selectChannel(1L, 12L)
             awaitSelectedChannel(12L)
-            StoreStream.getReviewRequest().onReviewRequestShown()
-            StoreStream.getReviewRequest().onUserAcceptedRequest()
-            StoreStream.getReviewRequest().onUserDismissedRequest()
             StoreStream.getAnalytics().handleFingerprint("wiring-test")
 
             val events = sink.events.filterIsInstance<Science.Event.MapObject>()
             assertTrue(events.any { it.type == "guild_viewed" })
             assertTrue(events.toString(), events.any { it.type == "channel_opened" && it.properties["channel_id"] == 12L })
             assertTrue(events.toString(), events.any { it.type == "text_in_voice_opened" })
-            assertTrue(events.any { it.type == "open_modal" && it.properties["type"] == "App Store Ratings Prompt" })
-            assertTrue(events.any { it.type == "modal_dismissed" && it.properties["dismiss_type"] == "accepted" })
-            assertTrue(events.any { it.type == "modal_dismissed" && it.properties["dismiss_type"] == "dismissed" })
         } finally {
             AnalyticsSink.reset()
             AnalyticsTracker.tracker.clear()

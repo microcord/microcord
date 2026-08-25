@@ -50,7 +50,6 @@ object NoticeBuilders {
         notice: StoreNotices.Dialog,
     ): Boolean {
         val data = when (notice.type) {
-            StoreNotices.Dialog.Type.REQUEST_RATING_MODAL -> requestRatingModal(context)
             StoreNotices.Dialog.Type.DELETE_CONNECTION_MODAL -> deleteConnectionModal(context, notice)
         }
         WidgetNoticeDialog.show(
@@ -65,33 +64,6 @@ object NoticeBuilders {
         )
         return true
     }
-
-    /**
-     * "Enjoying Discord?" — the Play Store review prompt.
-     *
-     * All three outcomes are reported back to `StoreReviewRequest`, including merely *seeing* it
-     * ([WidgetNoticeDialog.ON_SHOW]), because the store's cooldown is measured from the moment the
-     * user was asked rather than from the moment they answered.
-     */
-    private fun requestRatingModal(context: Context) = DialogData(
-        headerText = context.i18nRender(R.string.rating_request_title),
-        bodyText = context.i18nRender(R.string.rating_request_body_android),
-        okText = context.i18nRender(R.string.okay),
-        cancelText = context.i18nRender(R.string.no_thanks),
-        listenerMap = mapOf(
-            WidgetNoticeDialog.ON_SHOW to { _: View ->
-                StoreStream.getReviewRequest().onReviewRequestShown()
-            },
-            R.id.notice_ok to { view: View ->
-                StoreStream.getReviewRequest().onUserAcceptedRequest()
-                UriHandler.directToPlayStore(view.context)
-            },
-            R.id.CANCEL_BUTTON to { _: View ->
-                StoreStream.getReviewRequest().onUserDismissedRequest()
-            },
-        ),
-        extraLayoutId = R.layout.view_review_request_modal_image,
-    )
 
     /**
      * "Disconnect your Steam account?" — raised from the connections settings screen, which is

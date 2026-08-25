@@ -3690,3 +3690,14 @@ title and never swaps; message within 2s of backgrounding reaches the tray; long
 RESUME replay notifies; foreground in-app read clears the tray immediately while a backgrounded
 notification persists untouched; three DMs across a fresh process each render exactly once;
 main-process-dead push still renders via :fcm (avatarless only if offline).
+
+- 2026-08-26 (b): Removed the "Enjoying Discord?" Play Store rating prompt entirely at the
+  user's request - Manticord is not distributed through the Play Store. Deleted
+  StoreReviewRequest and its StoreStream wiring (construction, init, READY handler, accessor),
+  StoreNotices.Dialog.Type.REQUEST_RATING_MODAL, the
+equestRatingModal builder in
+  NoticeBuilders, and the three AnalyticsTracker review callbacks; rewired the affected
+  tests (NoticeStoresTest dialog-seen coverage now uses DELETE_CONNECTION_MODAL;
+  StoreStreamWiringTest drops the review analytics leg). Recovered rating strings and the
+  modal-image layout remain as resources per the resource rules. NoticeStoresTest,
+  StoreStreamWiringTest, compileDebugKotlin and offline installDebug pass on Android 16 A065.
