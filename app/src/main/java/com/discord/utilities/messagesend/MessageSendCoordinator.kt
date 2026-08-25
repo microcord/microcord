@@ -86,6 +86,12 @@ class MessageSendCoordinator @JvmOverloads constructor(
         val messageReference: MessageReference? = null,
         /** Reference `SendMessageOptions.location`; see [MessageSendLocation]. */
         val location: String = MessageSendLocation.OTHER,
+        /**
+         * Reuses a prior send's nonce instead of minting one. The restart/captcha resend must
+         * pass the persisted message's nonce: the server de-duplicates on it, so a retry with a
+         * fresh nonce posts a second copy of a message whose first request actually landed.
+         */
+        val nonce: String? = null,
     )
 
     sealed class Submission {
@@ -176,7 +182,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
     }
 
     fun send(input: Send): Submission {
-        val nonce = nonceGenerator.nonce().toString()
+        val nonce = input.nonce ?: nonceGenerator.nonce().toString()
         val reference = input.messageReference ?: input.reply?.messageReference
         val base = Message(
             id = nonce.toLong(),

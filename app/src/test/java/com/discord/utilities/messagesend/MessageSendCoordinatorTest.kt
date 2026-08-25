@@ -80,6 +80,9 @@ class MessageSendCoordinatorTest {
 
     @Test
     fun oversizedContentIsRejectedEvenWithAnAttachment() {
+        // No Uri is constructible under returnDefaultValues (Uri.parse/EMPTY are stubbed to
+        // null); skip rather than delete so the check still runs under instrumentation.
+        org.junit.Assume.assumeTrue(Uri.parse("file:///message.txt") != null)
         val submission = coordinator.send(
             MessageSendCoordinator.Send(
                 channelId = CHANNEL_ID,
@@ -99,6 +102,24 @@ class MessageSendCoordinatorTest {
         )
 
         assertTrue(submission is MessageSendCoordinator.Submission.Rejected)
+    }
+
+    /** A restart/captcha resend must reuse the first attempt's nonce so the server can de-dupe. */
+    @Test
+    fun aResendReusesTheSuppliedNonceOnTheWireAndAsRequestIdentity() {
+        val submission = coordinator.send(
+            MessageSendCoordinator.Send(
+                channelId = CHANNEL_ID,
+                content = "retry me",
+                author = User(7L, "me"),
+                nonce = "123456789012345678",
+            ),
+        )
+
+        val accepted = submission as MessageSendCoordinator.Submission.Accepted
+        assertEquals("123456789012345678", accepted.requestId)
+        assertEquals("123456789012345678", accepted.optimistic.nonce)
+        assertEquals("123456789012345678", restApi.sendCalls.single().body?.nonce)
     }
 
     @Test

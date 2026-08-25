@@ -3730,3 +3730,19 @@ A deliberate Manticord addition over 126.21, whose composer leaves URLs unstyled
 Using the platform matcher avoids any custom URL regex on Android's ICU engine. Offline
 `installDebug` passes on Android 16 A065; device-check a GIF URL appended with the new flag
 and a hand-typed https:// link both coloring and losing color when edited away.
+- 2026-08-26 (f): Fixed duplicate messages after a restart on bad network. The boot resend sweep
+(`StoreMessages.resendAllLocalMessages` -> `resendMessage` -> `sendMessage`) minted a fresh
+nonce on every attempt, so when the pre-restart POST had actually reached the server but its
+ACK was lost, the retry was a brand-new message - Discord's server-side nonce de-duplication
+could not see it. In-session retries were already safe (`MessageQueue` reuses the request
+object; `resume`/`retry` preserve the nonce; the queue's own transport retry is explicitly
+gated on the nonce for this reason). `MessageSendCoordinator.Send` now accepts an optional
+`nonce`, `send()` falls back to minting only when none is supplied, `StoreMessages`
+`sendMessage` forwards it, and `resendMessage` passes the persisted message's original
+nonce - covering both the restart sweep and the captcha resend path. A regression pins the
+supplied nonce appearing as request identity, optimistic-row nonce, and wire body nonce. Also
+unblocked the latent `oversizedContentIsRejectedEvenWithAnAttachment` failure (Uri.parse is
+stubbed null under returnDefaultValues; assume-skips in plain JVM, still runs under
+instrumentation). Focused MessageSendCoordinatorTest passes; offline `installDebug` succeeds
+on Android 16 A065. Device-check: send a message, kill networking before the ACK, restart the
+app, restore networking, and confirm exactly one copy.

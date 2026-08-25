@@ -966,6 +966,8 @@ class StoreMessages @JvmOverloads constructor(
         guildId: Long? = null,
         location: String = MessageSendLocation.OTHER,
         flags: Long? = null,
+        /** Reuses the persisted nonce on resends; see [MessageSendCoordinator.Send.nonce]. */
+        nonce: String? = null,
     ): Observable<MessageResult> {
         val coordinator = sendCoordinator ?: return Observable.just(MessageResult.NoValidContent)
         val submission = coordinator.send(
@@ -984,6 +986,7 @@ class StoreMessages @JvmOverloads constructor(
                 location = location,
                 flags = flags,
                 messageReference = messageReference,
+                nonce = nonce,
             ),
         )
         return when (submission) {
@@ -1063,6 +1066,9 @@ class StoreMessages @JvmOverloads constructor(
             guildId = message.guildId,
             location = if (isAutoAttempt) MessageSendLocation.OTHER else MessageSendLocation.RETRY,
             flags = message.flags,
+            // Same nonce as the first attempt: the server de-duplicates on it, so a resend whose
+            // original request actually landed returns that message instead of posting a copy.
+            nonce = message.nonce,
         )
     }
 
