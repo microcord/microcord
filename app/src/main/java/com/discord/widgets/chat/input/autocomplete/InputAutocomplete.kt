@@ -5,6 +5,8 @@ import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.BackgroundColorSpan
 import android.text.style.CharacterStyle
+import android.text.style.ForegroundColorSpan
+import android.util.Patterns
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
@@ -486,6 +488,13 @@ class InputAutocomplete(
                     ),
                 )
             }
+            // A deliberate Manticord addition — 126.21 leaves typed URLs unstyled — so an
+            // appended GIF link reads as a link. `Patterns.WEB_URL` is the platform matcher.
+            val linkColor = ColorCompat.getThemedColor(editText, R.attr.colorTextLink)
+            val urlMatcher = Patterns.WEB_URL.matcher(editable)
+            while (urlMatcher.find()) {
+                put(urlMatcher.start() until urlMatcher.end(), listOf(ForegroundColorSpan(linkColor)))
+            }
         }
         applyEditTextAction(InputEditTextAction.ReplacePillSpans(editable.toString(), spans))
     }
@@ -516,6 +525,7 @@ class InputAutocomplete(
             is InputEditTextAction.ReplacePillSpans -> {
                 editable.getSpans(0, editable.length, ComposerMentionSpan::class.java).forEach(editable::removeSpan)
                 editable.getSpans(0, editable.length, BackgroundColorSpan::class.java).forEach(editable::removeSpan)
+                editable.getSpans(0, editable.length, ForegroundColorSpan::class.java).forEach(editable::removeSpan)
                 action.spans.forEach { (range, styles) ->
                     styles.forEach { style ->
                         editable.setSpan(style, range.first, range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)

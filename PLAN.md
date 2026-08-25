@@ -3712,3 +3712,21 @@ equestRatingModal builder in
   share the sender. compileDebugKotlin and offline installDebug pass on Android 16 A065;
   device-check by arming a reply, sending a GIF, and confirming the sent row renders as a reply
   and the composer's reply banner clears.
+
+- 2026-08-26 (d): Added the default-off `GIF URL to Input` Feature Flag. When enabled, picking a
+GIF appends its Tenor link at the composer's cursor (via a new `WidgetChatInput.inputAppender`
+hook set while the input is bound, using the same insert-at-selection logic as an emoji pick)
+so the link can be edited into a larger message; when no input is bound the link is appended to
+the channel's persisted draft instead. Flag off keeps the immediate send, including the pending
+reply from the previous fix. The switch lives in Feature Flags next to More GIF Providers.
+Offline `installDebug` passes on Android 16 A065; device-check both modes and the draft
+fallback (pick from the tray while the chat screen is not on screen).
+
+- 2026-08-26 (e): URLs typed or appended in the composer now render in the Discord link color.
+A deliberate Manticord addition over 126.21, whose composer leaves URLs unstyled; the existing
+`replaceMentionPills` span pass in `InputAutocomplete` (run on every edit) now also applies a
+`ForegroundColorSpan` themed by `?attr/colorTextLink` over every `Patterns.WEB_URL` match, and
+`ReplacePillSpans` clears the foreground spans with the pill spans so restyles stay idempotent.
+Using the platform matcher avoids any custom URL regex on Android's ICU engine. Offline
+`installDebug` passes on Android 16 A065; device-check a GIF URL appended with the new flag
+and a hand-typed https:// link both coloring and losing color when edited away.

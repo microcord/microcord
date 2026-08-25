@@ -244,6 +244,18 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onViewBound(view: View) {
+        inputAppender = { channelId, text ->
+            val editor = input?.takeIf { state?.channelId == channelId }
+            if (editor == null || !editor.isEnabled) {
+                false
+            } else {
+                val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
+                val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(start)
+                editor.text?.replace(start, end, text)
+                editor.setSelection((start + text.length).coerceAtMost(editor.text?.length ?: 0))
+                true
+            }
+        }
         super.onViewBound(view)
         _binding = WidgetChatInputBinding.bind(view)
         pluginComposerRegistration = PluginUiRegistry.addComposerListener {
@@ -394,6 +406,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flexInputViewModel.updateMessageLimitCounter(AppFlexInputViewModel.MessageLimitCounter())
         view?.removeCallbacks(pluginComposerBinder)
         input?.removeTextChangedListener(watcher)
+        inputAppender = null
         autocomplete?.onDestroyView()
         SharedPreferencesProvider.get().unregisterOnSharedPreferenceChangeListener(customizationListener)
         autocomplete = null
@@ -1786,6 +1799,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         @JvmField var pendingRepliesStore: StorePendingReplies? = null
         @JvmField var editingStore: StoreChatInputEditing? = null
         @JvmField var uploadHandler: ((UploadRequest) -> Boolean)? = null
+
+        /** Inserts text at the composer's cursor, like an emoji pick; null when no input is bound. */
+        @JvmField var inputAppender: ((channelId: Long, text: String) -> Boolean)? = null
 
         fun requestMention(userId: Long) = mentionRequests.onNext(userId)
     }

@@ -45,6 +45,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.moreGifProvidersEnabled()
             setOnCheckedListener(FeatureFlags::setMoreGifProvidersEnabled)
         }
+        binding.settingsFeatureGifUrlToInput.apply {
+            isChecked = FeatureFlags.gifUrlToInputEnabled()
+            setOnCheckedListener(FeatureFlags::setGifUrlToInputEnabled)
+        }
         binding.settingsFeatureQuickMessageActions.apply {
             isChecked = FeatureFlags.quickMessageActionsEnabled()
             setOnCheckedListener(FeatureFlags::setQuickMessageActionsEnabled)
