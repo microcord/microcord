@@ -3649,3 +3649,12 @@ Resumable task: `app/src/main/java/com/discord/stores/StoreSearchInput.kt` and
 `app/src/main/java/com/discord/widgets/search/DefaultSearchStore.kt` | open message search on A065, select a modern `from:` user, then
 select `in:` and confirm the input retains `from:<user> in:`; rerun `SearchGifExpressionStoresTest` after the shared test sources compile.
 
+- 2026-08-25: Fixed pinned messages opening at the bottom. `WidgetChatListAdapter` retains its normal bottom-sticking behavior by
+  default, while `WidgetChannelPinnedMessages` explicitly disables initial newest-message jumps, growth-to-bottom, and resize-to-bottom
+  behavior so the list starts at its first pin. Production Kotlin compiles, `installDebug --offline` succeeds on Android 16 A065, and
+  `git diff --check` passes.
+
+Resumable task: `app/src/main/java/com/discord/widgets/chat/pins/WidgetChannelPinnedMessages.kt` | reference
+`discord-jadx/app/src/main/java/com/discord/widgets/chat/pins/WidgetChannelPinnedMessages.java` | open a channel with more than one page
+of pins on A065 and verify it starts at the top, preserves position while paging, and does not affect ordinary chat bottom anchoring.
+

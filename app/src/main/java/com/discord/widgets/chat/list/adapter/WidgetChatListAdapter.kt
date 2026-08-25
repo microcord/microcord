@@ -60,6 +60,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     var fragmentManager: FragmentManager,
     val eventHandler: EventHandler,
     val clock: Clock = ClockFactory.get(),
+    private val stickToBottom: Boolean = true,
 ) : MGRecyclerAdapterSimple<ChatListEntry>(recycler, deferredDiffs = false) {
 
     val botUiComponentProvider = ComponentProvider()
@@ -80,7 +81,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
                 (value.list.newestMessage()?.id ?: 0L) > (field.list.newestMessage()?.id ?: 0L)
             val atBottom = StoreChat.InteractionState.getScrollState(layoutManager)
                 .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
-            pendingStickToBottom = newestGrew && atBottom
+            pendingStickToBottom = stickToBottom && newestGrew && atBottom
             field = value
             setData(value.list)
             if (viewerChanged && itemCount > 0) notifyItemRangeChanged(0, itemCount)
@@ -107,7 +108,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private val handlerOfResize = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
         val oldHeight = oldBottom - oldTop
         val newHeight = bottom - top
-        if (oldHeight != newHeight && itemCount > 0 && atBottomBeforeResize) {
+        if (stickToBottom && oldHeight != newHeight && itemCount > 0 && atBottomBeforeResize) {
             layoutManager?.scrollToPosition(itemCount - 1)
         }
         atBottomBeforeResize = StoreChat.InteractionState.getScrollState(layoutManager)
@@ -628,7 +629,8 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         override fun run() {
             if (channelId != data.channelId) {
                 channelId = data.channelId
-                scrollToMessageId(0L) {}
+                if (stickToBottom) scrollToMessageId(0L) {}
+                else layoutManager?.scrollToPositionWithOffset(0, 0)
                 isTouchedSinceLastJump = false
                 pendingStickToBottom = false
             } else if (pendingStickToBottom) {

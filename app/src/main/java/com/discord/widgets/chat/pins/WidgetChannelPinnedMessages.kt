@@ -65,6 +65,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
                 this,
                 parentFragmentManager,
                 PinnedMessagesEventHandler(),
+                stickToBottom = false,
             ),
         )
         recycler.addItemDecoration(ThreadSpineItemDecoration(requireContext(), chatAdapter))
