@@ -6,6 +6,7 @@ import com.discord.models.domain.emoji.ModelEmojiCustom
 import com.discord.models.user.CoreUser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.TreeSet
 
@@ -97,6 +98,30 @@ class AutocompleteTextTest {
         assertEquals("#general", display("<#2>"))
         assertEquals("@mods", display("<@&3>"))
         assertNull(display("<#99>"))
+    }
+
+    @Test
+    fun numericUsernameDoesNotRemapACompletedMentionToken() {
+        val numeric = UserAutocompletable(CoreUser(99L, "1"), nickname = null)
+        val candidates = mapOf(LeadingIdentifier.MENTION to setOf<Autocompletable>(numeric))
+
+        assertTrue(
+            AutocompleteModelUtils.mapInputToMentions(
+                "<@123456>",
+                candidates,
+                emptyMap(),
+                isCommand = false,
+            ).mentions.isEmpty(),
+        )
+        assertEquals(
+            numeric,
+            AutocompleteModelUtils.mapInputToMentions(
+                "hello @1",
+                candidates,
+                emptyMap(),
+                isCommand = false,
+            ).mentions.values.single(),
+        )
     }
 
     @Test

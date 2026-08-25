@@ -24,6 +24,8 @@ import java.util.regex.Pattern
  */
 object AutocompleteModelUtils {
 
+    private val COMPLETED_MENTION = Regex("<(?:@&|@!?|#)\\d+>")
+
     /**
      * A slash command is autocompleted from the *start of the input*, not from the caret's word:
      * `/ban some` must keep offering `/ban` while the user types its arguments. Up to three
@@ -230,6 +232,9 @@ object AutocompleteModelUtils {
         isCommand: Boolean,
     ): ChatInputMentionsMap {
         val result = LinkedHashMap<IntRange, Autocompletable>()
+        val completedMentions = COMPLETED_MENTION.findAll(input)
+            .map { IntRange(it.range.first, it.range.last + 1) }
+            .toList()
 
         // Only scan buckets whose identifier actually occurs in the input. On a large guild this
         // is the difference between iterating a handful of channels and iterating every member.
@@ -247,7 +252,10 @@ object AutocompleteModelUtils {
                 var index = input.indexOf(matcher)
                 while (index != -1) {
                     val range = IntRange(index, index + matcher.length)
-                    if (shouldRecord(range, candidate, result)) {
+                    val insideCompletedMention = completedMentions.any {
+                        range.first < it.last && it.first < range.last
+                    }
+                    if (!insideCompletedMention && shouldRecord(range, candidate, result)) {
                         result[range] = currentInputMentionMap[range] ?: candidate
                     }
                     index = input.indexOf(matcher, index + 1)

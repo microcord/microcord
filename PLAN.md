@@ -3582,6 +3582,11 @@ handle), `UserNode` search tokens, and the handle lines under a display name.
   left safe wire tokens visible for the rest of the session. A lifecycle-scoped merge of those three
   existing store streams now reapplies spans whenever names arrive without changing cached or sent
   text. Offline `installDebug` passes on Android 16 A065.
+- Completed mention tokens are now excluded from autocomplete's plain-text range mapper. A numeric
+  username such as `1` previously matched the `@1` prefix inside an already-complete `<@123...>`
+  token, so send-time substitution could retarget or corrupt that mention. The mapper now treats
+  user, nickname-user, role, and channel wire tokens as atomic while still mapping a genuinely typed
+  `@1`. Regression coverage pins both cases; offline `installDebug` passes on Android 16 A065.
 
 Resumable task: `app/src/main/java/com/discord/gateway/io/IncomingParser.kt` and
 `app/src/main/java/com/discord/models/domain/ModelPayload.kt` | add separate Perfetto slices for envelope metadata and each
