@@ -47,6 +47,7 @@ import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.feature.MessageCustomization
 import com.discord.utilities.feature.MessageCustomization.CoreElement
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.intent.IntentUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.spans.ClickableSpan
@@ -529,6 +530,12 @@ class WidgetChatListAdapterItemMessage(
         isAnimationEnabled = entry.animateEmojis,
         userNames = entry.nickOrUsernames,
         channelNames = adapter.data.channelNames,
+        userAvatarUrls = entry.nickOrUsernames.keys.mapNotNull { userId ->
+            IconUtils.getForUser(StoreStream.getUsers().getUsers()[userId])?.let { userId to it }
+        }.toMap(),
+        guildNames = guildNames(),
+        guildIconUrls = guildIconUrls(),
+        viewingGuildId = adapter.data.guildId,
         roles = entry.roles,
         linkColorAttrResId = R.attr.colorTextLink,
         onClickUrl = { clickContext, url, mask -> UriHandler.handleOrUntrusted(clickContext, url, mask) },
@@ -544,12 +551,33 @@ class WidgetChatListAdapterItemMessage(
             )
         },
         channelMentionOnClick = ::selectChannel,
+        channelLinkOnClick = ::selectChannelLink,
+        userLinkOnClick = { userId -> adapter.eventHandler.onUserMentionClicked(userId, adapter.data.channelId, adapter.data.guildId) },
         emojiClickHandler = { emoji -> WidgetEmojiSheet.show(adapter.fragmentManager, emoji) },
     )
 
     private fun selectChannel(channelId: Long) {
         ChannelSelector.getInstance().findAndSet(itemView.context, channelId)
     }
+
+    private fun selectChannelLink(channelId: Long, guildId: Long?, messageId: Long?) {
+        // Reuses the deep-link route so a message-id link also jumps to that message, exactly as a
+        // notification tap would.
+        IntentUtils.consumeExternalRoutingIntent(
+            IntentUtils.RouteBuilders.selectChannel(channelId, guildId ?: 0L, messageId),
+            itemView.context,
+        )
+    }
+
+    /** Guild id -> display name, for the cross-server prefix on channel links. */
+    private fun guildNames(): Map<Long, String> =
+        StoreStream.getGuilds().getGuilds().mapValues { it.value.name }
+
+    /** Guild id -> icon URL, for the cross-server prefix on channel links. */
+    private fun guildIconUrls(): Map<Long, String> =
+        StoreStream.getGuilds().getGuilds().mapNotNull { (id, guild) ->
+            IconUtils.getForGuild(guild)?.let { id to it }
+        }.toMap()
 
     /**
      * Revealing a spoiler is a per-message, per-node piece of state so it survives scrolling. Read-

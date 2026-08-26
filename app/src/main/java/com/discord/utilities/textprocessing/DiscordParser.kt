@@ -101,6 +101,11 @@ object DiscordParser {
             parser.addRule(Rules.createUrlNoEmbedRule())
             parser.addRule(Rules.createMailtoRule())
             parser.addRule(Rules.createTelephoneRule())
+            // Discord URLs resolve to rich mentions before the generic URL rule, matching the
+            // React Native client's modern link rendering.
+            parser.addRule(Rules.createChannelLinkRule())
+            parser.addRule(Rules.createUserLinkRule())
+            parser.addRule(Rules.createAttachmentLinkRule())
             parser.addRule(Rules.createUrlRule())
         }
 

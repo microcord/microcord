@@ -6,7 +6,9 @@ import androidx.annotation.ColorInt
 import com.discord.R
 import com.discord.api.role.GuildRole
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.textprocessing.node.AttachmentLinkNode
 import com.discord.utilities.textprocessing.node.BasicRenderContext
+import com.discord.utilities.textprocessing.node.ChannelLinkNode
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
 import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
@@ -14,6 +16,7 @@ import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
+import com.discord.utilities.textprocessing.node.UserLinkNode
 import com.discord.utilities.textprocessing.node.UserMentionNode
 import com.discord.utilities.uri.UriHandler
 
@@ -37,6 +40,10 @@ data class MessageRenderContext(
     override val userNames: Map<Long, String>? = null,
     override val channelNames: Map<Long, String>? = null,
     override val roles: Map<Long, GuildRole>? = null,
+    override val userAvatarUrls: Map<Long, String>? = null,
+    override val guildNames: Map<Long, String>? = null,
+    override val guildIconUrls: Map<Long, String>? = null,
+    override val viewingGuildId: Long = 0L,
 
     @AttrRes override val linkColorAttrResId: Int = R.attr.colorTextLink,
     override val onClickUrl: (Context, String, String?) -> Unit = DEFAULT_URL_CLICK,
@@ -50,6 +57,12 @@ data class MessageRenderContext(
     override val userMentionOnClick: ((Long) -> Unit)? = null,
     override val channelMentionOnClick: ((Long) -> Unit)? = null,
 
+    /** Opens the channel/message a `discord.com/channels/...` link points at; null keeps it a plain URL. */
+    override val channelLinkOnClick: ((channelId: Long, guildId: Long?, messageId: Long?) -> Unit)? = null,
+
+    /** Opens the profile a `discord.com/users/...` link points at; null keeps it a plain URL. */
+    override val userLinkOnClick: ((Long) -> Unit)? = null,
+
     /** Opens the emoji detail sheet; null keeps emoji inert. */
     val emojiClickHandler: ((EmojiNode.EmojiIdAndType) -> Unit)? = null,
 
@@ -61,6 +74,9 @@ data class MessageRenderContext(
     UserMentionNode.RenderContext,
     EmojiNode.RenderContext,
     ChannelMentionNode.RenderContext,
+    ChannelLinkNode.RenderContext,
+    UserLinkNode.RenderContext,
+    AttachmentLinkNode.RenderContext,
     CommandMentionNode.RenderContext,
     RoleMentionNode.RenderContext,
     UrlNode.RenderContext,

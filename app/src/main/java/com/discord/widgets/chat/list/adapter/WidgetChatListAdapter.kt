@@ -72,6 +72,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     var data: Data = EmptyData()
         set(value) {
             val viewerChanged = field.userId != value.userId
+            // Channel names only change when the store re-snapshots after READY; message-only
+            // updates reuse the same snapshot object, so a reference check is free and only a real
+            // name change forces a rebind (channel links otherwise stay "#deleted-channel").
+            val namesChanged = field.channelNames !== value.channelNames
             if (field.channelId == value.channelId &&
                 StoreStream.getMessagesLoader().hasTopPageUpdate(value.channelId)
             ) {
@@ -84,7 +88,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             pendingStickToBottom = stickToBottom && newestGrew && atBottom
             field = value
             setData(value.list)
-            if (viewerChanged && itemCount > 0) notifyItemRangeChanged(0, itemCount)
+            if ((viewerChanged || namesChanged) && itemCount > 0) notifyItemRangeChanged(0, itemCount)
         }
 
     /**

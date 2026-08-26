@@ -24,9 +24,11 @@ import com.discord.simpleast.core.parser.Parser
 import com.discord.simpleast.core.parser.Rule
 import com.discord.simpleast.core.simple.SimpleMarkdownRules
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.textprocessing.node.AttachmentLinkNode
 import com.discord.utilities.textprocessing.node.BasicRenderContext
 import com.discord.utilities.textprocessing.node.BlockBackgroundNode
 import com.discord.utilities.textprocessing.node.BlockQuoteNode
+import com.discord.utilities.textprocessing.node.ChannelLinkNode
 import com.discord.utilities.textprocessing.node.ChannelMentionNode
 import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
@@ -39,6 +41,7 @@ import com.discord.utilities.textprocessing.node.SubtextNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
 import com.discord.utilities.textprocessing.node.UserMentionNode
+import com.discord.utilities.textprocessing.node.UserLinkNode
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -57,6 +60,12 @@ object Rules {
     const val REGEX_CUSTOM_EMOJI = "<(a)?:([a-zA-Z_0-9]+):(\\d+)>"
 
     private const val REGEX_URL = "((?:https?|steam)://[^\\s<]+[^<.,:;\"'\\]\\s])"
+    private const val REGEX_CHANNEL_LINK =
+        "((?:https?://)?(?:canary\\.|ptb\\.)?(?:discord|discordapp)\\.com/channels/(@me|\\d+)/(\\d+)(?:/(\\d+))?)"
+    private const val REGEX_USER_LINK =
+        "((?:https?://)?(?:canary\\.|ptb\\.)?(?:discord|discordapp)\\.com/users/(\\d+))"
+    private const val REGEX_ATTACHMENT_LINK =
+        "(https://(?:(?:media|images)\\.discordapp\\.net|cdn\\.discordapp\\.com)/(?:attachments|ephemeral-attachments)/\\d+/\\d+/([A-Za-z0-9._-]*[A-Za-z0-9_-])(?:[?][a-zA-Z0-9?&=_-]*)?)"
     private const val REGEX_LINK_INSIDE = "(?:\\[[^]]*]|[^]]|](?=[^\\[]*]))*"
     private const val REGEX_LINK_HREF_AND_TITLE =
         "\\s*<?((?:\\([^)]*\\)|[^\\s\\\\()]|\\\\.)*?)>?(?:\\s+['\"]([\\s\\S]*?)['\"])?\\s*"
@@ -73,6 +82,9 @@ object Rules {
     private val PATTERN_UNESCAPE_EMOTICON: Pattern = Pattern.compile("^(¯\\\\_\\(ツ\\)_/¯)")
     private val PATTERN_TIMESTAMP: Pattern = Pattern.compile("^<t:(-?\\d{1,17})(?::(t|T|d|D|f|F|R))?>")
     private val PATTERN_URL: Pattern = Pattern.compile("^$REGEX_URL")
+    private val PATTERN_CHANNEL_LINK: Pattern = Pattern.compile("^$REGEX_CHANNEL_LINK")
+    private val PATTERN_USER_LINK: Pattern = Pattern.compile("^$REGEX_USER_LINK")
+    private val PATTERN_ATTACHMENT_LINK: Pattern = Pattern.compile("^$REGEX_ATTACHMENT_LINK")
     private val PATTERN_URL_NO_EMBED: Pattern = Pattern.compile("^<$REGEX_URL>")
     private val PATTERN_MAILTO: Pattern = Pattern.compile("^<([^\\s<>@]+@[^\\s<>@]+\\.[^\\s<>@]+)>")
     private val PATTERN_TEL: Pattern = Pattern.compile(
@@ -576,6 +588,53 @@ object Rules {
                 parser: Parser<T, in TimestampNode<T>, S>,
                 state: S,
             ): ParseSpec<T, S> = ParseSpec(TimestampNode(matcher.group(1).orEmpty(), matcher.group(2)), state)
+        }
+
+    /** A `discord.com/channels/...` URL, rendered as a channel-mention pill (RN parity). */
+    fun <T : ChannelLinkNode.RenderContext, S> createChannelLinkRule(): Rule<T, ChannelLinkNode<T>, S> =
+        object : Rule<T, ChannelLinkNode<T>, S>(PATTERN_CHANNEL_LINK) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in ChannelLinkNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> {
+                val guild = matcher.group(2).takeUnless { it == "@me" }?.toLongOrNull()
+                val channelId = matcher.group(3).toLongOrNull() ?: return ParseSpec(
+                    UrlNode(matcher.group(1).orEmpty()),
+                    state,
+                )
+                val messageId = matcher.group(4)?.toLongOrNull()
+                return ParseSpec(
+                    ChannelLinkNode(matcher.group(1).orEmpty(), channelId, guild, messageId),
+                    state,
+                )
+            }
+        }
+
+    /** A `discord.com/users/...` URL, rendered as an `@username` mention (RN parity). */
+    fun <T : UserLinkNode.RenderContext, S> createUserLinkRule(): Rule<T, UserLinkNode<T>, S> =
+        object : Rule<T, UserLinkNode<T>, S>(PATTERN_USER_LINK) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in UserLinkNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> = ParseSpec(
+                UserLinkNode(matcher.group(1).orEmpty(), matcher.group(2).toLongOrDefault()),
+                state,
+            )
+        }
+
+    /** A `cdn.discordapp.com/attachments/...` URL, rendered as a paperclip + filename pill (RN parity). */
+    fun <T : AttachmentLinkNode.RenderContext, S> createAttachmentLinkRule(): Rule<T, AttachmentLinkNode<T>, S> =
+        object : Rule<T, AttachmentLinkNode<T>, S>(PATTERN_ATTACHMENT_LINK) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in AttachmentLinkNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> = ParseSpec(
+                AttachmentLinkNode(matcher.group(1).orEmpty(), matcher.group(2).orEmpty()),
+                state,
+            )
         }
 
     /** A bare `https://` link. */

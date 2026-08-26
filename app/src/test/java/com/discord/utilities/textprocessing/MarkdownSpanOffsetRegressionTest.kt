@@ -2,9 +2,13 @@ package com.discord.utilities.textprocessing
 
 import com.discord.simpleast.core.node.Node
 import com.discord.simpleast.core.node.TextNode
+import com.discord.utilities.textprocessing.node.AttachmentLinkNode
+import com.discord.utilities.textprocessing.node.ChannelLinkNode
 import com.discord.utilities.textprocessing.node.EmojiNode
+import com.discord.utilities.textprocessing.node.UserLinkNode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -54,6 +58,31 @@ class MarkdownSpanOffsetRegressionTest {
 
         assertEquals(listOf("a", "hidden", "b"), textPieces(nodes))
         assertFalse(emojiNodes(nodes).single().isRevealed)
+    }
+
+    /** Discord URLs resolve to rich mention nodes before the generic URL rule (RN parity). */
+    @Test
+    fun discordChannelMessageAndUserLinksResolveToMentions() {
+        val nodes = DiscordParser.parse(
+            "https://discord.com/channels/@me/731096390859489301/1541830616889294878 " +
+                "https://discord.com/users/123456789",
+        )
+        val channelLink = nodes.filterIsInstance<ChannelLinkNode<*>>().single()
+        assertEquals(731096390859489301L, channelLink.channelId)
+        assertEquals(null, channelLink.guildId)
+        assertEquals(1541830616889294878L, channelLink.messageId)
+        assertTrue(nodes.filterIsInstance<UserLinkNode<*>>().single().userId == 123456789L)
+    }
+
+    /** A CDN attachment URL renders masked to its filename, not the raw link. */
+    @Test
+    fun attachmentLinkRendersMaskedToItsFilename() {
+        val nodes = DiscordParser.parse(
+            "https://cdn.discordapp.com/attachments/1/2/catsurf.gif?ex=abc&is=def&hm=ghi",
+        )
+        val link = nodes.filterIsInstance<AttachmentLinkNode<*>>().single()
+        assertEquals("catsurf.gif", link.filename)
+        assertTrue(link.url.startsWith("https://cdn.discordapp.com/attachments/1/2/catsurf.gif"))
     }
 
     private companion object {

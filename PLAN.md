@@ -3796,3 +3796,44 @@ cannot decode real GIF containers, so those renders sat on the buffering spinner
 reroutes are reverted and Fresco's animated-GIF decoding handles them through the preview image.
 Offline `installDebug` passes on Android 16 A065; device-check cdn .gif embeds and .gif
 attachments autoplay and loop inline with no spinner.
+- 2026-08-26 (n): Backported the React Native client's modern Discord-link rendering into the
+markdown parser (source: RN bundle `modules/links/LinkUtils.tsx`, `modules/markup/MarkupAttachmentLinkRule.tsx`).
+Three rules now run ahead of the generic URL rule: (1) `discord.com/channels/{guild|@me}/{channel}[/{message}]`
+renders as a `#channel-name` mention pill via a new `ChannelLinkNode`, clicking it reuses the
+deep-link route so a message-id link jumps to that message; (2) `discord.com/users/{id}` renders
+as `@username` via the existing `UserMentionNode`; (3) `cdn.discordapp.com/attachments`/
+`media.discordapp.net` attachment URLs render masked to just the filename (an `UrlNode` mask).
+Uncached channels/unknown users degrade to plain links/missing-user text, and surfaces without a
+click handler stay plain URLs. `UrlNode.mask` widened to `internal` for the regression. Focused
+`MarkdownSpanOffsetRegressionTest` additions pass; offline `installDebug` succeeds on Android 16
+A065. Device-check channel/message/user/attachment links render as mentions/filenames and navigate
+in-app. Remaining RN rules not yet ported: thread links, `/events/{guild}/{event}`,
+`/guild-stages/...`, `/roll-dice`, invite/gift/app-directory/oauth2/guild-template links.
+- 2026-08-26 (o): Discord-link nodes now long-press to the copy/open/share context menu and user
+links keep their URL. `ChannelLinkNode` and the new `UserLinkNode` set `onLongPress` on
+their clickable span, which `LinkifiedTextView` routes to `WidgetUrlActions` (copy/open/share);
+the previous user-link reuse of `UserMentionNode` dropped the source URL and could not offer
+copy-link, so `UserLinkNode` retains it and opens the profile on tap, degrading to a plain
+URL for unknown users. Attachment links already long-pressed correctly via `UrlNode`. Visual
+parity gap remains vs RN: the RN renderer draws a real icon (paperclip/channel glyph/avatar) in
+the pill, while these pills are icon-less text+background - image spans for link icons are a
+separate follow-up. Focused `MarkdownSpanOffsetRegressionTest` passes; offline `installDebug`
+succeeds on Android 16 A065.
+- 2026-08-26 (p): Discord-link pills now carry leading icons matching the React Native renderer.
+A shared `LinkIconSpans` helper inserts a local tinted drawable or a circular avatar into the
+`DraweeSpanStringBuilder`. Channel links get the `#` glyph (`ic_channel_text_16dp`), user links
+get the avatar resolved from the user store, and attachment links are now a dedicated`
+`AttachmentLinkNode` with a paperclip glyph (`ic_attachment_white_24dp`) plus filename, all in
+the mention pill background - replacing the plain masked `UrlNode`. `MessageRenderContext` gained
+a `userAvatarUrls` map populated from `IconUtils.getForUser`; `UrlNode.mask`/reused`n`UserMentionNode` indirection for user links are gone in favour of `UserLinkNode`. Focused
+`MarkdownSpanOffsetRegressionTest` passes; offline `installDebug` succeeds on Android 16 A065.
+Device-check the three link types render icon + name in a pill and long-press offers copy/open/share.
+- 2026-08-26 (q): Icon now sits inside the mention pill and message links carry the RN jump glyph.
+The previous `BetterImageSpan` icons are `ReplacementSpan`s, so the `BackgroundColorSpan` never
+painted behind them - new `LinkPillIconSpan` draws the pill background itself, then the tinted
+drawable, with the avatar path passing a background drawable to `setVitoSpan`. Message links
+(`channels/.../{message}`) now append a trailing 12dp `ic_arrow_right_24dp` glyph inside the pill,
+matching RN's `makeMessage`/`iconType: message` marker; channel glyph (16dp), paperclip, and
+circular avatar round out the three. Focused `MarkdownSpanOffsetRegressionTest` passes and
+`compileDebugKotlin` succeeds; `installDebug` is blocked by the disconnected device (was A065).
+Reconnect and visually verify icon-inside-pill and the message-jump glyph.
