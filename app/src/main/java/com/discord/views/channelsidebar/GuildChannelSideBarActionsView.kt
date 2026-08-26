@@ -7,24 +7,27 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import com.discord.R
+import com.discord.utilities.feature.ChannelSidebarCustomization
 import com.google.android.material.button.MaterialButton
 
 class GuildChannelSideBarActionsView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
 ) : LinearLayout(context, attrs) {
+    private val search: MaterialButton
+    private val threads: MaterialButton
     private val notifications: MaterialButton
     private val media: MaterialButton
     private val pins: MaterialButton
-    private val searchOrThreads: MaterialButton
     private val settings: MaterialButton
 
     init {
         LayoutInflater.from(context).inflate(R.layout.guild_channel_side_bar_actions_view, this)
+        search = requireNotNull(findViewById(R.id.channel_sidebar_actions_search))
+        threads = requireNotNull(findViewById(R.id.channel_sidebar_actions_threads))
         notifications = requireNotNull(findViewById(R.id.channel_sidebar_actions_notifications))
         media = requireNotNull(findViewById(R.id.channel_sidebar_actions_media))
         pins = requireNotNull(findViewById(R.id.channel_sidebar_actions_pins))
-        searchOrThreads = requireNotNull(findViewById(R.id.channel_sidebar_actions_search_or_threads))
         settings = requireNotNull(findViewById(R.id.channel_sidebar_actions_settings))
         configure()
     }
@@ -40,7 +43,7 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
         hasUnseenPins: Boolean = false,
         channelIsMuted: Boolean = false,
         disablePins: Boolean = false,
-        showSearch: Boolean = true,
+        showThreads: Boolean = true,
     ) {
         setTopDrawable(pins, themedResource(if (hasUnseenPins) R.attr.ic_sidebar_pins_on_24dp else R.attr.ic_sidebar_pins_off_24dp))
         setTopDrawable(
@@ -50,15 +53,8 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
                 else R.attr.ic_sidebar_notifications_on_24dp,
             ),
         )
-        if (showSearch) {
-            setTopDrawable(searchOrThreads, R.drawable.ic_sidebar_search_24dp)
-            searchOrThreads.setText(R.string.search)
-            searchOrThreads.setOnClickListener(onSearchClicked)
-        } else {
-            setTopDrawable(searchOrThreads, R.drawable.ic_thread)
-            searchOrThreads.setText(R.string.threads)
-            searchOrThreads.setOnClickListener(onThreadBrowserClicked)
-        }
+        search.setOnClickListener(onSearchClicked)
+        threads.setOnClickListener(onThreadBrowserClicked)
         pins.isEnabled = !disablePins
         pins.setOnClickListener(onPinsClicked)
         notifications.setOnClickListener(onNotificationsClicked)
@@ -67,7 +63,20 @@ class GuildChannelSideBarActionsView @JvmOverloads constructor(
         )
         settings.setOnClickListener(onSettingsClicked)
         media.setOnClickListener(onMediaClicked)
+        search.visibility = visible(ChannelSidebarCustomization.Button.SEARCH)
+        threads.visibility = if (showThreads) visible(ChannelSidebarCustomization.Button.THREADS) else View.GONE
+        media.visibility = visible(ChannelSidebarCustomization.Button.MEDIA)
+        pins.visibility = visible(ChannelSidebarCustomization.Button.PINS)
+        notifications.visibility = visible(ChannelSidebarCustomization.Button.NOTIFICATIONS)
+        settings.visibility = visible(ChannelSidebarCustomization.Button.SETTINGS)
     }
+
+    private fun visible(button: ChannelSidebarCustomization.Button): Int =
+        if (ChannelSidebarCustomization.visible(ChannelSidebarCustomization.Surface.CHANNEL, button)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
 
     private fun setTopDrawable(button: MaterialButton, resource: Int) {
         button.setCompoundDrawablesWithIntrinsicBounds(0, resource, 0, 0)

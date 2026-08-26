@@ -84,6 +84,9 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         binding.settingsFeatureCustomizeDmList.setOnClickListener {
             WidgetSettingsDmListCustomization.launch(requireContext())
         }
+        binding.settingsFeatureCustomizeChannelSidebar.setOnClickListener {
+            WidgetSettingsChannelSidebarCustomization.launch(requireContext())
+        }
         binding.settingsFeatureCustomizeBottomTabs.setOnClickListener {
             WidgetSettingsPluginSurfaceCustomization.launch(requireContext(), Surface.BOTTOM_TABS)
         }

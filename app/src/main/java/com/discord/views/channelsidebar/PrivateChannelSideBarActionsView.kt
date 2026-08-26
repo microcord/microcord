@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.widget.LinearLayout
 import com.discord.R
+import com.discord.utilities.feature.ChannelSidebarCustomization
 import com.google.android.material.button.MaterialButton
 
 class PrivateChannelSideBarActionsView @JvmOverloads constructor(
@@ -51,5 +52,17 @@ class PrivateChannelSideBarActionsView @JvmOverloads constructor(
             true,
         )
         notifications.setCompoundDrawablesWithIntrinsicBounds(0, value.resourceId, 0, 0)
+        call.visibility = visible(ChannelSidebarCustomization.Button.CALL)
+        video.visibility = visible(ChannelSidebarCustomization.Button.VIDEO)
+        media.visibility = visible(ChannelSidebarCustomization.Button.MEDIA)
+        notifications.visibility = visible(ChannelSidebarCustomization.Button.NOTIFICATIONS)
+        search.visibility = visible(ChannelSidebarCustomization.Button.SEARCH)
     }
+
+    private fun visible(button: ChannelSidebarCustomization.Button): Int =
+        if (ChannelSidebarCustomization.visible(ChannelSidebarCustomization.Surface.DM, button)) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
 }

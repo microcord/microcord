@@ -24,9 +24,8 @@ import com.discord.widgets.user.calls.PrivateCallLauncher
  * The action row at the top of the right-hand panel.
  *
  * Guild channels and private channels get two different views, only one of which is ever visible.
- * On a wide screen a guild channel offers Threads in the first slot and Search moves into the
- * toolbar; on a narrow screen — and always for forum channels and forum posts, which have no thread
- * browser of their own — the first slot is Search.
+ * A guild channel offers Search, Threads, Media, Pins, Notifications and Settings; the Threads
+ * button is omitted for forum channels and forum posts, which have no thread browser.
  */
 class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_actions) {
 
@@ -105,8 +104,8 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
                     hasUnseenPins = viewState.hasUnreadPins,
                     channelIsMuted = viewState.isMuted,
                     disablePins = viewState.disablePins,
-                    // Forums have no thread browser, so they always keep Search in the first slot.
-                    showSearch = isSmallScreen() || viewState.isGuildForumPost || viewState.isGuildForumChannel,
+                    // Forums have no thread browser, so the Threads button is omitted.
+                    showThreads = !viewState.isGuildForumPost && !viewState.isGuildForumChannel,
                 )
             }
         }
@@ -127,17 +126,7 @@ class WidgetChannelSidebarActions : AppFragment(R.layout.widget_channel_sidebar_
         if (useVideo) launcher.launchVideoCall(channelId) else launcher.launchVoiceCall(channelId)
     }
 
-    /**
-     * Reproduces `DeviceUtils.isSmallScreen`, which has not been reconstructed: a screen at most
-     * 360dp wide.
-     */
-    private fun isSmallScreen(): Boolean = with(resources.displayMetrics) {
-        widthPixels <= SMALL_SCREEN_WIDTH_DP * density
-    }
-
     companion object {
-        private const val SMALL_SCREEN_WIDTH_DP = 360
-
         const val THREAD_BROWSER_SOURCE = "Channel Side Bar"
 
         /**
