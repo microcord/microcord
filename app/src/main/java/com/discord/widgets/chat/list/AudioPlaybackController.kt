@@ -30,7 +30,7 @@ internal class AudioPlaybackController(
         val current = player
         if (current == null) {
             val source = url ?: return
-            AppMediaPlayer.create(context, pollIntervalMs).also {
+            AppMediaPlayer.create(context, positionPollIntervalMs = pollIntervalMs).also {
                 player = it
                 it.setPlaybackSpeed(speed)
                 events = it.events.observeOn(AndroidSchedulers.mainThread()).subscribe(::handleEvent)

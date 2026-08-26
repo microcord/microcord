@@ -40,6 +40,7 @@ class AppMediaPlayer(
     private val exoPlayer: ExoPlayer,
     private val rxPlayerEventListener: RxPlayerEventListener,
     private val dataSourceFactory: DataSource.Factory,
+    private val directDataSourceFactory: DataSource.Factory = dataSourceFactory,
     private val timerScheduler: Scheduler,
     private val positionPollIntervalMs: Long = DEFAULT_POSITION_POLL_INTERVAL_MS,
 ) {
@@ -150,7 +151,7 @@ class AppMediaPlayer(
         this.mediaSource = mediaSource
 
         exoPlayer.setMediaSource(
-            ProgressiveMediaSource.Factory(dataSourceFactory)
+            ProgressiveMediaSource.Factory(dataSourceFor(mediaSource))
                 .createMediaSource(MediaItem.fromUri(mediaSource.progressiveMediaUri)),
         )
         exoPlayer.prepare()
@@ -158,6 +159,14 @@ class AppMediaPlayer(
         if (initialSeekPositionMs > 0L) exoPlayer.seekTo(exoPlayer.currentWindowIndex, initialSeekPositionMs)
         exoPlayer.repeatMode = if (loopMedia) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
+
+    /**
+     * GIFV loops are small and re-watched, so they read through the media cache; full videos
+     * stream direct. Writing a multi-hundred-MB file through the 100 MB LRU cache thrashes the
+     * evictor mid-write (disk churn on the loader thread) and is why very large videos lagged.
+     */
+    internal fun dataSourceFor(source: MediaSource): DataSource.Factory =
+        if (source.mediaType == MediaType.GIFV) dataSourceFactory else directDataSourceFactory
 
     @MainThread
     fun setVolume(volume: Float) {
@@ -228,37 +237,58 @@ class AppMediaPlayer(
          */
         internal const val MIN_BUFFER_MS = 10_000
         internal const val MAX_BUFFER_MS = 30_000
+
+        /** Inline-player caps: bounds high-bitrate buffering to a few MB instead of tens. */
+        internal const val VIDEO_MIN_BUFFER_MS = 5_000
+        internal const val VIDEO_MAX_BUFFER_MS = 12_000
         internal const val BUFFER_FOR_PLAYBACK_MS = 2_500
         internal const val BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 5_000
         internal const val ALLOCATION_SIZE_BYTES = 64 * 1024
 
-        /**
-         * Builds a player with the app's cache and buffer configuration.
-         *
-         * Must be called on the thread that will drive the player: ExoPlayer binds to the calling
-         * looper.
-         */
-        @MainThread
-        fun create(context: Context, positionPollIntervalMs: Long = DEFAULT_POSITION_POLL_INTERVAL_MS): AppMediaPlayer {
-            val dataSourceFactory = CacheDataSourceFactory(
-                context = context,
-                upstreamFactory = DefaultDataSourceFactory(context),
+    /**
+     * Builds a player with the app's cache and buffer configuration.
+     *
+     * Must be called on the thread that will drive the player: ExoPlayer binds to the calling
+     * looper.
+     *
+     * [lowMemoryBuffers] caps the buffer window for inline players. At the default 30 s ceiling a
+     * high-bitrate video buffers tens of MB of 64 KB allocations on a low-RAM device, and the
+     * growth phase (a few seconds in) is exactly when the app started thrashing into ANRs.
+     */
+    @MainThread
+    @JvmStatic
+    @JvmOverloads
+    fun create(
+        context: Context,
+        lowMemoryBuffers: Boolean = false,
+        positionPollIntervalMs: Long = DEFAULT_POSITION_POLL_INTERVAL_MS,
+    ): AppMediaPlayer {
+        val dataSourceFactory = CacheDataSourceFactory(
+            context = context,
+            upstreamFactory = DefaultDataSourceFactory(context),
+        )
+        val eventListener = RxPlayerEventListener()
+        val loadControl = DefaultLoadControl.Builder()
+            .setAllocator(DefaultAllocator(true, ALLOCATION_SIZE_BYTES))
+            .setBufferDurationsMs(
+                if (lowMemoryBuffers) VIDEO_MIN_BUFFER_MS else MIN_BUFFER_MS,
+                if (lowMemoryBuffers) VIDEO_MAX_BUFFER_MS else MAX_BUFFER_MS,
+                BUFFER_FOR_PLAYBACK_MS,
+                BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
             )
-            val eventListener = RxPlayerEventListener()
-            val loadControl = DefaultLoadControl.Builder()
-                .setAllocator(DefaultAllocator(true, ALLOCATION_SIZE_BYTES))
-                .setBufferDurationsMs(
-                    MIN_BUFFER_MS,
-                    MAX_BUFFER_MS,
-                    BUFFER_FOR_PLAYBACK_MS,
-                    BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-                )
-                .build()
+            .build()
             val exoPlayer = ExoPlayer.Builder(context)
                 .setLoadControl(loadControl)
                 .build()
                 .apply { addListener(eventListener) }
-            return AppMediaPlayer(exoPlayer, eventListener, dataSourceFactory, Schedulers.computation(), positionPollIntervalMs)
+            return AppMediaPlayer(
+                exoPlayer,
+                eventListener,
+                dataSourceFactory,
+                DefaultDataSourceFactory(context),
+                Schedulers.computation(),
+                positionPollIntervalMs,
+            )
         }
     }
 }

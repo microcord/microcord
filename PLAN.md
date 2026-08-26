@@ -3760,3 +3760,39 @@ on a new shared `bg_circle_white` oval tinted `status_green_600`/`status_grey_50
 the reference dot treatment without any image pipeline involvement. Offline `installDebug`
 passes on Android 16 A065; device-check the guild profile sheet shows green-online and
 grey-member dots next to their counts.
+- 2026-08-26 (j): Very large video attachments no longer lag the app. Every progressive load -
+including full-length videos - streamed through `CacheDataSource` into the shared 100 MB LRU
+media cache with a 100 MB per-entry sink limit, so a multi-hundred-MB file caused constantsynchronous eviction-during-write churn on the loader thread plus index rewrites, and the 30 s
+buffer window at high bitrate compounded the memory pressure. GIFV loops (small, repeatedly
+re-watched) still read through the cache; `MediaType.VIDEO` now plays direct from the network
+via a plain `DefaultDataSourceFactory`, selected by `AppMediaPlayer.dataSourceFor`. Offline`
+installDebug` passes on Android 16 A065; device-check a large video attachment playing without
+stutter and a GIFV still looping normally.
+- 2026-08-26 (k): Two media playback fixes. (1) Animated GIF attachments never played inline:
+`updateUIWithAttachment` only passed a media URI for VIDEO attachments, so GIF attachments
+(type IMAGE) rendered as a static poster and animated only in the fullscreen viewer. They now
+route down the GIFV path (proxy URI + `EmbedType.GIFV`) via the existing `isAnimated` flag,
+so they autoplay and loop inline like embed GIFs. (2) Inline video playback ANRs: the default
+30 s buffer window at high bitrate means tens of MB of 64 KB allocator blocks on a low-RAM
+device, and the report timeline (fine for a few seconds, then lag and ANR) matches the buffer
+filling. `AppMediaPlayer.create` gained a `lowMemoryBuffers` variant (5 s min / 12 s max)
+used by inline surfaces; the fullscreen viewer keeps the reference tuning. Config test pins the
+caps; offline `installDebug` passes on Android 16 A065.
+- 2026-08-26 (l): Animated-GIF image embeds (type "image" over a .gif, no `video` field) now
+play inline. `updateUIWithEmbed` derived its media URI only from `embed.video`, and`
+`getPreviewImage` reads the thumbnail first - which these embeds often lack - so they rendered
+nothing or a still, animating only in the fullscreen viewer. When the preview is missing it now
+falls back to the embed's own image field (gated on a query-stripped `.gif` URL), feeds that
+URI down the GIFV path with `EmbedType.GIFV`, and keeps video embeds untouched. Offline`
+installDebug` passes on Android 16 A065; device-check the catsurf-style cdn .gif embed
+autoplays and loops in chat.
+- 2026-08-26 (m): Fixed GIFs frozen inline and the stuck loading spinner. Root cause:`
+`EmbedResourceUtils.getPreviewUrls` decided animation with `originalUrl.endsWith(\".gif\")`, but
+Discord CDN URLs carry signed query strings (`...catsurf.gif?ex=...`), so the check never
+matched, every animated GIF was downgraded to a static `format=` still, and only the fullscreen
+viewer - which uses the raw URL - animated. The extension is now read from the query-stripped
+path. This also supersedes the previous GIFV rerouting of gif embeds/attachments (k): ExoPlayer
+cannot decode real GIF containers, so those renders sat on the buffering spinner forever; both
+reroutes are reverted and Fresco's animated-GIF decoding handles them through the preview image.
+Offline `installDebug` passes on Android 16 A065; device-check cdn .gif embeds and .gif
+attachments autoplay and loop inline with no spinner.

@@ -1,6 +1,7 @@
 package com.discord.player
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -25,6 +26,14 @@ class AppMediaPlayerConfigTest {
         assertEquals(30_000, AppMediaPlayer.MAX_BUFFER_MS)
         assertEquals(2_500, AppMediaPlayer.BUFFER_FOR_PLAYBACK_MS)
         assertEquals(5_000, AppMediaPlayer.BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+    }
+
+    /** Inline players cap the window so a high-bitrate video cannot buffer tens of MB. */
+    @Test
+    fun `inline players use the low-memory buffer caps`() {
+        assertEquals(5_000, AppMediaPlayer.VIDEO_MIN_BUFFER_MS)
+        assertEquals(12_000, AppMediaPlayer.VIDEO_MAX_BUFFER_MS)
+        assertTrue(AppMediaPlayer.VIDEO_MAX_BUFFER_MS < AppMediaPlayer.MAX_BUFFER_MS)
     }
 
     @Test

@@ -203,7 +203,9 @@ class InlineMediaView @JvmOverloads constructor(
     private fun createPlayer(params: ViewParams): AppMediaPlayer {
         appMediaPlayer?.let { return it }
         subscriptions = CompositeSubscription()
-        return AppMediaPlayer.create(context).also { player ->
+        // Inline surfaces cap their buffer window: a high-bitrate video filling the default 30 s
+        // window is tens of MB of allocations and was dragging the app into ANRs mid-playback.
+        return AppMediaPlayer.create(context, lowMemoryBuffers = true).also { player ->
             appMediaPlayer = player
             player.volume.ui(this).appSubscribe(
                 InlineMediaView::class.java,

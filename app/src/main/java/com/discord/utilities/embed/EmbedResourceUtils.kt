@@ -123,8 +123,12 @@ object EmbedResourceUtils {
         shouldAnimate: Boolean = true,
     ): List<String> {
         val sized = "$originalUrl?width=$width&height=$height"
+        // CDN URLs carry signed query strings (`...catsurf.gif?ex=…`), so the extension has to be
+        // read from the path alone — an endsWith on the full URL never matched, every animated GIF
+        // was downgraded to a still, and only the fullscreen viewer animated them.
+        val barePath = originalUrl.substringBefore('?').lowercase(Locale.ROOT)
         val keepAnimated = shouldAnimate &&
-            (originalUrl.startsWith(FILE_SCHEME) || originalUrl.endsWith(".gif"))
+            (originalUrl.startsWith(FILE_SCHEME) || barePath.endsWith(".gif"))
         return if (keepAnimated) {
             listOf(sized)
         } else {
