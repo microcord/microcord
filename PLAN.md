@@ -3752,3 +3752,11 @@ opening a browser. `UriHandler.handleUriSpecialCase` was a stub returning false,
 through to the Custom Tab even though the entire in-app route machinery existed -`n`DeepLinkParser` parses the channel path including the message id, and`n`StoreNavigation.routeIntent` queues it; that machinery only ran for external intents via`n`AppActivity.consumeIntent`/notification banners. The special case now detects app URIs and
 Discord https hosts and feeds them to `IntentUtils.consumeExternalRoutingIntent`, falling back
 to the browser for anything unroutable. Channel mentions (<#id>) were already wired through`n`ChannelSelector.findAndSet` and are unaffected. Offline `installDebug` passes on Android 16`nA065; device-check tapping a `discord.com/channels/.../message-id` link in a message jumps to`nthat message in-app, an invite link opens the join sheet, and a non-Discord URL still opens in`nthe browser.
+- 2026-08-26 (i): Restored the missing online/member status dots on the guild profile sheet.
+The two 8dp dots were `VitoImageView`s carrying only a `placeholderImage` - Fresco's Vito
+renders a placeholder only while an image request is pending, and no request is ever started
+for a source-less view, so both dots rendered transparent. Replaced them with plain 8dp views
+on a new shared `bg_circle_white` oval tinted `status_green_600`/`status_grey_500`, matching
+the reference dot treatment without any image pipeline involvement. Offline `installDebug`
+passes on Android 16 A065; device-check the guild profile sheet shows green-online and
+grey-member dots next to their counts.
