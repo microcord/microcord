@@ -168,6 +168,16 @@ class WidgetChatListActions : AppBottomSheet() {
             copy(model.messageContent.toString().replace(edited, ""), R.string.copy_text)
             dismiss()
         }
+        // Same shape the in-app router consumes (UriHandler.handleUriSpecialCase), so a pasted
+        // copy jumps straight back to this message.
+        bind(root, R.id.dialog_chat_actions_copy_link, !isLocal) {
+            val guildSegment = model.channel?.guildId?.takeUnless { it == 0L } ?: "@me"
+            copy(
+                "https://discord.com/channels/$guildSegment/${message.channelId}/${message.id}",
+                R.string.copy_message_link,
+            )
+            dismiss()
+        }
         bind(root, R.id.dialog_chat_actions_copy_id, model.isDeveloper && !isLocal) {
             copy(message.id.toString(), R.string.copy_id)
             dismiss()
