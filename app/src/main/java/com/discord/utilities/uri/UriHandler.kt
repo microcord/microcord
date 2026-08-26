@@ -12,6 +12,7 @@ import androidx.fragment.app.FragmentActivity
 import com.discord.R
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.intent.IntentUtils
 
 /**
  * The single entry point for opening a URI that came from outside the app.
@@ -207,7 +208,16 @@ object UriHandler {
      * handoff). Returns true when the URI was consumed.
      */
     @Suppress("UNUSED_PARAMETER")
-    private fun handleUriSpecialCase(context: Context, uri: Uri): Boolean = false
+    /**
+     * Discord's own URLs are routed inside the app instead of opened in a browser: a message
+     * containing a `discord.com/channels/...` link (or an invite) must navigate to that channel
+     * or message, which is what `consumeExternalRoutingIntent` does through the store graph.
+     * Returns false for everything else so [handle] falls back to opening it.
+     */
+    private fun handleUriSpecialCase(context: Context, uri: Uri): Boolean =
+        IntentUtils.isDiscordAppUri(uri) || IntentUtils.isHttpDomainUrl(uri) && runCatching {
+            IntentUtils.consumeExternalRoutingIntent(Intent(Intent.ACTION_VIEW, uri), context)
+        }.getOrDefault(false)
 
     private fun openUrl(
         context: Context,

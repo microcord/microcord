@@ -3746,3 +3746,9 @@ stubbed null under returnDefaultValues; assume-skips in plain JVM, still runs un
 instrumentation). Focused MessageSendCoordinatorTest passes; offline `installDebug` succeeds
 on Android 16 A065. Device-check: send a message, kill networking before the ACK, restart the
 app, restore networking, and confirm exactly one copy.
+- 2026-08-26 (g): Discord channel/message links inside messages now navigate in-app instead of
+opening a browser. `UriHandler.handleUriSpecialCase` was a stub returning false, so trusted
+`discord.com/channels/{guild}/{channel}/{message}` URLs (and invites on discord.gg) fell
+through to the Custom Tab even though the entire in-app route machinery existed -`n`DeepLinkParser` parses the channel path including the message id, and`n`StoreNavigation.routeIntent` queues it; that machinery only ran for external intents via`n`AppActivity.consumeIntent`/notification banners. The special case now detects app URIs and
+Discord https hosts and feeds them to `IntentUtils.consumeExternalRoutingIntent`, falling back
+to the browser for anything unroutable. Channel mentions (<#id>) were already wired through`n`ChannelSelector.findAndSet` and are unaffected. Offline `installDebug` passes on Android 16`nA065; device-check tapping a `discord.com/channels/.../message-id` link in a message jumps to`nthat message in-app, an invite link opens the join sheet, and a non-Discord URL still opens in`nthe browser.
