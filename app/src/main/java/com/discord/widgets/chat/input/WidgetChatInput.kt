@@ -1032,9 +1032,18 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     override fun onEmojiPicked(emoji: Emoji) {
         val editor = input ?: return
-        val text = emoji.getChatInputText() + " "
         val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
         val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(start)
+        val editable = editor.text
+        // Fake-Nitro inserts a markdown link, so keep it from gluing onto a preceding word.
+        val prefix = if (editable != null && start > 0 && start <= editable.length &&
+            !editable[start - 1].isWhitespace()
+        ) {
+            " "
+        } else {
+            ""
+        }
+        val text = prefix + emoji.getChatInputText() + " "
         editor.text?.replace(start, end, text)
         editor.setSelection((start + text.length).coerceAtMost(editor.text?.length ?: 0))
     }

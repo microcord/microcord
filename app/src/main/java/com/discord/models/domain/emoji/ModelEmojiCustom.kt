@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Parcel
 import android.os.Parcelable
 import com.discord.api.emoji.GuildEmoji
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import java.util.regex.Pattern
 import java.util.regex.PatternSyntaxException
@@ -128,10 +129,10 @@ open class ModelEmojiCustom : Emoji {
 
     override fun getCommand(name: String?): String = ":${nameDisambiguated()}:"
 
-    override fun getChatInputText(): String = getCommand(nameDisambiguated())
+    override fun getChatInputText(): String = spoofedContent() ?: getCommand(nameDisambiguated())
 
     override fun getMessageContentReplacement(): String =
-        if (isAnimated) "<a:$name:$id>" else "<:$name:$id>"
+        spoofedContent() ?: if (isAnimated) "<a:$name:$id>" else "<:$name:$id>"
 
     override fun getReactionKey(): String = "$name:$id"
 
@@ -149,9 +150,9 @@ open class ModelEmojiCustom : Emoji {
         }
     }
 
-    override fun isAvailable(): Boolean = available ?: true
+    override fun isAvailable(): Boolean = FeatureFlags.nitroSpoofEnabled() || (available ?: true)
 
-    override fun isUsable(): Boolean = usable
+    override fun isUsable(): Boolean = FeatureFlags.nitroSpoofEnabled() || usable
 
     override fun requiresColons(): Boolean = true
 
@@ -194,6 +195,23 @@ open class ModelEmojiCustom : Emoji {
     protected open fun canEqual(other: Any?): Boolean = other is ModelEmojiCustom
 
     private fun nameDisambiguated(): String = nameDisambiguated ?: name
+
+    /**
+     * Fake-Nitro: an emoji the viewer cannot normally use is emitted as a markdown hyperlink to its
+     * CDN URL, so the server accepts it as a plain link and recipients render it (Vencord parity).
+     * Returns null when the flag is off or the emoji is genuinely usable, in which case callers keep
+     * the shortcode.
+     *
+     * `size=48` keeps the link at the standard emoji resolution — the CDN's default is the full
+     * upload, which renders far too large in a message.
+     */
+    private fun spoofedContent(): String? {
+        if (!FeatureFlags.nitroSpoofEnabled()) return null
+        if (usable && (available ?: true)) return null
+        val extension = if (isAnimated) "gif" else "png"
+        val url = "${IconUtils.CDN_HOST}/emojis/$idStr.$extension?size=48&quality=lossless&name=$name"
+        return "[$name]($url)"
+    }
 
     private fun colonRegex(): String = "((?<!\\\\)):${nameDisambiguated()}:"
 

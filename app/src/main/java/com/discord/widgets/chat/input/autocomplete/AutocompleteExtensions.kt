@@ -29,9 +29,15 @@ fun String.replaceAutocompleteDataWithServerValues(
     var result = this
     for (range in inputMentionsMap.keys.sortedByDescending { it.first }) {
         val autocompletable = inputMentionsMap[range] ?: continue
-        val replacement = when (autocompletable) {
+        var replacement = when (autocompletable) {
             is EmojiAutocompletable -> autocompletable.emoji.getMessageContentReplacement()
             else -> autocompletable.getInputReplacement()
+        }
+        // A Fake-Nitro emoji is sent as `[name](url)`; separate it from neighbouring words so the
+        // markdown link never glues onto text (Vencord's getWordBoundary).
+        if (replacement.startsWith("[") && replacement.endsWith(")")) {
+            replacement = wordBoundary(result, range.first - 1) + replacement +
+                wordBoundary(result, range.last)
         }
         if (range.first <= result.length && range.last <= result.length) {
             result = result.replaceRange(range.first, range.last, replacement)
@@ -47,3 +53,7 @@ fun String.replaceAutocompleteDataWithServerValues(
     }
     return result
 }
+
+/** A space unless [offset] is out of range or already whitespace (Vencord's `getWordBoundary`). */
+private fun wordBoundary(text: String, offset: Int): String =
+    if (offset < 0 || offset >= text.length || text[offset].isWhitespace()) "" else " "

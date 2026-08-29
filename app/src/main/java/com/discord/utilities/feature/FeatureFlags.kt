@@ -20,6 +20,7 @@ object FeatureFlags {
     private const val NAMEPLATES = "feature_nameplates"
     private const val PROFILE_EFFECTS = "feature_profile_effects"
     private const val PROFILE_FRAMES = "feature_profile_frames"
+    private const val NITRO_SPOOF = "feature_nitro_spoof"
 
     fun voiceMessagesEnabled() = enabled(VOICE_MESSAGES, true)
     fun setVoiceMessagesEnabled(enabled: Boolean) = setEnabled(VOICE_MESSAGES, enabled)
@@ -55,6 +56,8 @@ object FeatureFlags {
     fun setProfileEffectsEnabled(enabled: Boolean) = setEnabled(PROFILE_EFFECTS, enabled)
     fun profileFramesEnabled() = enabled(PROFILE_FRAMES, true)
     fun setProfileFramesEnabled(enabled: Boolean) = setEnabled(PROFILE_FRAMES, enabled)
+    fun nitroSpoofEnabled() = enabled(NITRO_SPOOF)
+    fun setNitroSpoofEnabled(enabled: Boolean) = setEnabled(NITRO_SPOOF, enabled)
 
     private fun enabled(key: String, default: Boolean = false) =
         SharedPreferencesProvider.getOrNull()?.getBoolean(key, default) ?: default

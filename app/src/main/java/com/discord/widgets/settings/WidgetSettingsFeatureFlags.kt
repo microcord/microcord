@@ -57,6 +57,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.messageLimitCounterEnabled()
             setOnCheckedListener(FeatureFlags::setMessageLimitCounterEnabled)
         }
+        binding.settingsFeatureNitroSpoof.apply {
+            isChecked = FeatureFlags.nitroSpoofEnabled()
+            setOnCheckedListener(FeatureFlags::setNitroSpoofEnabled)
+        }
         binding.settingsFeatureChatboxCustomizations.apply {
             isChecked = FeatureFlags.chatboxCustomizationsEnabled()
             setOnCheckedListener { enabled ->
