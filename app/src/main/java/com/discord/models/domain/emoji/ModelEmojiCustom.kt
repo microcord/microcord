@@ -208,8 +208,9 @@ open class ModelEmojiCustom : Emoji {
     private fun spoofedContent(): String? {
         if (!FeatureFlags.nitroSpoofEnabled()) return null
         if (usable && (available ?: true)) return null
-        val extension = if (isAnimated) "gif" else "png"
-        val url = "${IconUtils.CDN_HOST}/emojis/$idStr.$extension?size=48&quality=lossless&name=$name"
+        val animated = if (isAnimated) "&animated=true" else ""
+        val url = "${IconUtils.CDN_HOST}/emojis/$idStr.${IconUtils.WEBP_IMAGE_EXTENSION}" +
+            "?size=48&quality=lossless&name=$name$animated"
         return "[$name]($url)"
     }
 
