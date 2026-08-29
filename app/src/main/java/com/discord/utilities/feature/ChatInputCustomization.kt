@@ -12,6 +12,7 @@ object ChatInputCustomization {
         EXPAND(R.string.expand_buttons),
         EXPRESSION(R.string.emoji),
         SEND(R.string.chat_input_customization_send_voice),
+        KEYBOARD(R.string.feature_silent_typing),
     }
 
     enum class Zone(@param:StringRes val label: Int) {
@@ -32,6 +33,7 @@ object ChatInputCustomization {
         Entry(Button.EXPAND, Zone.HIDDEN),
         Entry(Button.EXPRESSION, Zone.INSIDE_END),
         Entry(Button.SEND, Zone.RIGHT),
+        Entry(Button.KEYBOARD, Zone.INSIDE_END),
     )
 
     fun get(): List<Entry> = decode(SharedPreferencesProvider.get().getString(LAYOUT_KEY, null))

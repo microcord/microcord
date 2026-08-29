@@ -5,6 +5,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.Clock
@@ -80,6 +81,7 @@ class StoreUsersTyping(
      * "no channel selected" reaches here through the same input path.
      */
     fun setUserTyping(channelId: Long) {
+        if (FeatureFlags.silentTypingEnabled()) return
         if (channelId == 0L) return
         val api = api() ?: return
         api.setUserTyping(channelId, RestAPIParams.EmptyBody())

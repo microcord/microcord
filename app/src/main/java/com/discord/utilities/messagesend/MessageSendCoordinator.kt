@@ -21,6 +21,7 @@ import com.discord.stores.StorePendingReplies
 import com.discord.utilities.attachments.UploadAttachment
 import com.discord.utilities.attachments.toUploadAttachment
 import com.discord.utilities.captcha.CaptchaSolution
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.SendUtils
@@ -371,6 +372,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
     }
 
     fun typing(channelId: Long, content: CharSequence) {
+        if (FeatureFlags.silentTypingEnabled()) return
         if (channelId <= 0 || content.isEmpty()) return
         val timestamp = now()
         val previous = typingAt[channelId]

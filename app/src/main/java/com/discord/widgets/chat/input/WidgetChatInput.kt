@@ -3,6 +3,7 @@ package com.discord.widgets.chat.input
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
+import android.view.Gravity
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.SystemClock
@@ -29,6 +30,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.widget.ImageViewCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.appcompat.app.AlertDialog
 import com.discord.R
@@ -201,6 +203,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 flexInputBinding?.let {
                     configureChatboxCustomizations(it)
                     installPluginComposerViews(it)
+                    bindKeyboardButton(it)
                 }
                 state?.let(::updateChatboxCustomizationAvatar)
                 updateSendButtonVisibility()
@@ -219,6 +222,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var state: ChatInputViewModel.ViewState.Loaded? = null
     private var hasAttachments = false
     private var threadCreateInProgress = false
+    /** The configured zone the silent-typing button sits in; drives hide-on-text visibility. */
+    private var keyboardButtonZone: Zone = Zone.INSIDE_END
     /** Set once the author declines, so the prompt asks only on the first media send. */
     private var addMediaPromptShown = false
 
@@ -233,6 +238,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         override fun afterTextChanged(value: Editable?) {
             updateSendButtonVisibility()
             updateMessageLimitCounter(value)
+            updateKeyboardButtonForText(value?.isNotEmpty() == true)
             schedulePluginComposerBind()
             if (restoringText) return
             val loaded = state ?: return
@@ -429,6 +435,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flexInputBinding = flexBinding
         configureChatboxCustomizations(flexBinding)
         installPluginComposerViews(flexBinding)
+        bindKeyboardButton(flexBinding)
         flex.setKeyboardManager(object : KeyboardManager {
             override fun requestDisplay(editText: EditText) {
                 editText.requestFocus()
@@ -514,28 +521,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             if (sendInside) background = null else setBackgroundResource(R.drawable.drawable_circle_black)
         }
         layout.forEach { entry ->
-            val button = views.getValue(entry.button)
-            if (entry.zone == Zone.HIDDEN) {
-                button.visibility = View.GONE
-                return@forEach
-            }
-            button.visibility = View.VISIBLE
-            val margin = if (entry.zone == Zone.INSIDE || entry.zone == Zone.INSIDE_END) 0 else dp(4)
-            button.layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
-                marginStart = margin
-                marginEnd = margin
-            }
-            (button.parent as? ViewGroup)?.removeView(button)
-            when (entry.zone) {
-                Zone.LEFT -> flex.leftBtnsContainer.addView(button)
-                Zone.INSIDE -> flex.mainInputContainer.addView(
-                    button,
-                    flex.mainInputContainer.indexOfChild(flex.textInput).coerceAtLeast(0),
-                )
-                Zone.INSIDE_END -> flex.mainInputContainer.addView(button)
-                Zone.RIGHT -> flex.rightBtnsContainer.addView(button)
-                Zone.HIDDEN -> Unit
-            }
+            val size = if (entry.button == Button.EXPRESSION) 32 else 40
+            placeInZone(flex, views.getValue(entry.button), entry.zone, sizeDp = size)
         }
         layout.firstOrNull { it.button == Button.EXPAND && it.zone != Zone.HIDDEN }?.let { expand ->
             val siblings = layout.filter {
@@ -561,6 +548,60 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         }
         updateChatboxCustomizationGeometry(flex)
         state?.let(::updateChatboxCustomizationAvatar)
+    }
+
+    private fun bindKeyboardButton(flex: FlexInputWidgetBinding) {
+        keyboardButtonZone = ChatInputCustomization.get().firstOrNull { it.button == Button.KEYBOARD }?.zone
+            ?: ChatInputCustomization.defaultZone(Button.KEYBOARD)
+        placeInZone(flex, flex.keyboardBtn, keyboardButtonZone, sizeDp = 32)
+        flex.keyboardBtn.setOnClickListener {
+            FeatureFlags.setSilentTypingEnabled(!FeatureFlags.silentTypingEnabled())
+            updateKeyboardButtonTint(flex)
+        }
+        updateKeyboardButtonTint(flex)
+        updateKeyboardButtonForText(input?.text?.isNotEmpty() == true)
+        if (FeatureFlags.chatboxCustomizationsEnabled()) updateChatboxCustomizationGeometry(flex)
+    }
+
+    /** Moves [view] into the container for [zone], sizing it to a standard composer button. */
+    private fun placeInZone(flex: FlexInputWidgetBinding, view: View, zone: Zone, sizeDp: Int = 40) {
+        (view.parent as? ViewGroup)?.removeView(view)
+        if (zone == Zone.HIDDEN) {
+            view.visibility = View.GONE
+            return
+        }
+        view.visibility = View.VISIBLE
+        val margin = if (zone == Zone.INSIDE || zone == Zone.INSIDE_END) 0 else dp(4)
+        view.layoutParams = LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp)).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            marginStart = margin
+            marginEnd = margin
+        }
+        when (zone) {
+            Zone.LEFT -> flex.leftBtnsContainer.addView(view)
+            Zone.INSIDE -> flex.mainInputContainer.addView(
+                view,
+                flex.mainInputContainer.indexOfChild(flex.textInput).coerceAtLeast(0),
+            )
+            Zone.INSIDE_END -> flex.mainInputContainer.addView(view)
+            Zone.RIGHT -> flex.rightBtnsContainer.addView(view)
+            Zone.HIDDEN -> Unit
+        }
+    }
+
+    /** Hides the silent-typing button while text is present, matching `hideOnText`. */
+    private fun updateKeyboardButtonForText(hasText: Boolean) {
+        val button = flexInputBinding?.keyboardBtn ?: return
+        button.visibility = if (keyboardButtonZone == Zone.HIDDEN || hasText) View.GONE else View.VISIBLE
+    }
+
+    private fun updateKeyboardButtonTint(flex: FlexInputWidgetBinding) {
+        val color = if (FeatureFlags.silentTypingEnabled()) {
+            ContextCompat.getColor(flex.keyboardBtn.context, R.color.status_red_500)
+        } else {
+            ColorCompat.getThemedColor(flex.keyboardBtn.context, R.attr.colorInteractiveNormal)
+        }
+        ImageViewCompat.setImageTintList(flex.keyboardBtn, ColorStateList.valueOf(color))
     }
 
     private fun installPluginComposerViews(flex: FlexInputWidgetBinding) {

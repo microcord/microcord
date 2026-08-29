@@ -59,6 +59,7 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
             Button.EXPAND to binding.chatInputCustomizationExpand,
             Button.EXPRESSION to binding.chatInputCustomizationExpression,
             Button.SEND to binding.chatInputCustomizationSend,
+            Button.KEYBOARD to binding.chatInputCustomizationKeyboard,
         )
         lateinit var changed: () -> Unit
         val bindToggles = {
@@ -290,6 +291,7 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
         Button.EXPAND -> R.drawable.ic_carot_right_24dp
         Button.EXPRESSION -> R.drawable.ic_emoji_24dp
         Button.SEND -> R.drawable.ic_send_24dp
+        Button.KEYBOARD -> R.drawable.ic_keyboard_24dp
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()

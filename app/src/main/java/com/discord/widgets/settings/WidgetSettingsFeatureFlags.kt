@@ -61,6 +61,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.nitroSpoofEnabled()
             setOnCheckedListener(FeatureFlags::setNitroSpoofEnabled)
         }
+        binding.settingsFeatureSilentTyping.apply {
+            isChecked = FeatureFlags.silentTypingEnabled()
+            setOnCheckedListener(FeatureFlags::setSilentTypingEnabled)
+        }
         binding.settingsFeatureChatboxCustomizations.apply {
             isChecked = FeatureFlags.chatboxCustomizationsEnabled()
             setOnCheckedListener { enabled ->
