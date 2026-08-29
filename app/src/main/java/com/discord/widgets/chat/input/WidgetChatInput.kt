@@ -521,6 +521,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             if (sendInside) background = null else setBackgroundResource(R.drawable.drawable_circle_black)
         }
         layout.forEach { entry ->
+            if (entry.button == Button.KEYBOARD) return@forEach
             val size = if (entry.button == Button.EXPRESSION) 32 else 40
             placeInZone(flex, views.getValue(entry.button), entry.zone, sizeDp = size)
         }
@@ -528,7 +529,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             val siblings = layout.filter {
                 it.zone == Zone.LEFT || it.zone == Zone.RIGHT
             }.filter {
-                it.button != expand.button && it.button != Button.SEND
+                it.button != expand.button && it.button != Button.SEND && it.button != Button.KEYBOARD
             }
                 .map { views.getValue(it.button) }
             var savedVisibility = emptyMap<View, Int>()
