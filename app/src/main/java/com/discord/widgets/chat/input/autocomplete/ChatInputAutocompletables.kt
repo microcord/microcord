@@ -53,7 +53,14 @@ object ChatInputAutocompletables {
         EmojiAutocompletableSource(
             userSettingsStore = StoreStream.getUserSettings(),
             emojiSetSource = { guildId, channelId ->
-                StoreStream.getEmojis().getEmojiSet(guildId, channelId)
+                // Usability is filtered again below via isUsable()/isAvailable(), so include every
+                // emoji here — otherwise Fake-Nitro emojis never reach the autocomplete candidates.
+                StoreStream.getEmojis().getEmojiSet(
+                    guildId,
+                    channelId,
+                    includeUnusableEmojis = true,
+                    includeUnavailableEmojis = true,
+                )
             },
         )
     }
