@@ -3837,3 +3837,20 @@ matching RN's `makeMessage`/`iconType: message` marker; channel glyph (16dp), pa
 circular avatar round out the three. Focused `MarkdownSpanOffsetRegressionTest` passes and
 `compileDebugKotlin` succeeds; `installDebug` is blocked by the disconnected device (was A065).
 Reconnect and visually verify icon-inside-pill and the message-jump glyph.
+### 2026-09-05 — Mentions initial scroll position
+
+- Scope: make Recent Mentions open at the top, with newest results first.
+- Reference inspected: `discord-jadx/app/src/main/java/com/discord/widgets/user/WidgetUserMentions.java`
+  (`createAdapter`/`onViewBound`) and its `res/layout/widget_user_mentions.xml`.
+- Changed `app/src/main/java/com/discord/widgets/user/WidgetUserMentions.kt` to pass
+  `stickToBottom = false` to the shared chat adapter, matching the existing pinned-results usage.
+  The adapter's initial channel sentinel change now positions row zero at offset zero instead of
+  jumping to the final row; data updates and height changes no longer pin mentions to the bottom.
+  Migrated the touched toolbar/recycler lookups to `WidgetUserMentionsBinding`.
+- Verification: `git diff --check` and `scripts/build.sh :app:assembleDebug --offline` pass
+  using the existing user Gradle cache; the isolated cache lacked the offline Foojay plugin.
+  No live backend or device check performed; no broader parity status changed.
+- Resumable check: `app/src/main/java/com/discord/widgets/user/WidgetUserMentions.kt` |
+  reference `discord-jadx/app/src/main/java/com/discord/widgets/user/WidgetUserMentions.java` |
+  device-check initial opening starts at the newest result, and scrolling down to load older
+  mentions keeps the viewport stable.

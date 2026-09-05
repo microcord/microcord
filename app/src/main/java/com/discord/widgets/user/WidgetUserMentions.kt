@@ -1,13 +1,13 @@
 package com.discord.widgets.user
 
 import android.view.View
-import androidx.appcompat.widget.Toolbar
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appActivityViewModels
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetUserMentionsBinding
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
 import com.discord.stores.StoreNavigation
@@ -46,14 +46,18 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        val binding = WidgetUserMentionsBinding.bind(view)
         val isEmbedded = arguments?.getBoolean(ARG_EMBEDDED) == true
-        view.findViewById<Toolbar>(R.id.action_bar_toolbar).apply {
+        binding.actionBarToolbar.apply {
             setTitle(R.string.recent_mentions)
             visibility = if (isEmbedded) View.GONE else View.VISIBLE
         }
-        val recycler = view.findViewById<RecyclerView>(R.id.user_mentions_list)
+        val recycler = binding.userMentionsList
         val mentionsAdapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
-            WidgetChatListAdapter(recycler, this, parentFragmentManager, MentionsEventHandler(isEmbedded)),
+            WidgetChatListAdapter(
+                recycler, this, parentFragmentManager, MentionsEventHandler(isEmbedded),
+                stickToBottom = false,
+            ),
         ).apply { mentionMeMessageLevelHighlighting = false }
         recycler.addItemDecoration(ThreadSpineItemDecoration(requireContext(), mentionsAdapter))
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
