@@ -90,6 +90,64 @@ class StoreGuildsChannelsTest {
         assertFalse(channels.getInitializedForAuthedUser())
     }
 
+    @Test fun supplementalReconcilesCachedDmsClosedWhileOffline() {
+        val closed = channel(20, Channel.DM, 0, "closed")
+        val initial = channel(21, Channel.DM, 0, "initial")
+        val lazy = channel(22, Channel.DM, 0, "lazy")
+        dispatcher.schedule {
+            channels.handleChannelOrThreadCreateOrUpdate(closed)
+            channels.handleChannelOrThreadCreateOrUpdate(initial)
+        }
+        assertTrue(Persister.persistAll())
+        val restored = StoreChannels(dispatcher, deck)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(restored), deck))
+        dispatcher.schedule { restored.init() }
+        assertEquals(setOf(20L, 21L), restored.getChannelsForGuild(0).keys)
+
+        val ready = ModelPayload().apply {
+            privateChannels = listOf(initial)
+        }.withGuilds(emptyList())
+        dispatcher.schedule {
+            val hydrated = ReadyPayloadHydrator(guilds, restored).hydrate(ready)
+            restored.handleConnectionOpen(hydrated)
+        }
+        assertEquals(setOf(20L, 21L), restored.getChannelsForGuild(0).keys)
+        dispatcher.schedule { restored.handleConnectionOpenSupplemental(listOf(lazy), emptyMap()) }
+        assertEquals(setOf(21L, 22L), restored.getChannelsForGuild(0).keys)
+        assertNull(restored.getChannel(20))
+        assertFalse(restored.getChannelNames().containsKey(20L))
+
+        // Ordinary persistence now saves only the reconciled server membership.
+        assertTrue(Persister.persistAll())
+        assertEquals(setOf(21L, 22L), Persister<List<Channel>>(
+            StoreChannels.CHANNELS_CACHE_KEY, emptyList(), preload = false,
+        ).get().map { it.id }.toSet())
+    }
+
+    @Test fun emptySupplementalPrunesClosedDmsAndNewReadyReplacesInitialMembership() {
+        val old = channel(20, Channel.DM, 0, "old")
+        val initial = channel(21, Channel.DM, 0, "initial")
+        dispatcher.schedule {
+            channels.handleChannelOrThreadCreateOrUpdate(old)
+            channels.handleConnectionOpen(ModelPayload().apply { privateChannels = listOf(initial) })
+            channels.handleConnectionOpenSupplemental(emptyList(), emptyMap())
+        }
+        assertEquals(setOf(21L), channels.getChannelsForGuild(0).keys)
+
+        dispatcher.schedule { channels.handleConnectionOpen(ModelPayload().apply { privateChannels = emptyList() }) }
+        assertEquals(setOf(21L), channels.getChannelsForGuild(0).keys)
+        dispatcher.schedule { channels.handleConnectionOpenSupplemental(emptyList(), emptyMap()) }
+        assertTrue(channels.getChannelsForGuild(0).isEmpty())
+
+        dispatcher.schedule { channels.handleChannelOrThreadCreateOrUpdate(old) }
+        assertEquals(setOf(20L), channels.getChannelsForGuild(0).keys)
+        dispatcher.schedule {
+            channels.reset()
+            channels.handleConnectionOpenSupplemental(emptyList(), emptyMap())
+        }
+        assertTrue(channels.getChannelsForGuild(0).isEmpty())
+    }
+
     @Test fun exactCacheVersionsRestoreGuildsRolesJoinedAtAndChannels() {
         dispatcher.schedule {
             guilds.handleGuildAdd(readyGuild())

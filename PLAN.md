@@ -3854,3 +3854,40 @@ Reconnect and visually verify icon-inside-pill and the message-jump glyph.
   reference `discord-jadx/app/src/main/java/com/discord/widgets/user/WidgetUserMentions.java` |
   device-check initial opening starts at the newest result, and scrolling down to load older
   mentions keeps the viewport stable.
+
+### 2026-09-05 — React Native DM reconciliation evidence
+
+- Read-only RN reference located by user: `C:/Users/manti/Desktop/secresearch/discord/discordapk/`.
+  `out.js:620670` (ReadStates cache writer) derives private_channels_version from current private
+  channel IDs and their read-state last-message IDs; `out.js:2145650` sends the committed version.
+  This is not the target's monotonically increasing private-message-only tracker.
+- `out.js:231507` / Hermes function 16046 (`handleConnectionOpenSupplemental`) clears the private
+  channel map (environment slot 26), repopulates it from saved initial READY channels (slot 27),
+  then adds lazyPrivateChannels. Function 16047 saves initialPrivateChannels into slot 27 without
+  clearing the private-channel map at READY. Both bodies were verified using hermes-decomp disasm
+  against index.android.bundle, resolving the decompiler's misleading local closure assignments.
+- Root mismatch confirmed: target hydration merged cached DMs into READY and supplemental handling
+  only added channels. RN retains cache temporarily but reconciles against initial + supplemental
+  lists. The earlier cold-start version reset was a workaround and has been removed.
+- Implemented: `ReadyPayloadHydrator.kt` preserves server-provided initial DM membership without
+  merging cached entries or inferring partialness from the private-channel version. `StoreStream.kt`
+  no longer supplies that obsolete version callback. `StoreChannels.kt` retains cached private
+  channels during READY, saves the initial server channels separately, and rebuilds the private
+  map and channel-name index from initial + supplemental channels on READY_SUPPLEMENTAL, even
+  when supplemental is empty. New READY replaces the saved initial set; logout clears it.
+  Existing store dispatch, deferred persistence, recipient hydration, and managed filtering remain.
+- `StoreClientDataState.kt` and `FastConnectBootstrap.kt` are restored to their original cache-read
+  behavior: no unconditional cold-start version clearing, immediate disk write, or parallel sync.
+- Verification: `scripts/build.sh :app:testDebugUnitTest` filtered to `StoreClientDataStateTest`,
+  `ReadyPayloadHydratorTest`, and `StoreGuildsChannelsTest`, plus `:app:assembleDebug --offline`,
+  pass. Fixtures cover disk-cache restore, temporary cached visibility, stale DM removal after
+  supplemental, persisted final membership, empty supplemental and empty complete lists, a second
+  READY, logout reset, later DM recreation, and retained identify versions. `git diff --check` passes.
+  No live backend/device used; broader parity status is unchanged.
+- Resumable: `app/src/main/java/com/discord/stores/StoreChannels.kt` | RN `out.js:231507`,
+  bytecode F16046/F16047 | device-check desktop DM closure while Android is stopped, restart,
+  and verify removal after READY_SUPPLEMENTAL using sanitized logging.
+- Separate parity follow-up: `app/src/main/java/com/discord/stores/StoreClientDataState.kt` |
+  RN `out.js:620670` and `out.js:2145650` | reconcile the pre-existing monotonically increasing
+  version tracker with RN's cache-write calculation from current channel/read-state IDs; not
+  required for this membership reconciliation fix and not changed in this slice.

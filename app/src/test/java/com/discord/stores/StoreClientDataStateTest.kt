@@ -14,6 +14,24 @@ import com.discord.utilities.persister.Persister
 
 class StoreClientDataStateTest {
     @Test
+    fun `cold start retains committed versions including private channels`() {
+        Persister.init(Files.createTempDirectory("client-state-cold-start").toFile())
+        val cached = StoreClientDataState.ClientDataState(
+            guildVersions = mapOf(1L to 9L), highestLastMessageId = 100L,
+            readStateVersion = 3, userGuildSettingsVersion = 4, privateChannelsVersion = 200L,
+            apiCodeVersion = 1, initialGuildId = 1L,
+        )
+        Persister(StoreClientDataState.CACHE_KEY, StoreClientDataState.ClientDataState()).set(cached, persist = true)
+
+        val store = StoreClientDataState()
+        store.init()
+        store.snapshotData()
+
+        assertEquals(cached, store.getClientDataState())
+        assertEquals(cached.toIdentifyData(), store.getClientDataState().toIdentifyData())
+    }
+
+    @Test
     fun `entity updates retain the highest guild version`() {
         val gson = GsonBuilder().excludeFieldsWithModifiers(Modifier.STATIC).create()
         Persister.init(Files.createTempDirectory("client-state-v2").toFile())

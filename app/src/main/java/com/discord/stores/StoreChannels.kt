@@ -49,6 +49,7 @@ class StoreChannels(
      * so they are parked here and replayed at the end of [handleConnectionOpen].
      */
     private val preloadedThreads = HashMap<Long, Channel>()
+    private var initialPrivateChannels: Map<Long, Channel>? = null
     private var handledReadyPayload = false
     private var initializedForAuthedUser = false
     private var isConnectionOpen = false
@@ -88,6 +89,7 @@ class StoreChannels(
         channelNames.clear()
         threadsById.clear()
         preloadedThreads.clear()
+        initialPrivateChannels = null
         handledReadyPayload = false
         initializedForAuthedUser = false
         isConnectionOpen = false
@@ -102,11 +104,12 @@ class StoreChannels(
     @StoreThread
     fun handleConnectionOpen(payload: ModelPayload) {
         isConnectionOpen = true
+        val cachedPrivateChannels = channelsByGuild[PRIVATE_CHANNELS_ID].orEmpty().toMutableMap()
         channelsByGuild.clear()
         channelNames.clear()
         threadsById.clear()
         val readyUsers = (payload.users.orEmpty() + listOfNotNull(payload.me)).associateBy(User::id)
-        channelsByGuild[PRIVATE_CHANNELS_ID] = payload.privateChannels.orEmpty()
+        val initialChannels = payload.privateChannels.orEmpty()
             // Application-owned channels are never shown; the reference filters them, not threads.
             .filterNot(Channel::isManaged)
             .map { channel ->
@@ -115,6 +118,8 @@ class StoreChannels(
                 )
             }
             .associateByTo(HashMap(), Channel::id)
+        initialPrivateChannels = initialChannels
+        channelsByGuild[PRIVATE_CHANNELS_ID] = cachedPrivateChannels.apply { putAll(initialChannels) }
         payload.guilds.orEmpty().forEach(::storeGuild)
         preloadedThreads.values.filterNot { it.id in threadsById }.forEach { storeThread(it, it.guildId) }
         preloadedThreads.clear()
@@ -125,20 +130,19 @@ class StoreChannels(
     }
 
     /**
-     * Adds the DMs READY left out because the client already had them cached.
-     *
-     * These are additive: READY carried whichever conversations the server judged hot, and this is
-     * the remainder, so the two together are the whole list.
+     * Reconciles the cached DM list against READY plus READY_SUPPLEMENTAL, matching RN.
+     * Cached conversations remain visible only until the complete server list arrives.
      */
     @StoreThread
     fun handleConnectionOpenSupplemental(channels: List<Channel>, readyUsers: Map<Long, User>) {
-        if (channels.isEmpty()) return
-        val privateChannels = channelsByGuild.getOrPut(PRIVATE_CHANNELS_ID) { HashMap() }
+        val privateChannels = initialPrivateChannels?.toMutableMap()
+            ?: channelsByGuild.getOrPut(PRIVATE_CHANNELS_ID) { HashMap() }
         channels.filterNot(Channel::isManaged).forEach { channel ->
             privateChannels[channel.id] = if (!channel.recipients.isNullOrEmpty()) channel else channel.copy(
                 recipients = channel.recipientIds.orEmpty().mapNotNull(readyUsers::get),
             )
         }
+        channelsByGuild[PRIVATE_CHANNELS_ID] = privateChannels
         rebuildNames()
         markChanged()
     }

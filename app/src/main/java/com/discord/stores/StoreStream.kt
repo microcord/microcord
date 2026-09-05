@@ -282,9 +282,7 @@ class StoreStream private constructor(
         observationDeck,
         onGuildScheduledEventResolved = guildScheduledEvents::addGuildScheduledEventFromInvite,
     )
-    private val readyPayloadHydrator = ReadyPayloadHydrator(guilds, channels) {
-        clientDataState.getClientDataState().privateChannelsVersion
-    }
+    private val readyPayloadHydrator = ReadyPayloadHydrator(guilds, channels)
     private val guildSelected: StoreGuildSelected = StoreGuildSelected(
         dispatcher,
         observationDeck,

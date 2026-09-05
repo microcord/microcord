@@ -80,7 +80,7 @@ class ReadyPayloadHydratorTest {
         guilds.handleConnectionOpen(cachedPayload)
         channels.handleConnectionOpen(cachedPayload)
 
-        val result = ReadyPayloadHydrator(guilds, channels) { 100L }.hydrateReadyPayload(
+        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
             gson.fromJson(V2_PARTIAL_READY, ModelPayload::class.java),
         ) as ReadyPayloadHydrator.HydrateResult.Success
         val guild = result.payload.guilds!!.single()
@@ -89,32 +89,33 @@ class ReadyPayloadHydratorTest {
         assertEquals(listOf(11L), guild.channels!!.map { it.id })
         assertEquals(123L, guild.channels!!.single().lastMessageId)
         assertEquals("cached-name", guild.name)
-        assertEquals(listOf(20L), result.payload.privateChannels!!.map { it.id })
+        assertEquals(emptyList<Long>(), result.payload.privateChannels!!.map { it.id })
     }
 
     @Test
-    fun privateChannelDeltaMergesWithoutPartialGuildEntries() {
+    fun privateChannelsDoNotMergeCachedMembershipIntoReady() {
         val (guilds, channels) = stores()
         val cachedPayload = gson.fromJson(CACHED_READY, ModelPayload::class.java)
         guilds.handleConnectionOpen(cachedPayload)
         channels.handleConnectionOpen(cachedPayload)
 
-        val result = ReadyPayloadHydrator(guilds, channels) { 100L }.hydrateReadyPayload(
+        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
             gson.fromJson(V2_PRIVATE_CHANNEL_DELTA_ONLY, ModelPayload::class.java),
         ) as ReadyPayloadHydrator.HydrateResult.Success
 
-        assertEquals(listOf(20L), result.payload.privateChannels!!.map { it.id })
+        assertEquals(emptyList<Long>(), result.payload.privateChannels!!.map { it.id })
     }
 
     @Test
-    fun privateChannelDeltaRejectsMissingVersionedCache() {
+    fun emptyInitialPrivateChannelsDoNotRequireACache() {
         val (guilds, channels) = stores()
 
-        val result = ReadyPayloadHydrator(guilds, channels) { 100L }.hydrateReadyPayload(
+        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
             gson.fromJson(V2_PRIVATE_CHANNEL_DELTA_ONLY, ModelPayload::class.java),
         )
 
-        assertSame(ReadyPayloadHydrator.HydrateResult.Error, result)
+        assertEquals(emptyList<com.discord.api.channel.Channel>(),
+            (result as ReadyPayloadHydrator.HydrateResult.Success).payload.privateChannels)
     }
 
     @Test
