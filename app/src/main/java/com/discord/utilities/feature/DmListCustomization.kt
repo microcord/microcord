@@ -19,22 +19,12 @@ object DmListCustomization {
         TIMESTAMP(R.string.dm_list_customization_timestamp),
     }
 
-    private val defaults = mapOf(
-        Component.STATUS_DOT to true,
-        Component.STATUS to true,
-        Component.GUILD_TAG to true,
-        Component.MESSAGE to false,
-        Component.TIMESTAMP to false,
-    )
-
     fun visible(component: Component): Boolean =
-        SharedPreferencesProvider.get().getBoolean(key(component), defaults.getValue(component))
+        ClientSettings.dmComponent(component).get(SharedPreferencesProvider.get())
 
     fun setVisible(component: Component, visible: Boolean) {
-        SharedPreferencesProvider.get().edit().putBoolean(key(component), visible).apply()
+        ClientSettings.dmComponent(component).set(SharedPreferencesProvider.get(), visible)
     }
-
-    private fun key(component: Component) = "dm_list_customization_${component.name.lowercase()}"
 
     /** Whether the message preview takes over the row's description line, replacing the status. */
     fun previewReplacesStatus(messageEnabled: Boolean, isDirectMessage: Boolean, preview: String?): Boolean =

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:gravity="center_vertical" android:padding="24dp"
+    android:background="?attr/colorBackgroundPrimary" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:text="@string/cloud_settings_title" style="@style/UiKit.Settings.Item.Header"/>
+    <TextView android:id="@+id/recovery_progress" android:text="@string/cloud_settings_working"
+        android:accessibilityLiveRegion="polite" style="@style/UiKit.TextView"/>
+    <TextView android:id="@+id/recovery_error" android:text="@string/cloud_settings_recovery_error"
+        android:visibility="gone" android:accessibilityLiveRegion="assertive" style="@style/UiKit.TextView"/>
+    <TextView android:id="@+id/recovery_retry" android:text="@string/cloud_settings_retry"
+        android:visibility="gone" android:clickable="true" android:focusable="true" style="@style/UiKit.Settings.Item.Icon"/>
+    <TextView android:id="@+id/recovery_close" android:text="@string/cloud_settings_close"
+        android:visibility="gone" android:clickable="true" android:focusable="true" style="@style/UiKit.Settings.Item.Icon"/>
+</LinearLayout>

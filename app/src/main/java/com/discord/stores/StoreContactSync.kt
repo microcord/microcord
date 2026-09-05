@@ -117,23 +117,24 @@ class StoreContactSync(
         prefsSessionDurable.edit().putBoolean(UPSELL_DISMISS_KEY, true).apply()
         dispatcher.schedule {
             dismissState[UPSELL_DISMISS_KEY] = true
+            dismissStateCache.set(HashMap(dismissState), persist = true)
             markChanged()
         }
     }
 
     fun dismissFriendsListUpsell() {
-        dismissStateCache.set(dismissState, persist = true)
         dispatcher.schedule {
             dismissState[FRIENDS_UPSELL_DISMISS_KEY] = true
+            dismissStateCache.set(HashMap(dismissState), persist = true)
             markChanged()
         }
     }
 
     fun clearDismissStates() {
-        dismissStateCache.clear(persist = true)
         prefsSessionDurable.edit().remove(UPSELL_DISMISS_KEY).apply()
         dispatcher.schedule {
             dismissState.clear()
+            dismissStateCache.clear(persist = true)
             markChanged()
         }
     }

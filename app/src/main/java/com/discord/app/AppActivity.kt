@@ -188,6 +188,15 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (App.settingsRecoveryRequired) {
+            setTheme(R.style.AppTheme_Dark)
+            fatalCrashShown = true
+            super.onCreate(null)
+            startActivity(Intent(this, ClientSettingsRestoreActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            finish()
+            return
+        }
         val theme = runCatching { StoreStream.getUserSettingsSystem().getTheme() }.getOrDefault(ModelUserSettings.THEME_DARK)
         appliedTheme = theme
         setTheme(
@@ -220,13 +229,14 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (App.settingsRecoveryRequired) return
         mostRecentIntent = intent
         consumeIntent(intent)
         newIntentListeners.values.toList().forEach { listener -> listener(intent) }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        if (StoreStream.getNavigation().getPendingIntent() != null) {
+        if (!App.settingsRecoveryRequired && StoreStream.getNavigation().getPendingIntent() != null) {
             outState.putParcelable(STATE_PENDING_INTENT, pendingLaunchIntent)
         }
         super.onSaveInstanceState(outState)
@@ -816,7 +826,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
 
     class Main : AppActivity() {
         override fun onDestroy() {
-            if (isFinishing && !isChangingConfigurations) StoreStream.disconnectGatewayForTaskRemoval()
+            if (!App.settingsRecoveryRequired && isFinishing && !isChangingConfigurations) StoreStream.disconnectGatewayForTaskRemoval()
             super.onDestroy()
         }
     }

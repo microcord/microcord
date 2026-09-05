@@ -1,5 +1,9 @@
 package com.discord.stores
 
+import com.discord.utilities.feature.ClientPreferenceSnapshot
+import com.discord.utilities.feature.LocalSettingsSnapshot
+import com.discord.utilities.feature.ManticordSettingsBackupCodec
+
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
@@ -4023,6 +4027,24 @@ class StoreStream private constructor(
         @JvmStatic fun getPendingReplies() = requireInstance().pendingReplies
         @JvmStatic fun getPinnedMessages() = requireInstance().pinnedMessages
         @JvmStatic fun getSavedMessages() = requireInstance().savedMessages
+        internal fun captureClientSettings(context: android.content.Context): rx.Observable<ManticordSettingsBackupCodec.Payload> =
+            rx.Observable.create { subscriber ->
+                requireInstance().dispatcher.schedule {
+                    if (!subscriber.isUnsubscribed) {
+                        try {
+                            check(com.discord.utilities.persister.Persister.persist(LocalSettingsSnapshot.persistedKeys)) { "Could not flush local settings" }
+                            val preferences = ClientPreferenceSnapshot.capture(context)
+                            val local = LocalSettingsSnapshot.capture(preferences)
+                            subscriber.onNext(ManticordSettingsBackupCodec.Payload(
+                                preferences.booleans + local.booleans, preferences.strings + local.strings,
+                            ))
+                            subscriber.onCompleted()
+                        } catch (failure: Exception) {
+                            subscriber.onError(failure)
+                        }
+                    }
+                }
+            }
         @JvmStatic fun getSafetyHub() = requireInstance().safetyHub
         @JvmStatic fun getMessageUploads() = requireInstance().messageUploads
         @JvmStatic fun getMessageState() = requireInstance().messageState

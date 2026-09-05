@@ -25,7 +25,7 @@ object ChatInputCustomization {
 
     data class Entry(val button: Button, val zone: Zone)
 
-    const val LAYOUT_KEY = "feature_chatbox_customizations_layout"
+    const val LAYOUT_KEY = ClientSettings.CHAT_INPUT_LAYOUT_KEY
     private val defaults = listOf(
         Entry(Button.PROFILE, Zone.LEFT),
         Entry(Button.ATTACHMENT, Zone.LEFT),
@@ -36,10 +36,10 @@ object ChatInputCustomization {
         Entry(Button.KEYBOARD, Zone.INSIDE_END),
     )
 
-    fun get(): List<Entry> = decode(SharedPreferencesProvider.get().getString(LAYOUT_KEY, null))
+    fun get(): List<Entry> = decode(ClientSettings.chatInputLayout.get(SharedPreferencesProvider.get()))
 
     fun save(entries: List<Entry>) {
-        SharedPreferencesProvider.get().edit().putString(LAYOUT_KEY, encode(entries)).apply()
+        ClientSettings.chatInputLayout.set(SharedPreferencesProvider.get(), encode(entries))
     }
 
     fun defaultZone(button: Button) = defaults.first { it.button == button }.zone.takeUnless { it == Zone.HIDDEN }

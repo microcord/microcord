@@ -5,6 +5,11 @@
     </com.google.android.material.appbar.AppBarLayout>
     <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
         <LinearLayout android:paddingBottom="@dimen/list_bottom_padding" style="@style/UiKit.ViewGroup.LinearLayout">
+            <com.discord.views.CheckedSetting android:id="@+id/settings_feature_cloud_backup" app:cs_text="@string/cloud_settings_title" app:cs_subtext="@string/cloud_settings_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            <TextView android:id="@+id/settings_cloud_save" android:visibility="gone" android:text="@string/cloud_settings_save" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/settings_cloud_restore" android:visibility="gone" android:text="@string/cloud_settings_restore" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/settings_cloud_clear" android:visibility="gone" android:text="@string/cloud_settings_clear" android:textColor="?attr/colorError" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/settings_cloud_status" android:visibility="gone" android:text="@string/cloud_settings_working" android:accessibilityLiveRegion="polite" android:padding="16dp" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView"/>
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_tap_tap" app:cs_text="@string/feature_tap_tap" app:cs_subtext="@string/feature_tap_tap_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_fetch_uncached_users" app:cs_text="@string/feature_fetch_uncached_users" app:cs_subtext="@string/feature_fetch_uncached_users_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
             <com.discord.views.CheckedSetting android:id="@+id/settings_feature_view_profile_images" app:cs_text="@string/feature_view_profile_images" app:cs_subtext="@string/feature_view_profile_images_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>

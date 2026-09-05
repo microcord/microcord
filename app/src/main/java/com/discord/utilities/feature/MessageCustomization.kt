@@ -44,8 +44,6 @@ object MessageCustomization {
 
     data class Entry(val section: Section, val visible: Boolean = true)
 
-    private const val LAYOUT_KEY = "message_customization_layout"
-    private const val CORE_PREFIX = "message_customization_core_"
     private val defaults = Section.entries.map(::Entry)
     @Volatile private var layoutCache: Layout? = null
     @Volatile private var coreCache: BooleanArray? = null
@@ -54,7 +52,7 @@ object MessageCustomization {
 
     fun save(entries: List<Entry>) {
         layoutCache = Layout(entries.toList())
-        SharedPreferencesProvider.get().edit().putString(LAYOUT_KEY, encode(entries)).apply()
+        ClientSettings.messageLayout.set(SharedPreferencesProvider.get(), encode(entries))
     }
 
     fun coreVisible(element: CoreElement) = core()[element.ordinal]
@@ -63,9 +61,7 @@ object MessageCustomization {
 
     fun setCoreVisible(element: CoreElement, visible: Boolean) {
         coreCache = core().copyOf().apply { this[element.ordinal] = visible }
-        SharedPreferencesProvider.get().edit()
-            .putBoolean(CORE_PREFIX + element.name.lowercase(), visible)
-            .apply()
+        ClientSettings.messageCore(element).set(SharedPreferencesProvider.get(), visible)
     }
 
     fun apply(rows: List<ChatListEntry>): List<ChatListEntry> = apply(rows, layout())
@@ -107,14 +103,14 @@ object MessageCustomization {
 
     private fun layout(): Layout = layoutCache ?: synchronized(this) {
         layoutCache ?: Layout(
-            decode(SharedPreferencesProvider.get().getString(LAYOUT_KEY, null)),
+            decode(ClientSettings.messageLayout.get(SharedPreferencesProvider.get())),
         ).also { layoutCache = it }
     }
 
     private fun core(): BooleanArray = coreCache ?: synchronized(this) {
         coreCache ?: SharedPreferencesProvider.get().let { preferences ->
             BooleanArray(CoreElement.entries.size) { index ->
-                preferences.getBoolean(CORE_PREFIX + CoreElement.entries[index].name.lowercase(), true)
+                ClientSettings.messageCore(CoreElement.entries[index]).get(preferences)
             }
         }.also { coreCache = it }
     }

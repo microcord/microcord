@@ -69,6 +69,9 @@ class Persister<T : Any>(
     @JvmOverloads
     fun clear(persist: Boolean = false): T = set(defaultValue, persist)
 
+    /** Flush this owner only, so a cold restore never flushes an obsolete handle for the same key. */
+    fun persistNow(): Boolean = persist()
+
     @Synchronized
     fun getObservable(): Observable<T> {
         valueSubject?.let { return it }

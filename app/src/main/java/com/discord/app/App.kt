@@ -37,7 +37,14 @@ import java.io.File
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        if (currentProcessName() == "$packageName:settings_restore") return
         if (!initialized.compareAndSet(false, true)) return
+
+        if (!com.discord.utilities.feature.ManticordSettingsBackup.awaitRestore(this)) {
+            settingsRecoveryRequired = true
+            if (isFcmProcess(currentProcessName(), packageName)) android.os.Process.killProcess(android.os.Process.myPid())
+            return
+        }
 
         BootLog.record(BootLogEvent.PROCESS_START)
         AppLog.init(this)
@@ -77,6 +84,15 @@ class App : Application() {
         BootLog.record(BootLogEvent.NATIVE_READY)
         StoreStream.initialize(this)
         PluginRuntime.initialize(this)
+        val restorePreferences = SharedPreferencesProvider.getPrefsSessionDurable()
+        val restoreKey = com.discord.utilities.feature.ManticordSettingsBackup.RESTORE_RESULT
+        if (restorePreferences.contains(restoreKey)) {
+            val restored = restorePreferences.getBoolean(restoreKey, false)
+            restorePreferences.edit().remove(restoreKey).apply()
+            Handler(Looper.getMainLooper()).post {
+                AppToast.show(this, if (restored) com.discord.R.string.cloud_settings_restored else com.discord.R.string.cloud_settings_restore_failed)
+            }
+        }
         // Without this the sidebar has no pending-applications folder and a guild the user has
         // applied to cannot be tapped at all.
         GuildsListStoreHooks.install()
@@ -89,6 +105,7 @@ class App : Application() {
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
+        if (settingsRecoveryRequired || currentProcessName() == "$packageName:settings_restore") return
         MGImagesConfig.onTrimMemory(level)
     }
 
@@ -107,6 +124,8 @@ class App : Application() {
     }
 
     companion object {
+        @Volatile internal var settingsRecoveryRequired = false
+            private set
         private const val STARTUP_DEFER_MS = 500L
         private val initialized = AtomicBoolean()
     }

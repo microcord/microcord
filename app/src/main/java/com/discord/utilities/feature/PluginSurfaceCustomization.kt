@@ -9,14 +9,17 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 
 object PluginSurfaceCustomization {
-    enum class Surface(val key: String) {
-        BOTTOM_TABS("plugin_surface_bottom_tabs"),
-        PROFILE("plugin_surface_profile"),
-        PROFILE_TABS("plugin_surface_profile_tabs"),
-        COMPOSER("plugin_surface_composer"),
-        MESSAGE_HEADER("plugin_surface_message_header"),
-        MESSAGE_CONTENT("plugin_surface_message_content"),
-        MESSAGE_STANDALONE("plugin_surface_message_standalone"),
+    enum class Surface {
+        BOTTOM_TABS,
+        PROFILE,
+        PROFILE_TABS,
+        COMPOSER,
+        MESSAGE_HEADER,
+        MESSAGE_CONTENT,
+        MESSAGE_STANDALONE,
+        ;
+
+        val key: String get() = ClientSettings.pluginLayout(this).key
     }
 
     data class Entry(val key: String, val visible: Boolean = true)
@@ -37,7 +40,7 @@ object PluginSurfaceCustomization {
 
     fun get(surface: Surface, knownKeys: List<String>): List<Entry> {
         cache[surface]?.takeIf { it.knownKeys == knownKeys }?.let { return it.entries }
-        return decode(SharedPreferencesProvider.get().getString(surface.key, null), knownKeys).also {
+        return decode(ClientSettings.pluginLayout(surface).get(SharedPreferencesProvider.get()), knownKeys).also {
             cache[surface] = Cached(knownKeys.toList(), it)
         }
     }
@@ -56,7 +59,7 @@ object PluginSurfaceCustomization {
 
     fun save(surface: Surface, entries: List<Entry>) {
         val value = entries.joinToString(",") { "${encode(it.key)}:${it.visible}" }
-        SharedPreferencesProvider.get().edit().putString(surface.key, value).apply()
+        ClientSettings.pluginLayout(surface).set(SharedPreferencesProvider.get(), value)
         cache.remove(surface)
     }
 

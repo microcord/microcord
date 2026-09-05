@@ -143,6 +143,13 @@
         android:theme="@style/AppTheme.Dark"
         tools:targetApi="n">
         <profileable android:shell="true" />
+        <activity
+            android:name="com.discord.app.ClientSettingsRestoreActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize"
+            android:process=":settings_restore"
+            android:theme="@style/AppTheme.Loading" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

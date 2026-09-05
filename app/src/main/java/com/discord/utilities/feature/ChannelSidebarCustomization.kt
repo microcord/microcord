@@ -45,12 +45,9 @@ object ChannelSidebarCustomization {
     fun buttons(surface: Surface) = if (surface == Surface.DM) dmButtons else channelButtons
 
     fun visible(surface: Surface, button: Button): Boolean =
-        SharedPreferencesProvider.get().getBoolean(key(surface, button), button != Button.PINS)
+        ClientSettings.sidebarButton(surface, button).get(SharedPreferencesProvider.get())
 
     fun setVisible(surface: Surface, button: Button, visible: Boolean) {
-        SharedPreferencesProvider.get().edit().putBoolean(key(surface, button), visible).apply()
+        ClientSettings.sidebarButton(surface, button).set(SharedPreferencesProvider.get(), visible)
     }
-
-    private fun key(surface: Surface, button: Button) =
-        "channel_sidebar_customization_${surface.name.lowercase()}_${button.name.lowercase()}"
 }

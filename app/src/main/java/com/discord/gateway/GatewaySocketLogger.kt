@@ -41,6 +41,7 @@ internal object GatewayLogRedactor {
         "static_client_session_id",
         "token",
         "user_settings_proto",
+        "proto",
     )
 
     fun redact(rawMessage: String): String = runCatching {

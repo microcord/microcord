@@ -3,13 +3,14 @@ package com.discord.utilities.feature
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.utilities.cache.SharedPreferencesProvider
-import java.security.MessageDigest
-import java.util.concurrent.ConcurrentHashMap
 
 object HeaderCustomization {
-    enum class Surface(val key: String) {
-        DM("header_customization_dm_layout"),
-        CHANNEL("header_customization_channel_layout"),
+    enum class Surface {
+        DM,
+        CHANNEL,
+        ;
+
+        val key: String get() = ClientSettings.headerLayout(this).key
     }
 
     enum class Action(@param:StringRes val label: Int) {
@@ -34,42 +35,27 @@ object HeaderCustomization {
 
     fun get(surface: Surface): List<Entry> = decode(
         surface,
-        SharedPreferencesProvider.get().getString(surface.key, null),
+        ClientSettings.headerLayout(surface).get(SharedPreferencesProvider.get()),
     )
 
     fun save(surface: Surface, entries: List<Entry>) {
-        SharedPreferencesProvider.get().edit().putString(surface.key, encode(entries)).apply()
+        ClientSettings.headerLayout(surface).set(SharedPreferencesProvider.get(), encode(entries))
     }
 
     fun actions(surface: Surface) = if (surface == Surface.DM) dmActions else channelActions
 
     fun identityVisible(surface: Surface, identity: Identity) =
-        SharedPreferencesProvider.get().getBoolean(identityKey(surface, identity), true)
+        ClientSettings.headerIdentity(surface, identity).get(SharedPreferencesProvider.get())
 
     fun setIdentityVisible(surface: Surface, identity: Identity, visible: Boolean) {
-        SharedPreferencesProvider.get().edit().putBoolean(identityKey(surface, identity), visible).apply()
+        ClientSettings.headerIdentity(surface, identity).set(SharedPreferencesProvider.get(), visible)
     }
 
     fun pluginVisible(surface: Surface, owner: String, contributionId: String): Boolean =
-        SharedPreferencesProvider.get().getBoolean(pluginKey(surface, owner, contributionId), true)
+        ClientSettings.headerPlugin(surface, owner, contributionId).get(SharedPreferencesProvider.get())
 
     fun setPluginVisible(surface: Surface, owner: String, contributionId: String, visible: Boolean) {
-        SharedPreferencesProvider.get().edit()
-            .putBoolean(pluginKey(surface, owner, contributionId), visible)
-            .apply()
-    }
-
-    private fun identityKey(surface: Surface, identity: Identity) =
-        "header_customization_${surface.name.lowercase()}_${identity.name.lowercase()}"
-
-    private fun pluginKey(surface: Surface, owner: String, contributionId: String): String {
-        val identity = "${surface.name}:$owner:$contributionId"
-        return pluginKeys.getOrPut(identity) {
-            val digest = MessageDigest.getInstance("SHA-256")
-                .digest("$owner:$contributionId".toByteArray())
-                .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-            "header_customization_${surface.name.lowercase()}_plugin_$digest"
-        }
+        ClientSettings.headerPlugin(surface, owner, contributionId).set(SharedPreferencesProvider.get(), visible)
     }
 
     internal fun encode(entries: List<Entry>) = entries.joinToString(",") {
@@ -87,6 +73,4 @@ object HeaderCustomization {
         }.filter { it.action in actions }.distinctBy(Entry::action)
         return parsed + actions.filter { action -> parsed.none { it.action == action } }.map(::Entry)
     }
-
-    private val pluginKeys = ConcurrentHashMap<String, String>()
 }
