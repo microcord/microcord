@@ -7,7 +7,6 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
@@ -23,6 +22,7 @@ import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
+import com.discord.databinding.WidgetChatListActionsBinding
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiSet
 import com.discord.models.guild.Guild
@@ -64,7 +64,9 @@ class WidgetChatListActions : AppBottomSheet() {
         fun onMessageActionError(error: Throwable) = Unit
     }
 
-    private lateinit var emojiAdapter: WidgetChatListActionsEmojisAdapter
+    private var _binding: WidgetChatListActionsBinding? = null
+    private val binding get() = checkNotNull(_binding)
+    private var emojiAdapter: WidgetChatListActionsEmojisAdapter? = null
     private var itemDecorator: RecyclerView.ItemDecoration? = null
     private var channelId = 0L
     private var messageId = 0L
@@ -73,9 +75,10 @@ class WidgetChatListActions : AppBottomSheet() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        _binding = WidgetChatListActionsBinding.bind(view)
         channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID)
         messageId = argumentsOrDefault.getLong(ARG_MESSAGE_ID)
-        val recycler = view.findViewById<RecyclerView>(R.id.dialog_chat_actions_add_reaction_emojis_list)
+        val recycler = binding.dialogChatActionsAddReactionEmojisList
         emojiAdapter = WidgetChatListActionsEmojisAdapter(recycler).apply {
             onClickEmoji = ::addReaction
             onClickMoreEmojis = {
@@ -105,6 +108,18 @@ class WidgetChatListActions : AppBottomSheet() {
             )
     }
 
+    override fun onDestroyView() {
+        _binding?.dialogChatActionsAddReactionEmojisList?.let { recycler ->
+            itemDecorator?.let(recycler::removeItemDecoration)
+            recycler.adapter = null
+        }
+        itemDecorator = null
+        emojiAdapter = null
+        currentModel = null
+        _binding = null
+        super.onDestroyView()
+    }
+
     private var currentModel: Model? = null
 
     private fun configureUI(model: Model?) {
@@ -113,13 +128,13 @@ class WidgetChatListActions : AppBottomSheet() {
             dismiss()
             return
         }
-        val root = requireView()
+        val binding = _binding ?: return
         val message = model.message
         val manage = model.manageMessageContext
         val isLocal = message.isLocal()
         val hasReactions = message.getReactionsMap().isNotEmpty()
         PluginContextMenuHost.bind(
-            root.findViewById(R.id.plugin_context_menu_items),
+            binding.pluginContextMenuItems,
             pluginContextMenuContext(
                 PluginContextMenuSurface.MESSAGE,
                 message.guildId,
@@ -131,37 +146,36 @@ class WidgetChatListActions : AppBottomSheet() {
             ::dismiss,
         )
 
-        configureQuickReactions(root, model.recentEmojis, isLocal, manage.canAddReactions)
-        bind(root, R.id.dialog_chat_actions_edit, model.type == TYPE_CHAT && manage.canEdit && message.poll == null) {
+        configureQuickReactions(model.recentEmojis, isLocal, manage.canAddReactions)
+        bind(binding.dialogChatActionsEdit, model.type == TYPE_CHAT && manage.canEdit && message.poll == null) {
             editMessage(model)
         }
         val canEndPoll = message.poll?.let { poll ->
             message.author?.id == model.me.id && poll.results?.finalized != true &&
                 (poll.expiry?.dateTimeMillis ?: Long.MAX_VALUE) > System.currentTimeMillis()
         } == true
-        bind(root, R.id.dialog_chat_actions_end_poll, canEndPoll) { endPoll(message) }
-        bind(root, R.id.dialog_chat_actions_publish, canPublish(model)) {
+        bind(binding.dialogChatActionsEndPoll, canEndPoll) { endPoll(message) }
+        bind(binding.dialogChatActionsPublish, canPublish(model)) {
             MessageActionDialogs.showPublishMessageConfirmation(parentFragmentManager, requireContext(), message, this) {
                 dismiss()
             }
         }
-        bind(root, R.id.dialog_chat_actions_manage_reactions, hasReactions) {
+        bind(binding.dialogChatActionsManageReactions, hasReactions) {
             WidgetManageReactions.create(channelId, messageId, requireContext())
         }
-        bind(root, R.id.dialog_chat_actions_remove_all_reactions, hasReactions && manage.canManageMessages) {
+        bind(binding.dialogChatActionsRemoveAllReactions, hasReactions && manage.canManageMessages) {
             removeAllReactions(message)
         }
-        bind(root, R.id.dialog_chat_actions_resend, message.canResend()) {
+        bind(binding.dialogChatActionsResend, message.canResend()) {
             host().messageActionCoordinator().retry(message)
             dismiss()
         }
-        bind(root, R.id.dialog_chat_actions_mark_unread, !message.isFailed() && manage.canMarkUnread) {
+        bind(binding.dialogChatActionsMarkUnread, !message.isFailed() && manage.canMarkUnread) {
             StoreStream.getMessageAck().markUnread(message.channelId, message.id)
             dismiss()
         }
         bind(
-            root,
-            R.id.dialog_chat_actions_copy,
+            binding.dialogChatActionsCopy,
             !model.messageContent.isNullOrEmpty() && !message.isLocalApplicationCommand(),
         ) {
             val edited = EditedMessageNode.getEditedString(requireContext())
@@ -170,7 +184,7 @@ class WidgetChatListActions : AppBottomSheet() {
         }
         // Same shape the in-app router consumes (UriHandler.handleUriSpecialCase), so a pasted
         // copy jumps straight back to this message.
-        bind(root, R.id.dialog_chat_actions_copy_link, !isLocal) {
+        bind(binding.dialogChatActionsCopyLink, !isLocal) {
             val guildSegment = model.channel?.guildId?.takeUnless { it == 0L } ?: "@me"
             copy(
                 "https://discord.com/channels/$guildSegment/${message.channelId}/${message.id}",
@@ -178,41 +192,40 @@ class WidgetChatListActions : AppBottomSheet() {
             )
             dismiss()
         }
-        bind(root, R.id.dialog_chat_actions_copy_id, model.isDeveloper && !isLocal) {
+        bind(binding.dialogChatActionsCopyId, model.isDeveloper && !isLocal) {
             copy(message.id.toString(), R.string.copy_id)
             dismiss()
         }
-        bind(root, R.id.dialog_chat_actions_report, message.author?.id != model.me.id) {
+        bind(binding.dialogChatActionsReport, message.author?.id != model.me.id) {
             WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)
             dismiss()
         }
-        root.findViewById<TextView>(R.id.dialog_chat_actions_share).setText(R.string.forward_message)
+        binding.dialogChatActionsShare.setText(R.string.forward_message)
         bind(
-            root,
-            R.id.dialog_chat_actions_share,
+            binding.dialogChatActionsShare,
             ForwardingPolicy.canForward(message, model.channel, model.permissions),
         ) { forward(message) }
-        bind(root, R.id.dialog_chat_actions_pin, manage.canTogglePinned) {
+        bind(binding.dialogChatActionsPin, manage.canTogglePinned) {
             MessageActionDialogs.showPinMessageConfirmation(parentFragmentManager, requireContext(), message, this) {
                 dismiss()
             }
         }
-        root.findViewById<TextView>(R.id.dialog_chat_actions_pin)
+        binding.dialogChatActionsPin
             .setText(if (message.pinned == true) R.string.unpin else R.string.pin_message)
-        bind(root, R.id.dialog_chat_actions_delete, manage.canDelete) {
+        bind(binding.dialogChatActionsDelete, manage.canDelete) {
             MessageActionDialogs.showDeleteMessageConfirmation(parentFragmentManager, requireContext(), message) {
                 dismiss()
             }
         }
-        bind(root, R.id.dialog_chat_actions_profile, true) {
+        bind(binding.dialogChatActionsProfile, true) {
             dismiss()
             message.author?.id?.let { WidgetUserSheet.show(parentFragmentManager, it, channelId, model.guild?.id) }
         }
-        bind(root, R.id.dialog_chat_actions_reply, canReply(model)) {
+        bind(binding.dialogChatActionsReply, canReply(model)) {
             dismiss()
             model.channel?.let { host().messageActionCoordinator().reply(it, message, model.me.id) }
         }
-        bind(root, R.id.dialog_chat_actions_start_thread, canCreatePublicThread(model)) {
+        bind(binding.dialogChatActionsStartThread, canCreatePublicThread(model)) {
             dialog?.dismiss()
             dismiss()
             ChannelSelector.getInstance().openCreateThread(
@@ -224,14 +237,15 @@ class WidgetChatListActions : AppBottomSheet() {
         }
     }
 
-    private fun configureQuickReactions(root: View, recent: List<Emoji>, isLocal: Boolean, canAdd: Boolean) {
-        val recycler = root.findViewById<RecyclerView>(R.id.dialog_chat_actions_add_reaction_emojis_list)
+    private fun configureQuickReactions(recent: List<Emoji>, isLocal: Boolean, canAdd: Boolean) {
+        val recycler = binding.dialogChatActionsAddReactionEmojisList
         if (recent.isEmpty() || isLocal || !canAdd) {
             recycler.isVisible = false
             return
         }
         recycler.isVisible = true
         recycler.post {
+            if (_binding?.dialogChatActionsAddReactionEmojisList !== recycler) return@post
             val size = resources.getDimensionPixelSize(R.dimen.chat_input_emoji_size)
             val gap = dpToPixels(8)
             val available = recycler.width - recycler.paddingStart - recycler.paddingEnd
@@ -241,7 +255,7 @@ class WidgetChatListActions : AppBottomSheet() {
             val decoration = SpacingDecoration(gap + if (count > 1) remaining / (count - 1) else 0)
             recycler.addItemDecoration(decoration)
             itemDecorator = decoration
-            emojiAdapter.setData(recent, count)
+            emojiAdapter?.setData(recent, count)
         }
     }
 
@@ -339,8 +353,8 @@ class WidgetChatListActions : AppBottomSheet() {
         return permissionAllowed && channelAllowed
     }
 
-    private fun bind(root: View, id: Int, visible: Boolean, click: () -> Unit) =
-        root.findViewById<View>(id).apply {
+    private fun bind(view: View, visible: Boolean, click: () -> Unit) =
+        view.apply {
             isVisible = visible
             setOnClickListener { click() }
         }

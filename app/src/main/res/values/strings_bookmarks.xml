@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bookmark_actions_title">Bookmarks</string>
+    <string name="bookmark_action_remove">Remove Bookmark</string>
+    <string name="bookmark_action_removed">Bookmark removed.</string>
+    <string name="bookmarks_empty_title">Womp womp, you have no bookmarks.</string>
+    <string name="bookmarks_empty_body">Messages you bookmark in Discord appear here.</string>
+    <string name="bookmark_unavailable">A message you bookmarked could not be found.</string>
+    <string name="bookmarks_load_failed">Could not load bookmarks. Tap to retry.</string>
+    <string name="bookmark_options">Bookmark options</string>
+    <string name="bookmark_jump">Jump to Message</string>
+    <string name="bookmark_unknown_channel">unknown-channel</string>
+    <string name="bookmark_preview_description">%1$s: %2$s. Jump to Message.</string>
+</resources>

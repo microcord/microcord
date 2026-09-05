@@ -1,6 +1,9 @@
 package com.discord.widgets.user
 
 import android.view.View
+import android.view.MenuItem
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -13,6 +16,8 @@ import com.discord.models.message.Message
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.views.ThemedColor
+import com.discord.widgets.chat.bookmarks.WidgetMessageBookmarks
 import com.discord.widgets.chat.list.ThreadSpineItemDecoration
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -51,6 +56,19 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         binding.actionBarToolbar.apply {
             setTitle(R.string.recent_mentions)
             visibility = if (isEmbedded) View.GONE else View.VISIBLE
+            if (!isEmbedded) {
+                // Append only this action: the recovered filter menu is not currently wired here.
+                menu.add(R.string.bookmark_actions_title).apply {
+                    icon = AppCompatResources.getDrawable(context, R.drawable.ic_bookmark_24dp)?.mutate()?.also {
+                        DrawableCompat.setTint(it, ThemedColor.resolve(context, R.attr.colorInteractiveNormal))
+                    }
+                    setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+                    setOnMenuItemClickListener {
+                        WidgetMessageBookmarks.launch(requireContext())
+                        true
+                    }
+                }
+            }
         }
         val recycler = binding.userMentionsList
         val mentionsAdapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(

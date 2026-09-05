@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" android:paddingBottom="16dp"
+    android:background="?attr/colorBackgroundPrimary" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:id="@+id/bookmark_jump" android:text="@string/bookmark_jump"
+        app:drawableStartCompat="@drawable/ic_reply_24dp" app:drawableTint="?attr/colorInteractiveNormal"
+        style="@style/UiKit.Settings.Item.Icon" />
+    <TextView android:id="@+id/bookmark_remove" android:text="@string/bookmark_action_remove"
+        app:drawableStartCompat="@drawable/ic_bookmark_filled_24dp" app:drawableTint="?attr/colorError"
+        android:textColor="?attr/colorError" style="@style/UiKit.Settings.Item.Icon" />
+</LinearLayout>

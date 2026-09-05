@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent"
+    android:layout_height="wrap_content" android:layout_marginBottom="12dp"
+    app:cardBackgroundColor="?attr/colorBackgroundSecondary" app:cardCornerRadius="8dp"
+    app:cardElevation="0dp" app:strokeWidth="1dp" app:strokeColor="?attr/colorBackgroundModifierAccent">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingBottom="12dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="12dp">
+            <com.discord.views.VitoImageView android:id="@+id/bookmark_icon"
+                android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="8dp"
+                android:importantForAccessibility="no" app:roundAsCircle="true" />
+            <TextView android:id="@+id/bookmark_channel" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2"
+                android:ellipsize="end" android:textColor="?attr/colorHeaderPrimary"
+                style="@style/UiKit.TextView.Semibold" />
+            <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/bookmark_options"
+                android:layout_width="48dp" android:layout_height="48dp" android:padding="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_more_horizontal_24dp" app:tint="?attr/colorInteractiveNormal"
+                android:contentDescription="@string/bookmark_options" />
+        </LinearLayout>
+        <TextView android:id="@+id/bookmark_unavailable" android:visibility="gone" android:padding="16dp"
+            android:text="@string/bookmark_unavailable" android:textColor="?attr/colorTextMuted"
+            style="@style/UiKit.TextView" />
+        <FrameLayout android:id="@+id/bookmark_preview" android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <com.discord.utilities.view.recycler.MaxHeightRecyclerView android:id="@+id/bookmark_message"
+                android:layout_width="match_parent" android:layout_height="wrap_content" app:max_height="250dp"
+                android:nestedScrollingEnabled="false" android:importantForAccessibility="noHideDescendants"
+                android:descendantFocusability="blocksDescendants" />
+            <View android:id="@+id/bookmark_jump" android:layout_width="match_parent" android:layout_height="match_parent"
+                android:background="?attr/selectableItemBackground" android:clickable="true" android:focusable="true"
+                android:contentDescription="@string/bookmark_jump" />
+        </FrameLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

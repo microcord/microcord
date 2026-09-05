@@ -93,6 +93,7 @@ internal object RestLogRedactor {
     private val sensitiveKeys = setOf(
         "authorization", "captcha_key", "captcha_rqtoken", "client_secret", "content", "email",
         "filename", "mfa_code", "name", "nonce", "password", "phone", "session_id", "token",
+        "author_summary", "channel_summary", "message_summary", "notes",
     )
 
     fun redact(raw: String): String = runCatching {

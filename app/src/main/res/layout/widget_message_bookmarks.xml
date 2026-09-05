@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar" />
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent"
+        android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <TextView android:id="@+id/bookmarks_retry" android:text="@string/bookmarks_load_failed"
+            android:visibility="gone" android:clickable="true" android:focusable="true"
+            android:accessibilityLiveRegion="polite" style="@style/UiKit.Settings.Item.Icon" />
+        <include android:id="@+id/bookmarks_loading" layout="@layout/widget_chat_list_adapter_item_loading"
+            android:layout_width="match_parent" android:layout_height="48dp" android:visibility="gone" />
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/bookmarks_list"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:padding="12dp" android:clipToPadding="false" android:scrollbars="vertical" />
+            <androidx.core.widget.NestedScrollView android:id="@+id/bookmarks_empty"
+                android:layout_width="match_parent" android:layout_height="match_parent"
+                android:fillViewport="true" android:visibility="gone">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:gravity="center" android:padding="24dp">
+                    <ImageView android:layout_width="64dp" android:layout_height="64dp"
+                        android:layout_marginBottom="16dp" android:src="@drawable/ic_bookmark_24dp"
+                        app:tint="?attr/colorInteractiveNormal" android:importantForAccessibility="no" />
+                    <TextView android:text="@string/bookmarks_empty_title" android:gravity="center"
+                        android:textColor="?attr/colorHeaderPrimary" style="@style/UiKit.TextView.Large" />
+                    <TextView android:text="@string/bookmarks_empty_body" android:gravity="center"
+                        android:layout_marginTop="8dp" android:textColor="?attr/colorTextMuted"
+                        style="@style/UiKit.TextView" />
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
+        </FrameLayout>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

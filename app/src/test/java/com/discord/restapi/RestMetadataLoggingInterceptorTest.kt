@@ -25,6 +25,16 @@ import retrofit2.http.Query
 
 class RestMetadataLoggingInterceptorTest {
     @Test
+    fun `saved message summaries and notes are redacted`() {
+        val log = RestLogRedactor.redact(
+            """{"save_data":{"channel_id":"10","message_id":"20","author_summary":"private author", "channel_summary":"private channel", "message_summary":"private text", "notes":"private note"}}""",
+        )
+        assertFalse(log.contains("private"))
+        assertTrue(log.contains("\"channel_id\":\"10\""))
+        assertTrue(log.contains("\"message_id\":\"20\""))
+    }
+
+    @Test
     fun `debug build enables logging and release build disables it`() {
         val debugClient = OkHttpClient.Builder().addDebugRestLogging(true).build()
         val releaseClient = OkHttpClient.Builder().addDebugRestLogging(false).build()

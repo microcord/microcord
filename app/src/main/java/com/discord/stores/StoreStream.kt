@@ -652,6 +652,7 @@ class StoreStream private constructor(
     })
     private val pendingReplies = StorePendingReplies(dispatcher, observationDeck)
     private val unreadSettingNotice = StoreUnreadSettingNotice(dispatcher, observationDeck, clock)
+    private val savedMessages = StoreSavedMessages(dispatcher, observationDeck, { RestAPI.apiOrNull })
     private val pinnedMessages = StorePinnedMessages(dispatcher, observationDeck, loader = { channelId, before, callback ->
         val generation = authGeneration
         restApi.getChannelPins(channelId, before = before)
@@ -1087,6 +1088,7 @@ class StoreStream private constructor(
         messagePreviews,
         pendingReplies,
         pinnedMessages,
+        savedMessages,
         safetyHub,
         unreadSettingNotice,
         messageUploads,
@@ -1233,6 +1235,9 @@ class StoreStream private constructor(
                 }
             },
         )
+        observationDeck.connect(permissions, channels, guilds, updateOnConnect = false) {
+            savedMessages.invalidateUnavailable()
+        }
         StageStoreAccess.install(lurking)
         WidgetHomeViewModel.storeLurking = lurking
         WidgetHomeViewModel.storeGuildsNsfw = guildsNsfw
@@ -2259,6 +2264,8 @@ class StoreStream private constructor(
         }
 
         // Messages
+        dispatchSubscribe(events.savedMessageCreate, "streamSavedMessageCreate", savedMessages::handleSavedMessageCreate)
+        dispatchSubscribe(events.savedMessageDelete, "streamSavedMessageDelete", savedMessages::handleSavedMessageDelete)
         dispatchSubscribe(events.messageCreate, "streamMessageCreate", ::handleMessageCreateInternal)
         dispatchSubscribe(events.messageUpdate, "streamMessageUpdate") { message ->
             val incoming = DomainMessage(message)
@@ -2270,6 +2277,7 @@ class StoreStream private constructor(
                 }
             }
             pinnedMessages.handleMessageUpdate(message)
+            savedMessages.handleMessageUpdate(message)
             messageState.handleMessageUpdate(message)
             messageReplies.handleMessageUpdate(message)
             threadMessages.handleMessageUpdate(message)
@@ -2280,6 +2288,7 @@ class StoreStream private constructor(
         dispatchSubscribe(events.messageDelete, "streamMessageDelete") { deleted ->
             messages.handleMessageDelete(deleted)
             pinnedMessages.handleMessageDeleteBulk(deleted.channelId, deleted.messageIds.orEmpty())
+            savedMessages.handleMessageDelete(deleted.channelId, deleted.messageIds.orEmpty())
             pendingReplies.handleMessageDelete(deleted)
             messageState.handleMessageDelete(deleted)
             messageReplies.handleMessageDelete(deleted)
@@ -3109,6 +3118,7 @@ class StoreStream private constructor(
         val token = state?.token
         if (token != gatewayToken) {
             authGeneration++
+            savedMessages.handlePreLogout()
             if (::messageSendCoordinator.isInitialized) messageSendCoordinator.cancelAll()
             cancelActiveUploads()
             messagesLoader.reset()
@@ -3181,6 +3191,7 @@ class StoreStream private constructor(
             users.getMeInternal().id.takeUnless { it == 0L }?.let(multiAccount::removeAccountInternal)
         }
         authGeneration++
+        savedMessages.handlePreLogout()
         gatewayConnection.handlePreLogout()
         if (::messageSendCoordinator.isInitialized) messageSendCoordinator.cancelAll()
         cancelActiveUploads()
@@ -3308,6 +3319,7 @@ class StoreStream private constructor(
             runCatching(action).onFailure { Log.e("StoreStream", "Logout reset failed for $name", it) }
         }
         // Before anything else, so a settings write still in flight cannot repopulate the cache.
+        resetStore("savedMessages", savedMessages::handlePreLogout)
         resetStore("userSettingsProtoWriter", userSettingsProtoWriter::handlePreLogout)
         resetStore("userSettingsProto", userSettingsProto::handlePreLogout)
         resetStore("frecencyProtoWriter", frecencyProtoWriter::handlePreLogout)
@@ -3384,6 +3396,13 @@ class StoreStream private constructor(
             (payload.users.orEmpty() + listOfNotNull(payload.me)).associateBy { it.id }
         authentication.handleConnectionOpen(payload)
         users.handleConnectionOpen(payload)
+        val savedMessagesUserId = users.getMeInternal().id
+        // READY may queue a refreshed auth token above; activate after that token's account reset.
+        dispatcher.schedule {
+            if (users.getMeInternal().id == savedMessagesUserId) {
+                savedMessages.handleConnectionOpen(savedMessagesUserId)
+            }
+        }
         multiAccount.handleConnectionOpen(users.getMeInternal(), authentication.getAuthState()?.token)
         multiAccountSwitch.handleConnectionOpen(users.getMeInternal())
         // Deferred a dispatch: the registration reads the account snapshot, which does not include
@@ -4003,6 +4022,7 @@ class StoreStream private constructor(
         @JvmStatic fun getMessagePreviews() = requireInstance().messagePreviews
         @JvmStatic fun getPendingReplies() = requireInstance().pendingReplies
         @JvmStatic fun getPinnedMessages() = requireInstance().pinnedMessages
+        @JvmStatic fun getSavedMessages() = requireInstance().savedMessages
         @JvmStatic fun getSafetyHub() = requireInstance().safetyHub
         @JvmStatic fun getMessageUploads() = requireInstance().messageUploads
         @JvmStatic fun getMessageState() = requireInstance().messageState

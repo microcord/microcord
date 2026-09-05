@@ -1165,6 +1165,7 @@ or observable behavior. Small implementation details do not belong here.
 
 | Date | Decision | Reason | Consequence |
 | --- | --- | --- | --- |
+| 2026-09-05 | Backport React Native bookmark viewing and removal; defer local bookmark creation | User confirmed viewing works and requested removal of the failing Bookmark Message feature | Keep the Notifications toolbar entry, synced viewer, jump and card removal. Remove the long-press bookmark action, PUT contract, request DTO and save logic rather than hiding them behind a flag. Use default REST/Gateway transport and clear account state on logout; no transport identity or TLS changes |
 | 2026-08-11 | Allow Discord's client-side Firebase configuration for FCM parity | The user explicitly overrode the prior project-owned-Firebase restriction after confirming custom-project tokens cannot be delivered by Discord's sender | The reference `google-services` client identifiers may be used locally; private Firebase Admin/service-account credentials, account tokens, and cookies remain forbidden |
 | 2026-08-09 | Publish master builds as debug Actions artifacts and reserve tagged release APKs for manual workflow runs | Continuous tagged releases obscured intentional releases and provided no embedded CI provenance | Settings shows `Dev <build id> <commit hash>`; manual release APKs retain the committed Baseline Profile |
 | 2026-08-09 | Sign local and CI debug/release APKs with one repository-owned development certificate | Per-machine Android debug keys made GitHub Actions APKs incompatible with local installs | All Manticord development artifacts are update-compatible; the public key is explicitly not a production trust identity |
@@ -3891,3 +3892,71 @@ Reconnect and visually verify icon-inside-pill and the message-jump glyph.
   RN `out.js:620670` and `out.js:2145650` | reconcile the pre-existing monotonically increasing
   version tracker with RN's cache-write calculation from current channel/read-state IDs; not
   required for this membership reconciliation fix and not changed in this slice.
+
+### 2026-09-05 - React Native Bookmark Viewer
+
+- Scope: a Bookmarks button in the standalone Recent Mentions/Notifications toolbar and an
+  account-synced list with previews, jump-to-message, card removal, loading, retry, empty and
+  unavailable states. User requested removal of local bookmark creation after live PUT failures;
+  its long-press action, eligibility/upsell logic, request DTO, PUT endpoint, store save method and
+  dedicated tests are removed, not merely hidden. Empty copy now points to bookmarks made in
+  Discord instead of advertising an unavailable long-press action. Reminders remain in the
+  collection but not the list; no reminder editor, scheduling or notifications. No 126.21 phase
+  or audit blocker is promoted to DONE by this modern extension.
+- Reference: read-only `C:/Users/manti/Desktop/secresearch/discord/discordapk/out.js`:
+  routes at 119291-119296; store at 1331948-1332351; eligibility at 1330775-1331362;
+  bookmark caller at 1333557-1333568; cards at 1365082-1366078; HTTP actions at
+  2135838-2136016. Hermes functions F73989, F74035, F74039, F74058/F74059, F74071/F74072,
+  F76485/F76498/F76504 and F125943-F125945 resolve broken decompilation. UNKNOWN channel
+  type 10000 is confirmed at out.js:125607 / Hermes F8274. The summary and notes fields are
+  documented strings in `discord-userdoccers/discord-userdoccers`, commit
+  `3db62a60d7b5bd0ea4761e68690094e532466cd5`, `pages/resources/user.mdx:1970-1982`.
+- Transport/state: typed `SavedMessage`, `SaveData`, GET response and deletion payload; GET
+  `users/@me/saved-messages` and DELETE with channel/message IDs, plus
+  `SAVED_MESSAGE_CREATE` / `SAVED_MESSAGE_DELETE` to sync changes from other clients. GET has
+  no pagination parameters. `StoreSavedMessages` runs mutations on the owning dispatcher, publishes
+  immutable snapshots, retains missing-message metadata, merges message edits/deletions, and
+  maintains channel, unavailable and overdue indexes. READY refetches; failed fetches retain
+  known entries and are retryable. Account generations reject stale responses and cold requests.
+- Intentional resilience differences: reconcile confirmed DELETE responses as well as
+  idempotent Gateway echoes; clear overdue state on logout (RN leaves it behind); retain data on
+  fetch errors. Full-fetch races merge coalesced in-flight message changes instead of discarding
+  new Gateway state. The temporary journal is capped at 1024 distinct IDs; overflow leaves
+  current data intact and offers retry, without an automatic retry loop.
+- UI: existing generated-binding Discord message rows render non-interactive previews capped
+  at 250dp and two text lines, including forwarded bodies. Command replies normalize only the
+  preview row type so their response body stays visible. Spoiler accessibility uses rendered
+  spans, not raw message text. Known inaccessible channels show a removable unavailable card;
+  a server-returned message with an uncached channel uses RN's UNKNOWN fallback. Card removal
+  does not require premium. Retain the action sheet's generated-binding migration and lifecycle
+  cleanup, but it no longer observes or fetches saved messages. Consolidated bookmark strings;
+  REST logging redacts saved-message summaries and notes, with a regression test.
+- Runtime evidence: on A065 / Android 16, normal-app GET returned HTTP 200 at 14:34:47 and
+  the user confirmed viewing works. PUT initially returned HTTP 404 with API code 0. A successful
+  official-client capture confirmed v9 and `{"source":"context_menu"}`; matching that body
+  still returned HTTP 404/code 0 at 14:35:28 and 14:36:21. Missing source was not a sufficient
+  fix; the cause remains unresolved. No desktop identity/header copying or API-version fallback.
+  Earlier isolated instrumentation hit a trust-anchor failure before the bookmark comparison;
+  this is distinct from the normal-app 404. ByeByeDPI is required by the user and was left enabled;
+  certificate validation was not changed. Temporary live probe and Gradle isolation script removed.
+- Verification: final `scripts/build.sh :app:testDebugUnitTest` filtered to
+  `StoreSavedMessagesTest` (17), `SavedMessagesTransportTest` (3),
+  `RestMetadataLoggingInterceptorTest` (4), `BookmarkPreviewTest` (4) and `MessageActionsTest` (3),
+  with `:app:assembleDebug :app:installDebug --offline`, passes: 31 tests, no skips, installed on
+  A065 / Android 16. Tests cover GET/DELETE metadata, typed Gateway events, immutable snapshots,
+  failed removal, delayed DELETE versus a newer Gateway save, account isolation, fetch races and
+  preview behavior. `git diff --check` passes. No release build or full device matrix was run.
+  The explicitly requested device X-Super-Properties capture used temporary debug-only logging
+  of that header alone; the capture code was removed before the final build/install. No captured
+  header values or credentials were added to the repository, and normal log redaction is unchanged.
+- Known limits: the list uses recovered themed components and a bookmark empty-state glyph,
+  not RN's dedicated illustration/group-DM facepile. No reminder editor or reminder scheduling
+  is added. Live DELETE, reconnect/account-switch behavior and the full visual/accessibility
+  matrix remain unverified. Local creation and reminder-to-bookmark conversion are deferred by
+  user decision; do not restore them without new runtime evidence and approval.
+- Resumable: `app/src/main/java/com/discord/widgets/chat/bookmarks/WidgetMessageBookmarks.kt` |
+  RN out.js:1365082-1366078 | device-check cards, two-line truncation, scroll/recycle, TalkBack
+  spoilers, toolbar Up and jump-to-Main with text/media/forwarded/command/deleted messages.
+- Resumable: `app/src/main/java/com/discord/stores/StoreSavedMessages.kt` |
+  RN out.js:1331948-1332351 and 2135838-2136016 | opt-in live check card removal, sync from
+  official-client changes, reconnect and account switch using sanitized logs.

@@ -66,6 +66,7 @@ import com.discord.api.hubs.EmailVerification
 import com.discord.api.hubs.EmailVerificationCode
 import com.discord.api.hubs.WaitlistSignup
 import com.discord.api.message.Message
+import com.discord.api.savedmessage.SavedMessagesResponse
 import com.discord.api.message.PollVoters
 import com.discord.api.notification.DeviceSyncResponse
 import com.discord.api.notification.PushSyncToken
@@ -962,6 +963,17 @@ interface RestAPIInterface {
     fun deletePermissionOverwrites(
         @Path("channelId") channelId: Long,
         @Path("targetId") targetId: Long,
+    ): Observable<Void>
+
+    // -- Personal saved messages ------------------------------------------------------------------
+
+    @GET("users/@me/saved-messages")
+    fun getSavedMessages(): Observable<SavedMessagesResponse>
+
+    @DELETE("users/@me/saved-messages/{channelId}/{messageId}")
+    fun deleteSavedMessage(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
     ): Observable<Void>
 
     // -- Pins and reactions -----------------------------------------------------------------------

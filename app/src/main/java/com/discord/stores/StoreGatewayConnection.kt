@@ -35,6 +35,8 @@ import com.discord.api.requiredaction.UserRequiredActionUpdate
 import com.discord.api.role.GuildRoleCreate
 import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
+import com.discord.api.savedmessage.SavedMessage
+import com.discord.api.savedmessage.SavedMessageDelete
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.sticker.GuildStickersUpdate
 import com.discord.api.soundboard.SoundboardSound
@@ -209,6 +211,9 @@ class StoreGatewayConnection(
     val forumUnreads = behavior<ForumUnreads>()
 
     // Messages
+    // Account-scoped mutations must not replay a prior account's saved content to late subscribers.
+    val savedMessageCreate = publish<SavedMessage>()
+    val savedMessageDelete = publish<SavedMessageDelete>()
     val messageCreate = behavior<Message>()
     val messageUpdate = behavior<Message>()
     val messageDelete = behavior<ModelMessageDelete>()
@@ -587,6 +592,8 @@ class StoreGatewayConnection(
             "FORUM_UNREADS" -> forumUnreads.emit(data)
 
             // Messages
+            "SAVED_MESSAGE_CREATE" -> savedMessageCreate.emit(data)
+            "SAVED_MESSAGE_DELETE" -> savedMessageDelete.emit(data)
             "MESSAGE_CREATE" -> messageCreate.emit(data)
             "MESSAGE_UPDATE" -> messageUpdate.emit(data)
             "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> messageDelete.emit(data)

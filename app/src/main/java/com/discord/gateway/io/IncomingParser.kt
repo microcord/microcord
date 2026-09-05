@@ -33,6 +33,8 @@ import com.discord.api.requiredaction.UserRequiredActionUpdate
 import com.discord.api.role.GuildRoleCreate
 import com.discord.api.role.GuildRoleDelete
 import com.discord.api.role.GuildRoleUpdate
+import com.discord.api.savedmessage.SavedMessage
+import com.discord.api.savedmessage.SavedMessageDelete
 import com.discord.api.stageinstance.StageInstance
 import com.discord.api.sticker.GuildStickersUpdate
 import com.discord.api.soundboard.SoundboardSound
@@ -272,6 +274,8 @@ class IncomingParser(private val gson: Gson) {
         "FORUM_UNREADS" -> gson.fromJson(data, ForumUnreads::class.java)
 
         // Messages
+        "SAVED_MESSAGE_CREATE" -> gson.fromJson(data, SavedMessage::class.java)
+        "SAVED_MESSAGE_DELETE" -> gson.fromJson(data, SavedMessageDelete::class.java)
         "MESSAGE_CREATE", "MESSAGE_UPDATE" -> gson.fromJson(data, Message::class.java)
         "MESSAGE_DELETE", "MESSAGE_DELETE_BULK" -> gson.fromJson(data, ModelMessageDelete::class.java)
         "MESSAGE_ACK" -> gson.fromJson(data, ModelReadState::class.java)
