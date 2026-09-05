@@ -119,7 +119,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             ensureChatInflated()
         }
         super.onViewCreated(view, savedInstanceState)
-        pluginHeaderRegistration = PluginUiRegistry.addHeaderListener { view.post(::refreshChatToolbar) }
+        pluginHeaderRegistration = PluginUiRegistry.addHeaderListener {
+            view.post { if (_binding?.root === view) refreshChatToolbar() }
+        }
         applyPanelInsets()
         WidgetHomePanelLoading(binding.root).configure(this)
         startPanelState = PanelState.Closed
@@ -204,57 +206,56 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             .filterKeys { it !in mentions.getLowImportanceMentionChannels() }.values.sum()
         updateUnreadCount()
         val navigation = StoreStream.getNavigation()
-        navigationSubscription = navigation.getNavigationPanelAction().subscribe { action ->
-            activity?.runOnUiThread { navigation.setNavigationPanelAction(action, panels) }
+        // Keep main-thread delivery in the subscription so onStop also cancels queued UI work.
+        navigationSubscription = navigation.getNavigationPanelAction().ui().subscribe { action ->
+            navigation.setNavigationPanelAction(action, panels)
         }
-        selectedChannelSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel().subscribe { selected ->
-            activity?.runOnUiThread {
-                // A cold start emits `Uninitialized` before the persisted selection resolves. It has
-                // no channel, so deciding the surface from it pins the DM list open at full width and
-                // the real channel then snaps it shut a frame later. Wait for the resolved value.
-                if (!selected.isResolved()) return@runOnUiThread
-                val channel = selected.channelOrParent
-                val closeStartupPanel = awaitingInitialSelection && channel != null
-                awaitingInitialSelection = false
-                val surface = centerSurface(selected)
-                if (surface == CenterSurface.NONE) ensureStartPanelFragments()
-                if (surface == CenterSurface.FORUM) ensureForumFragment()
-                if (surface == CenterSurface.DIRECTORY) {
-                    ensureDirectoryFragment()
-                    // Built up front: inflating it on the drag's first frame janks the open.
-                    ensureEndPanelFragment()
+        selectedChannelSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel().ui().subscribe { selected ->
+            // A cold start emits `Uninitialized` before the persisted selection resolves. It has
+            // no channel, so deciding the surface from it pins the DM list open at full width and
+            // the real channel then snaps it shut a frame later. Wait for the resolved value.
+            if (!selected.isResolved()) return@subscribe
+            val channel = selected.channelOrParent
+            val closeStartupPanel = awaitingInitialSelection && channel != null
+            awaitingInitialSelection = false
+            val surface = centerSurface(selected)
+            if (surface == CenterSurface.NONE) ensureStartPanelFragments()
+            if (surface == CenterSurface.FORUM) ensureForumFragment()
+            if (surface == CenterSurface.DIRECTORY) {
+                ensureDirectoryFragment()
+                // Built up front: inflating it on the drag's first frame janks the open.
+                ensureEndPanelFragment()
+            }
+            lockCloseRightPanel(surface != CenterSurface.CHAT && surface != CenterSurface.DIRECTORY)
+            panels.setStartPanelUseFullPortraitWidth(surface == CenterSurface.NONE)
+            panels.setStartPanelLockState(
+                if (surface == CenterSurface.NONE) OverlappingPanelsLayout.LockState.OPEN
+                else OverlappingPanelsLayout.LockState.UNLOCKED,
+            )
+            if (surface == CenterSurface.CHAT) ensureChatInflated()
+            chatBinding?.root?.visibility = if (surface == CenterSurface.CHAT) View.VISIBLE else View.GONE
+            binding.panelCenter.widgetForumChannelList.visibility =
+                if (surface == CenterSurface.FORUM) View.VISIBLE else View.GONE
+            binding.panelCenter.widgetHomePanelDirectory.visibility =
+                if (surface == CenterSurface.DIRECTORY) View.VISIBLE else View.GONE
+            if (channel != null) {
+                if (surface == CenterSurface.FORUM) {
+                    (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)?.refreshToolbar()
+                } else if (surface != CenterSurface.DIRECTORY) {
+                    configureToolbar(channel)
                 }
-                lockCloseRightPanel(surface != CenterSurface.CHAT && surface != CenterSurface.DIRECTORY)
-                panels.setStartPanelUseFullPortraitWidth(surface == CenterSurface.NONE)
-                panels.setStartPanelLockState(
-                    if (surface == CenterSurface.NONE) OverlappingPanelsLayout.LockState.OPEN
-                    else OverlappingPanelsLayout.LockState.UNLOCKED,
-                )
-                if (surface == CenterSurface.CHAT) ensureChatInflated()
-                chatBinding?.root?.visibility = if (surface == CenterSurface.CHAT) View.VISIBLE else View.GONE
-                binding.panelCenter.widgetForumChannelList.visibility =
-                    if (surface == CenterSurface.FORUM) View.VISIBLE else View.GONE
-                binding.panelCenter.widgetHomePanelDirectory.visibility =
-                    if (surface == CenterSurface.DIRECTORY) View.VISIBLE else View.GONE
-                if (channel != null) {
-                    if (surface == CenterSurface.FORUM) {
-                        (childFragmentManager.findFragmentByTag(FORUM_TAG) as? WidgetForumBrowser)?.refreshToolbar()
-                    } else if (surface != CenterSurface.DIRECTORY) {
-                        configureToolbar(channel)
-                    }
-                    if (closeStartupPanel) panels.closePanelsImmediately()
-                }
+                if (closeStartupPanel) panels.closePanelsImmediately()
             }
         }
-        activeThreadsSubscription = StoreStream.getThreadsActive().observeAllActiveThreadsById().subscribe {
-            activity?.runOnUiThread(::refreshChatToolbar)
+        activeThreadsSubscription = StoreStream.getThreadsActive().observeAllActiveThreadsById().ui().subscribe {
+            refreshChatToolbar()
         }
-        voiceChannelSubscription = StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().subscribe {
-            activity?.runOnUiThread(::refreshChatToolbar)
+        voiceChannelSubscription = StoreStream.getVoiceChannelSelected().observeSelectedVoiceChannelId().ui().subscribe {
+            refreshChatToolbar()
         }
         // A DM's title is built from its recipients, so renaming one has to redraw the toolbar.
-        friendNicknameSubscription = StoreStream.getUserRelationships().observeNicknames().subscribe {
-            activity?.runOnUiThread(::refreshChatToolbar)
+        friendNicknameSubscription = StoreStream.getUserRelationships().observeNicknames().ui().subscribe {
+            refreshChatToolbar()
         }
         dmPresenceSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel()
             .switchMap { selected ->
@@ -263,21 +264,19 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                     ?: Observable.just(null)
             }
             .distinctUntilChanged()
-            .subscribe { activity?.runOnUiThread(::refreshChatToolbar) }
-        mentionSubscription = StoreStream.getMentions().observeTotalMentions().subscribe { count ->
-            activity?.runOnUiThread {
-                unreadCount = count
-                updateUnreadCount()
-            }
+            .ui()
+            .subscribe { refreshChatToolbar() }
+        mentionSubscription = StoreStream.getMentions().observeTotalMentions().ui().subscribe { count ->
+            unreadCount = count
+            updateUnreadCount()
         }
         val spoilerAgree = StoreStream.getChannelSpoilerAgree()
         spoilerGateSubscription = Observable.combineLatest(
             StoreStream.getChannelsSelected().observeResolvedSelectedChannel(),
             spoilerAgree.observeAnyAgreementChange(),
         ) { selected, _ -> selected }
-            .subscribe { selected ->
-                activity?.runOnUiThread { configureSpoilerGate(selected) }
-            }
+            .ui()
+            .subscribe(::configureSpoilerGate)
     }
 
     private fun configureSpoilerGate(selected: StoreChannelsSelected.ResolvedSelectedChannel) {
