@@ -6,9 +6,11 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.text.format.Formatter
+import android.text.method.LinkMovementMethod
 import android.view.View
 import androidx.core.content.FileProvider
 import androidx.core.view.isVisible
+import androidx.core.view.ViewCompat
 import com.discord.BuildConfig
 import com.discord.R
 import com.discord.app.AppFragment
@@ -16,14 +18,23 @@ import com.discord.databinding.WidgetSettingsUpdatesBinding
 import com.discord.utilities.rx.ui
 import com.discord.utilities.updates.AppUpdater
 import com.discord.utilities.updates.AppUpdater.Phase
+import com.discord.utilities.updates.AppUpdate
+import com.discord.utilities.updates.AppUpdateChanges
+import com.discord.utilities.uri.UriHandler
+import com.discord.widgets.changelog.ChangeLogParser
+import rx.Subscription
 
 class WidgetSettingsUpdates : AppFragment(R.layout.widget_settings_updates) {
     private var binding: WidgetSettingsUpdatesBinding? = null
     private var preparingInstall = false
+    private var cachedChanges: AppUpdateChanges? = null
+    private var changesKey: String? = null
+    private var changesJob: Subscription? = null
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val bound = WidgetSettingsUpdatesBinding.bind(view).also { binding = it }
+        changesKey = null
         setActionBarTitle(R.string.updater_title)
         setActionBarDisplayHomeAsUpEnabled()
         SettingsNavigation.bindBack(this)
@@ -33,7 +44,18 @@ class WidgetSettingsUpdates : AppFragment(R.layout.widget_settings_updates) {
             AppUpdater.setAutomaticChecks(enabled)
             if (enabled) AppUpdater.onForeground(view.context)
         }
-        bound.updaterCheck.setOnClickListener { AppUpdater.check(view.context) }
+        bound.updaterCheck.setOnClickListener {
+            resetChanges()
+            cachedChanges = null
+            AppUpdater.check(view.context)
+        }
+        bound.updaterChangesRetry.setOnClickListener {
+            resetChanges()
+            render(AppUpdater.state)
+        }
+        bound.updaterNotes.movementMethod = LinkMovementMethod.getInstance()
+        ViewCompat.setAccessibilityHeading(bound.updaterNotesTitle, true)
+        ViewCompat.setAccessibilityHeading(bound.updaterCommitsTitle, true)
         bound.updaterCancel.setOnClickListener { AppUpdater.cancelDownload(view.context) }
         bound.updaterAction.setOnClickListener {
             if (AppUpdater.state.phase == Phase.READY) installUpdate() else AppUpdater.startDownload(view.context)
@@ -49,11 +71,13 @@ class WidgetSettingsUpdates : AppFragment(R.layout.widget_settings_updates) {
     }
 
     override fun onPause() {
+        resetChanges()
         AppUpdater.stopWatchingDownload()
         super.onPause()
     }
 
     override fun onDestroyView() {
+        resetChanges()
         binding = null
         super.onDestroyView()
     }
@@ -101,6 +125,74 @@ class WidgetSettingsUpdates : AppFragment(R.layout.widget_settings_updates) {
             if (canInstall(context)) R.string.updater_install else R.string.updater_allow_install
         } else R.string.updater_download)
         bound.updaterCancel.isVisible = state.phase == Phase.DOWNLOADING
+        bound.updaterChanges.isVisible = update != null
+        if (update != null && state.phase != Phase.CHECKING) showChanges(update)
+    }
+
+    private fun resetChanges() {
+        changesJob?.unsubscribe()
+        changesJob = null
+        changesKey = null
+    }
+
+    private fun showChanges(update: AppUpdate) {
+        val key = "${update.release}:${update.commitSha}"
+        if (changesKey == key) return
+        resetChanges()
+        changesKey = key
+        val cached = cachedChanges?.takeIf {
+            it.release == update.release && it.toSha == update.commitSha && it.fromSha == BuildConfig.UPDATE_COMMIT_SHA
+        }
+        if (cached != null) {
+            renderChanges(cached)
+            return
+        }
+        val bound = binding ?: return
+        bound.updaterChangesStatus.setText(R.string.updater_changes_loading)
+        bound.updaterChangesStatus.isVisible = true
+        bound.updaterChangesRetry.isVisible = false
+        bound.updaterNotes.text = ""
+        bound.updaterNotesTruncated.isVisible = false
+        bound.updaterCommits.text = ""
+        bound.updaterCommitSummary.text = ""
+        changesJob = AppUpdater.loadChanges(update).ui(this).subscribe({ changes ->
+            if (changesKey == key) {
+                changesJob = null
+                cachedChanges = changes
+                renderChanges(changes)
+            }
+        }, {
+            if (changesKey == key) {
+                changesJob = null
+                binding?.updaterChangesStatus?.setText(R.string.updater_changes_failed)
+                binding?.updaterChangesRetry?.isVisible = true
+            }
+        })
+    }
+
+    private fun renderChanges(changes: AppUpdateChanges) {
+        val bound = binding ?: return
+        val context = bound.root.context
+        bound.updaterChangesStatus.isVisible = false
+        bound.updaterChangesRetry.isVisible = false
+        val notes = changes.notes?.takeIf(String::isNotBlank) ?: context.getString(R.string.updater_notes_empty)
+        runCatching {
+            ChangeLogParser.parse(context, notes) { ctx, url, mask -> UriHandler.handleOrUntrusted(ctx, url, mask) }
+        }.fold(
+            onSuccess = { bound.updaterNotes.setDraweeSpanStringBuilder(it) },
+            onFailure = { bound.updaterNotes.text = notes },
+        )
+        bound.updaterNotesTruncated.isVisible = changes.notesTruncated == true
+        bound.updaterCommitSummary.text = when (changes.comparison) {
+            AppUpdateChanges.Comparison.COMPARED -> buildString {
+                append(context.getString(R.string.updater_commits_range, changes.fromSha?.take(8), changes.toSha?.take(8)))
+                if (changes.commitsTruncated == true) append("\n").append(context.getString(
+                    R.string.updater_commits_truncated, changes.commits.orEmpty().size, changes.totalCommits))
+            }
+            AppUpdateChanges.Comparison.IDENTICAL -> context.getString(R.string.updater_commits_identical)
+            else -> context.getString(R.string.updater_commits_unavailable)
+        }
+        bound.updaterCommits.text = changes.commits.orEmpty().joinToString("\n\n") { "${it.sha?.take(8)}  ${it.title.orEmpty()}" }
     }
 
     private fun installUpdate() {

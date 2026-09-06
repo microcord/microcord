@@ -24,6 +24,7 @@ import com.discord.databinding.WidgetSettingsUpdatesBinding
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.feature.ClientSettings
 import com.discord.utilities.updates.AppUpdate
+import com.discord.utilities.updates.AppUpdateChanges
 import com.discord.utilities.updates.AppUpdater
 import com.discord.utilities.updates.AppUpdater.Phase
 import com.discord.utilities.updates.AppUpdater.State
@@ -49,6 +50,7 @@ class WidgetSettingsUpdatesTest {
         val restoredField = AppUpdater::class.java.getDeclaredField("restored").apply { isAccessible = true }
         val pollingField = AppUpdater::class.java.getDeclaredField("polling").apply { isAccessible = true }
         val noticeField = AppUpdater::class.java.getDeclaredField("queuedNoticeSha").apply { isAccessible = true }
+        val changesField = WidgetSettingsUpdates::class.java.getDeclaredField("cachedChanges").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
         val states = statesField.get(AppUpdater) as BehaviorSubject<State>
         val (originalState, originalRestored) = onMain {
@@ -91,9 +93,19 @@ class WidgetSettingsUpdatesTest {
         lateinit var fragment: WidgetSettingsUpdates
         lateinit var binding: WidgetSettingsUpdatesBinding
 
+        fun changesFor(update: AppUpdate) = AppUpdateChanges(
+            update.release, BuildConfig.UPDATE_COMMIT_SHA, update.commitSha, "Release notes fixture.", false,
+            if (update.hasBuildMetadata) listOf(AppUpdateChanges.Commit(update.commitSha, "fix: changelog fixture")) else emptyList(),
+            if (update.hasBuildMetadata) AppUpdateChanges.Comparison.COMPARED else AppUpdateChanges.Comparison.UNAVAILABLE,
+            if (update.hasBuildMetadata) 1L else null, false,
+        ).validate(update, BuildConfig.UPDATE_COMMIT_SHA)
+
         fun assertRendered(state: State, status: Int, action: Int? = null,
             checkEnabled: Boolean = true, progress: Int? = null, indeterminate: Boolean = false) {
-            onMain { states.onNext(state) }
+            onMain {
+                state.update?.let { changesField.set(fragment, changesFor(it)) }
+                states.onNext(state)
+            }
             instrumentation.waitForIdleSync()
             onMain {
                 val context = binding.root.context
@@ -124,6 +136,11 @@ class WidgetSettingsUpdatesTest {
                         it.commitSha?.take(8) ?: context.getString(R.string.updater_unknown_commit),
                         Formatter.formatShortFileSize(context, requireNotNull(it.size))),
                         binding.updaterRelease.text.toString())
+                    assertEquals(View.VISIBLE, binding.updaterChanges.visibility)
+                    assertEquals(View.GONE, binding.updaterChangesStatus.visibility)
+                    assertEquals("Release notes fixture.", binding.updaterNotes.text.toString())
+                    assertEquals(if (it.hasBuildMetadata) "${it.commitSha?.take(8)}  fix: changelog fixture" else "",
+                        binding.updaterCommits.text.toString())
                 }
                 assertEquals(Long.MAX_VALUE, runtime.getLong("next_check", 0))
                 assertFalse("The UI must not start a feed request", checkedNetwork.get())
@@ -158,7 +175,7 @@ class WidgetSettingsUpdatesTest {
                 fragments.dispatchActivityCreated()
                 fragments.dispatchStart()
                 fragments.dispatchResume()
-                fragment = WidgetSettingsUpdates()
+                fragment = WidgetSettingsUpdates().also { changesField.set(it, changesFor(update)) }
                 fragments.supportFragmentManager.beginTransaction().add(container.id, fragment).commitNow()
                 binding = WidgetSettingsUpdatesBinding.bind(fragment.requireView())
                 assertTrue(binding.updaterAutomatic.isChecked)
@@ -190,7 +207,10 @@ class WidgetSettingsUpdatesTest {
                     val oldView = fragment.requireView()
                     val containerId = fragment.id
                     manager.beginTransaction().remove(fragment).commitNow()
-                    fragment = WidgetSettingsUpdates().apply { setInitialSavedState(savedState) }
+                    fragment = WidgetSettingsUpdates().apply {
+                        setInitialSavedState(savedState)
+                        changesField.set(this, changesFor(update))
+                    }
                     manager.beginTransaction().add(containerId, fragment).commitNow()
                     binding = WidgetSettingsUpdatesBinding.bind(fragment.requireView())
                     assertNotSame(oldView, binding.root)

@@ -1,8 +1,11 @@
 # Manticord Release Downloads
 
 Cloudflare Worker exposing published, non-prerelease `build-N` releases' `app-release.apk`
-assets and validated build metadata from `git.hoodnet.work/firecord/microcord`. The repository,
-raw release notes and other assets remain private. The selected APKs become publicly downloadable.
+assets and validated build metadata from `git.hoodnet.work/firecord/microcord`. The repository
+and other assets remain private. Selected APKs, bounded published release notes and commit titles
+between the installed and published build SHAs are intentionally public. Keep credentials and
+private information out of release notes and commit titles. Draft/prerelease notes, author data,
+commit message bodies, patches, files and upstream error payloads are never exposed.
 
 Primary address: https://microcord.mantikafasi.dev
 
@@ -27,10 +30,14 @@ or the Android app. Local `.env*` and `.dev.vars*` files are ignored. The Worker
 - `GET /latest.json`: `release`, `publishedAt`, `apkUrl`, `sha256`, `size`, plus `commitSha`,
   `commitTimestamp`, `versionCode`, `versionName`, `packageName` when a valid manifest is attached.
 - `GET /releases/build-163.apk`: that exact published release's APK, not whichever is latest.
-- Both routes support HEAD. Unknown routes, extra query parameters and other methods are rejected.
+- `GET /releases/build-166/changes.json?from=<installed SHA>`: notes and commit titles for that
+  exact published APK. Requires exactly one `from` parameter containing a full 40-hex installed
+  commit SHA (case-insensitive, returned lowercase). No repository, branch or other inputs.
+- All routes support HEAD. Unknown routes, extra query parameters and other methods are rejected.
 
-The feed caches only sanitized release metadata for 60 seconds (internal cache schema `v2`).
-It never caches the raw release, raw manifest, credentials or media URLs. Downloads use fresh GitHub
+The feed caches only sanitized release metadata and bounded notes for 60 seconds (internal cache
+schema `v3`). Notes never enter `latest.json`, preserving the existing feed and its 16 KiB client
+limit. The cache never stores the raw release, raw manifest, credentials or media URLs. Downloads use fresh GitHub
 redirects restricted to the observed `https://media.git.hoodnet.work` origin, or stream a
 binary 200/206 response. Redirects are not cached; upstream credentials/cookies are never
 forwarded to the user or to the download host. Single byte ranges are forwarded for resuming.
@@ -42,6 +49,38 @@ new build fields are absent, not fabricated from `target_commitish`, publication
 number. The client must report a legacy feed and not auto-prompt in that case. No historical
 release needs to be edited. An attached but invalid or unavailable manifest fails closed (503),
 rather than silently becoming a legacy feed.
+
+## Changelog Response
+
+| Field | Contract |
+| --- | --- |
+| `release` | Validated requested `build-N` release tag |
+| `fromSha` | Full installed SHA, lowercase |
+| `toSha` | Validated manifest `commitSha`, lowercase; `null` for legacy releases |
+| `notes` | Release `body`, at most 4,000 UTF-16 code units; empty when absent |
+| `notesTruncated` | Whether the release body exceeded that limit |
+| `commits` | At most 100 `{sha, title}` objects; full lowercase SHA and first-line-only title, at most 200 UTF-16 code units |
+| `comparison` | `compared`, `identical` or `unavailable` |
+| `totalCommits` | Validated comparison total, `0` for identical, `null` when unavailable |
+| `commitsTruncated` | Whether more commits exist than returned (pagination or response byte cap) |
+
+The Worker calls only the fixed repository's GitHub compare API using
+`from...manifest.commitSha?per_page=100&page=1`, never the mutable `target_commitish` or a
+previous release. Commit titles are exposed only for `status: ahead` with both `base_commit.sha`
+and `merge_base_commit.sha` equal to the installed SHA. Identical SHAs skip comparison entirely
+and return an empty list/zero total. Legacy releases still expose notes without fabricated SHAs.
+
+Unknown/404 bases, behind/diverged history, malformed comparisons, throttling, server errors,
+timeouts and redirects yield `unavailable`, an empty list, null total and `commitsTruncated: false`.
+They do not block notes, `latest.json` or APK downloads. Compare responses have a 10-second timeout
+and a streamed 4 MiB limit before parsing; diff/file data is discarded. No compare redirect is
+followed. Responses remain within the app's 128 KiB limit, trimming the commit list and setting
+`commitsTruncated` if JSON escaping expands the bounded strings past that limit.
+
+Only sanitized comparison results are cached for 10 minutes, keyed by the full installed and
+immutable target SHAs on the request's own origin (internal cache schema `v1`); unavailable
+results use 60 seconds. Release notes remain in the separate 60-second metadata cache so owner
+edits refresh independently. No KV, database or new dependency is used.
 
 ## Build Identity
 
@@ -97,6 +136,10 @@ CI keeps pushes as debug artifact uploads only. Manual `workflow_dispatch` build
 and publishes the manifest beside `app-release.apk`, failing if either file is missing. The
 release's `target_commitish` is pinned to `github.sha` to avoid branch movement during a build.
 There are no schedules or automatic releases. No GitHub credential is embedded in either file.
+Manual runs accept an optional string `release_notes` input, passed directly to the release
+action's `body`, never through a shell. These are public notes, not private build instructions.
+The owner can alternatively edit the release body on GitHub; the Worker exposes its bounded text
+after the metadata cache expires.
 
 The Worker fetches only the exact `update-manifest.json` asset ID listed on the same release as
 the APK. It permits a direct 200 response or one 302 to the observed media origin, with manual

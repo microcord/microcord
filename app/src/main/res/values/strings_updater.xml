@@ -27,4 +27,15 @@
     <string name="updater_download_failed">Download failed. Check your connection and free storage, then try again.</string>
     <string name="updater_verification_failed">The download could not be verified. It was discarded; please download it again.</string>
     <string name="updater_install_failed">Could not open the Android installer. Check installation permission and try again.</string>
+    <string name="updater_notes_title">Release notes</string>
+    <string name="updater_notes_empty">No release notes were provided.</string>
+    <string name="updater_notes_truncated">Release notes shortened for display.</string>
+    <string name="updater_commits_title">Commits since your installed build</string>
+    <string name="updater_commits_range">%1$s to %2$s</string>
+    <string name="updater_commits_truncated">Showing the first %1$d of %2$d commits.</string>
+    <string name="updater_commits_identical">This release has the same source revision as your installed build.</string>
+    <string name="updater_commits_unavailable">Commit comparison is unavailable for this build.</string>
+    <string name="updater_changes_loading">Loading release notes and commits...</string>
+    <string name="updater_changes_failed">Could not load release notes. You can still download the update.</string>
+    <string name="updater_changes_retry">Retry release notes</string>
 </resources>

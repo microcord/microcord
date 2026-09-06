@@ -74,4 +74,38 @@ class AppUpdateTest {
         assertFalse(acceptsUpdatePackage(update, 1, update.packageName, 1, true))
         assertFalse(acceptsUpdatePackage(update, 1, update.packageName, update.versionCode!!, false))
     }
+
+    @Test fun `release changes are bound to the installed and published source revisions`() {
+        val from = "a".repeat(40)
+        val changes = AppUpdateChanges(update.release, from, update.commitSha, "## Fixed\n- A bug", false,
+            listOf(AppUpdateChanges.Commit(update.commitSha, "fix: a bug")),
+            AppUpdateChanges.Comparison.COMPARED, 1, false)
+        val parsed = Gson().fromJson(Gson().toJson(changes), AppUpdateChanges::class.java).validate(update, from)
+        assertEquals(changes, parsed)
+        changes.copy(comparison = AppUpdateChanges.Comparison.UNAVAILABLE, commits = emptyList(), totalCommits = null)
+            .validate(update, from)
+        changes.copy(fromSha = update.commitSha, comparison = AppUpdateChanges.Comparison.IDENTICAL,
+            commits = emptyList(), totalCommits = 0).validate(update, update.commitSha!!)
+        changes.copy(totalCommits = 150, commitsTruncated = true, notesTruncated = true).validate(update, from)
+    }
+
+    @Test fun `malformed or mismatched changelogs cannot be rendered as another update`() {
+        val from = "a".repeat(40)
+        val changes = AppUpdateChanges(update.release, from, update.commitSha, "Notes", false,
+            listOf(AppUpdateChanges.Commit(update.commitSha, "fix: a bug")),
+            AppUpdateChanges.Comparison.COMPARED, 1, false)
+        val invalid = listOf(
+            changes.copy(release = "build-43"), changes.copy(fromSha = "c".repeat(40)),
+            changes.copy(toSha = "c".repeat(40)), changes.copy(notes = null),
+            changes.copy(notes = "x".repeat(4_001)), changes.copy(notesTruncated = null),
+            changes.copy(commits = List(101) { changes.commits!!.single() }),
+            changes.copy(commits = listOf(AppUpdateChanges.Commit("bad", "title"))),
+            changes.copy(commits = listOf(AppUpdateChanges.Commit(update.commitSha, "title\nprivate body"))),
+            changes.copy(commits = listOf(AppUpdateChanges.Commit(update.commitSha, "x".repeat(201)))),
+            changes.copy(commits = null), changes.copy(comparison = null), changes.copy(totalCommits = 0),
+            changes.copy(totalCommits = 150), changes.copy(commitsTruncated = true),
+            changes.copy(comparison = AppUpdateChanges.Comparison.UNAVAILABLE),
+        )
+        invalid.forEach { value -> assertThrows(Exception::class.java) { value.validate(update, from) } }
+    }
 }

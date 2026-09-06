@@ -8,7 +8,8 @@ const env = { GITHUB_TOKEN: "local-test-only" };
 const release = {
   tag_name: "build-42", draft: false, prerelease: false, published_at: "2026-09-06T12:00:00Z",
   target_commitish: "master",
-  body: "DO NOT EXPOSE private release notes",
+  body: "Public release notes",
+  author: { login: "DO NOT EXPOSE" },
   assets: [{ id: 7, name: "app-release.apk", state: "uploaded", size: 8, digest: `sha256:${"a".repeat(64)}` }],
 };
 const commitTimestamp = Date.parse("2026-09-06T11:00:00Z") / 1000;
@@ -16,6 +17,20 @@ const manifest = {
   commitSha: "b".repeat(40), commitTimestamp, versionCode: commitTimestamp - 1577836800,
   versionName: "1.0", sha256: "a".repeat(64), size: 8, packageName: "dev.mantikafasi.manticord",
 };
+const fromSha = "c".repeat(40);
+const changesPath = `/releases/build-42/changes.json?from=${fromSha}`;
+
+function ahead(from = fromSha, to = manifest.commitSha) {
+  return {
+    status: "ahead", base_commit: { sha: from }, merge_base_commit: { sha: from }, total_commits: 2,
+    commits: [
+      { sha: "d".repeat(40), commit: { message: "First title\nDO NOT EXPOSE commit body", author: { email: "DO NOT EXPOSE" } } },
+      { sha: to, commit: { message: "Second title\r\nDO NOT EXPOSE", committer: { email: "DO NOT EXPOSE" } }, author: { login: "DO NOT EXPOSE" } },
+    ],
+    files: [{ filename: "DO NOT EXPOSE", patch: "DO NOT EXPOSE" }],
+    diff_url: "https://untrusted.example/DO-NOT-EXPOSE",
+  };
+}
 
 function withManifest(body = JSON.stringify(manifest), assetChanges = {}) {
   return { ...release, assets: [...release.assets, {
@@ -83,8 +98,10 @@ test("valid manifest exposes full build identity and caches only slim validated 
   assert.equal(calls[1].options.redirect, "manual");
   assert.ok(calls[1].options.signal instanceof AbortSignal);
   const { apkUrl, ...cacheFields } = expected;
-  assert.deepEqual([...cached.keys()], [`${origin}/_release-cache/v2/latest`]);
-  assert.deepEqual(await cached.values().next().value.clone().json(), { ...cacheFields, assetId: 7 });
+  assert.deepEqual([...cached.keys()], [`${origin}/_release-cache/v3/latest`]);
+  assert.deepEqual(await cached.values().next().value.clone().json(), {
+    ...cacheFields, assetId: 7, notes: release.body, notesTruncated: false,
+  });
   assert.deepEqual(await (await request()).json(), expected);
   assert.equal(await (await request("/latest.json", { method: "HEAD" })).text(), "");
   assert.equal(calls.length, 2);
@@ -243,11 +260,12 @@ test("historical build-163 downloads remain pinned after the latest feed has a m
 
 test("old cache schema cannot bypass manifest lookup and cached feeds still require the secret", async () => {
   cached.set(`${origin}/_release-cache/latest`, Response.json({ release: "build-99", assetId: 99 }));
+  cached.set(`${origin}/_release-cache/v2/latest`, Response.json({ release: "build-99", assetId: 99 }));
   responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)));
   assert.equal((await (await request()).json()).commitSha, manifest.commitSha);
   assert.equal(calls.length, 2);
   assert.equal((await worker.fetch(new Request(`${origin}/latest.json`), {})).status, 503);
-  assert.equal((await request("/_release-cache/v2/latest")).status, 404);
+  assert.equal((await request("/_release-cache/v3/latest")).status, 404);
   assert.equal(calls.length, 2);
 });
 
@@ -346,4 +364,299 @@ test("lookup errors and non-binary download bodies are sanitized and never cache
   const response = await request("/releases/build-42.apk");
   assert.equal(response.status, 503);
   assert.doesNotMatch(await response.text(), /DO NOT EXPOSE/);
+});
+
+test("changes compare the exact installed SHA to the validated published SHA and cache only public fields", async () => {
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(ahead(), {
+    headers: { "Set-Cookie": "DO NOT EXPOSE", "Location": "https://untrusted.example/DO-NOT-EXPOSE" },
+  }));
+  const response = await request(changesPath, { headers: { Authorization: "untrusted", Cookie: "untrusted" } });
+  assert.equal(response.status, 200);
+  const expected = {
+    release: "build-42", fromSha, toSha: manifest.commitSha, notes: release.body, notesTruncated: false,
+    comparison: "compared", totalCommits: 2, commitsTruncated: false,
+    commits: [{ sha: "d".repeat(40), title: "First title" }, { sha: manifest.commitSha, title: "Second title" }],
+  };
+  assert.deepEqual(await response.json(), expected);
+  assert.equal(response.headers.get("Cache-Control"), "public, max-age=60");
+  assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
+  assert.equal(response.headers.get("Set-Cookie"), null);
+  assert.equal(response.headers.get("Location"), null);
+  assert.equal(calls[0].url, `${api}/releases/tags/build-42`);
+  assert.equal(calls[1].url, `${api}/releases/assets/8`);
+  assert.equal(calls[2].url, `${api}/compare/${fromSha}...${manifest.commitSha}?per_page=100&page=1`);
+  assert.equal(calls[2].options.redirect, "manual");
+  assert.ok(calls[2].options.signal instanceof AbortSignal);
+  assert.equal(calls[2].options.headers.Authorization, `Bearer ${env.GITHUB_TOKEN}`);
+  assert.equal(calls[2].options.headers.Accept, "application/vnd.github+json");
+  assert.equal(calls[2].options.headers.Cookie, undefined);
+  const comparisonCache = cached.get(`${origin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`);
+  assert.equal(comparisonCache.headers.get("Cache-Control"), "public, max-age=600");
+  const { commits, comparison, totalCommits, commitsTruncated } = expected;
+  assert.deepEqual(await comparisonCache.clone().json(), { commits, comparison, totalCommits, commitsTruncated });
+  for (const entry of cached.values()) assert.doesNotMatch(await entry.clone().text(), /DO NOT EXPOSE|untrusted|local-test-only/);
+  assert.deepEqual(await (await request(changesPath.replace(fromSha, fromSha.toUpperCase()))).json(), expected);
+  const head = await request(changesPath, { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), "");
+  assert.equal(calls.length, 3);
+  assert.equal((await worker.fetch(new Request(`${origin}${changesPath}`), {})).status, 503);
+  assert.equal((await request(`/_compare-cache/v1/${fromSha}/${manifest.commitSha}`)).status, 404);
+  // Notes/compare failures cannot change the original feed or version-pinned APK path.
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)));
+  const feed = await (await request()).json();
+  assert.equal(feed.notes, undefined);
+  assert.equal(feed.commits, undefined);
+  responses.push(new Response("APK", { headers: { "Content-Type": "application/octet-stream" } }));
+  assert.equal(await (await request("/releases/build-42.apk")).text(), "APK");
+  assert.equal(calls.at(-1).url, `${api}/releases/assets/7`);
+});
+
+test("comparison cache separates both SHAs and origins but reuses immutable pairs across tags", async () => {
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(ahead()));
+  await request(changesPath);
+  const otherFrom = "e".repeat(40);
+  responses.push(Response.json(ahead(otherFrom)));
+  assert.equal((await (await request(changesPath.replace(fromSha, otherFrom))).json()).fromSha, otherFrom);
+  assert.equal(calls.length, 4);
+
+  const otherManifest = { ...manifest, commitSha: "f".repeat(40) };
+  const body = JSON.stringify(otherManifest);
+  responses.push(Response.json({ ...withManifest(body), tag_name: "build-43" }), new Response(body), Response.json(ahead(fromSha, otherManifest.commitSha)));
+  assert.equal((await (await request(changesPath.replace("build-42", "build-43"))).json()).toSha, otherManifest.commitSha);
+  assert.equal(calls.length, 7);
+  assert.equal(calls[6].url, `${api}/compare/${fromSha}...${otherManifest.commitSha}?per_page=100&page=1`);
+
+  responses.push(Response.json({ ...withManifest(), tag_name: "build-44", body: "Other release notes" }), new Response(JSON.stringify(manifest)));
+  assert.equal((await (await request(changesPath.replace("build-42", "build-44"))).json()).notes, "Other release notes");
+  assert.equal(calls.length, 9);
+  const otherOrigin = "https://other-updates.example.com";
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(ahead()));
+  assert.equal((await worker.fetch(new Request(`${otherOrigin}${changesPath}`), env)).status, 200);
+  assert.ok(cached.has(`${otherOrigin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`));
+  assert.equal(calls.length, 12);
+
+  // Metadata expiry refreshes owner-edited notes without refetching an immutable comparison.
+  cached.delete(`${origin}/_release-cache/v3/build-42`);
+  responses.push(Response.json({ ...withManifest(), body: "Edited notes" }), new Response(JSON.stringify(manifest)));
+  assert.equal((await (await request(changesPath)).json()).notes, "Edited notes");
+  assert.equal(calls.length, 14);
+});
+
+test("legacy and identical releases expose notes without comparing or fabricating source identity", async () => {
+  responses.push(Response.json(release));
+  assert.deepEqual(await (await request(changesPath)).json(), {
+    release: "build-42", fromSha, toSha: null, notes: release.body, notesTruncated: false,
+    comparison: "unavailable", totalCommits: null, commits: [], commitsTruncated: false,
+  });
+  assert.equal(calls.length, 1);
+  cached.clear();
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)));
+  assert.deepEqual(await (await request(changesPath.replace(fromSha, manifest.commitSha.toUpperCase()))).json(), {
+    release: "build-42", fromSha: manifest.commitSha, toSha: manifest.commitSha, notes: release.body, notesTruncated: false,
+    comparison: "identical", totalCommits: 0, commits: [], commitsTruncated: false,
+  });
+  assert.equal(calls.length, 3);
+  assert.equal(cached.size, 1);
+});
+
+test("notes are bounded in UTF-16 and cached only after release and manifest validation", async () => {
+  for (const body of [null, undefined, 7, { private: "DO NOT EXPOSE" }, "", "n".repeat(4000), "n".repeat(4001), "\ud83d\ude00".repeat(2001)]) {
+    cached.clear();
+    responses.push(Response.json({ ...release, body }));
+    const changes = await (await request(changesPath)).json();
+    assert.equal(changes.notes, typeof body === "string" ? body.slice(0, 4000) : "");
+    assert.equal(changes.notesTruncated, typeof body === "string" && body.length > 4000);
+    const entry = cached.get(`${origin}/_release-cache/v3/build-42`);
+    assert.equal(entry.headers.get("Cache-Control"), "public, max-age=60");
+    assert.equal((await entry.clone().json()).notes, changes.notes);
+  }
+  cached.clear();
+  cached.set(`${origin}/_release-cache/v2/build-42`, Response.json({ release: "build-42", notes: "DO NOT EXPOSE" }));
+  responses.push(Response.json(release));
+  assert.equal((await (await request(changesPath)).json()).notes, release.body);
+  cached.clear();
+  for (const change of [{ draft: true }, { prerelease: true }, { tag_name: "build-43" }, { assets: [] }]) {
+    responses.push(Response.json({ ...withManifest(), ...change, body: "DO NOT EXPOSE" }));
+    const response = await request(changesPath);
+    assert.equal(response.status, 404);
+    assert.doesNotMatch(await response.text(), /DO NOT EXPOSE/);
+    assert.equal(cached.size, 0);
+  }
+  responses.push(Response.json({ ...withManifest(), body: "DO NOT EXPOSE" }), new Response("Invalid manifest"));
+  const response = await request(changesPath);
+  assert.equal(response.status, 503);
+  assert.doesNotMatch(await response.text(), /DO NOT EXPOSE/);
+  assert.equal(cached.size, 0);
+});
+
+test("titles use only the first line, normalize SHAs, and cap at 200 UTF-16 units", async () => {
+  const messages = [
+    ...["\n", "\r", "\r\n", "\v", "\f", "\u0085", "\u2028", "\u2029"].map(separator => `Title${separator}DO NOT EXPOSE`),
+    "\nDO NOT EXPOSE", "", "x".repeat(201), "\ud83d\ude00".repeat(101),
+  ];
+  const comparison = { ...ahead(), total_commits: messages.length, commits: messages.map(message => ({ sha: manifest.commitSha.toUpperCase(), commit: { message } })) };
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(comparison));
+  const changes = await (await request(changesPath)).json();
+  assert.deepEqual(changes.commits.map(commit => commit.title), [...Array(8).fill("Title"), "", "", "x".repeat(200), "\ud83d\ude00".repeat(100)]);
+  for (const commit of changes.commits) assert.equal(commit.sha, manifest.commitSha);
+  for (const entry of cached.values()) assert.doesNotMatch(await entry.clone().text(), /DO NOT EXPOSE/);
+});
+
+test("behind, diverged and malformed comparisons are unavailable with a short sanitized negative cache", async () => {
+  const invalid = [
+    null, [], {},
+    ...[
+      { status: "behind" }, { status: "diverged" }, { status: "identical" }, { status: "unknown" },
+      { base_commit: { sha: manifest.commitSha } }, { merge_base_commit: { sha: manifest.commitSha } },
+      { base_commit: null }, { merge_base_commit: { sha: `${fromSha}\n` } },
+      ...[-1, 0, 1.5, "2", null, Number.MAX_SAFE_INTEGER + 1, 3].map(total_commits => ({ total_commits })),
+      { commits: null }, { commits: [] }, { commits: {} }, { commits: Array(101).fill(ahead().commits[0]), total_commits: 101 },
+      ...[null, {}, { sha: "short" }, { sha: "g".repeat(40) }, { sha: "0".repeat(40) },
+        { sha: `${manifest.commitSha}\n` }, { sha: manifest.commitSha, commit: { message: null } },
+        { sha: manifest.commitSha, commit: { message: 4 } },
+      ].map(commit => ({ commits: [ahead().commits[0], commit] })),
+    ].map(change => ({ ...ahead(), ...change, private: "DO NOT EXPOSE" })),
+  ];
+  for (const comparison of invalid) {
+    cached.clear();
+    const count = calls.length;
+    responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(comparison));
+    const response = await request(changesPath);
+    assert.equal(response.status, 200);
+    const changes = await response.json();
+    assert.equal(changes.notes, release.body);
+    assert.equal(changes.comparison, "unavailable");
+    assert.equal(changes.totalCommits, null);
+    assert.equal(changes.commitsTruncated, false);
+    assert.deepEqual(changes.commits, []);
+    const entry = cached.get(`${origin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`);
+    assert.equal(entry.headers.get("Cache-Control"), "public, max-age=60");
+    assert.deepEqual(await entry.clone().json(), { commits: [], comparison: "unavailable", totalCommits: null, commitsTruncated: false });
+    assert.equal((await request(changesPath)).status, 200);
+    assert.equal(calls.length, count + 3);
+  }
+});
+
+test("unknown bases, throttling, server/parse/timeout failures and redirects never hide notes or leak details", async () => {
+  const warnings = [];
+  mock.method(console, "warn", (...args) => warnings.push(args));
+  const failures = [
+    ...[401, 403, 404, 422, 429, 500, 502, 503].map(status => new Response("DO NOT EXPOSE", { status })),
+    ...[301, 302, 303, 307, 308].map(status => new Response("DO NOT EXPOSE", { status, headers: { Location: "https://evil.example/DO-NOT-EXPOSE" } })),
+    new Response(null, { status: 302, headers: { Location: "https://media.git.hoodnet.work/compare-test" } }),
+    new TypeError("DO NOT EXPOSE"), new DOMException("DO NOT EXPOSE", "TimeoutError"), new DOMException("DO NOT EXPOSE", "AbortError"),
+    new Response("DO NOT EXPOSE invalid JSON"), new Response(new Uint8Array([0xff])),
+    new Response(new ReadableStream({ start(controller) { controller.error(new Error("DO NOT EXPOSE body failure")); } })),
+  ];
+  for (const failure of failures) {
+    cached.clear();
+    const count = calls.length;
+    responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), failure);
+    const response = await request(changesPath);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Location"), null);
+    assert.equal(response.headers.get("Set-Cookie"), null);
+    const changes = await response.json();
+    assert.equal(changes.notes, release.body);
+    assert.equal(changes.comparison, "unavailable");
+    assert.deepEqual(changes.commits, []);
+    assert.equal(calls.length, count + 3);
+    for (const entry of cached.values()) assert.doesNotMatch(await entry.clone().text(), /DO NOT EXPOSE|evil\.example|local-test-only/);
+    responses.push(new Response("APK", { headers: { "Content-Type": "application/octet-stream" } }));
+    assert.equal(await (await request("/releases/build-42.apk")).text(), "APK");
+  }
+  assert.deepEqual(warnings, []);
+});
+
+test("comparison bodies are capped at 4 MiB even with missing or dishonest Content-Length", async () => {
+  const limit = 4 * 1024 * 1024;
+  const body = JSON.stringify(ahead());
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), new Response(body.padEnd(limit)));
+  assert.equal((await (await request(changesPath)).json()).comparison, "compared");
+  for (const length of [null, "1", String(limit + 1), "invalid"]) {
+    cached.clear();
+    let cancelled = false;
+    let reads = 0;
+    const stream = new ReadableStream({
+      pull(controller) { reads++; controller.enqueue(new Uint8Array(64 * 1024)); },
+      cancel() { cancelled = true; },
+    });
+    responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), new Response(stream, {
+      headers: length === null ? {} : { "Content-Length": length },
+    }));
+    const response = await request(changesPath);
+    const changes = await response.json();
+    assert.equal(changes.comparison, "unavailable");
+    assert.equal(changes.notes, release.body);
+    assert.equal(cancelled, true);
+    assert.ok(reads <= 66);
+  }
+});
+
+test("commit pagination and JSON expansion signal truncation and stay within the app's 128 KiB cap", async () => {
+  for (const total of [99, 100, 101, 500]) {
+    cached.clear();
+    const comparison = { ...ahead(), total_commits: total, commits: Array(Math.min(total, 100)).fill(ahead().commits[0]) };
+    responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(comparison));
+    const response = await request(changesPath);
+    const text = await response.text();
+    const changes = JSON.parse(text);
+    assert.equal(changes.commits.length, Math.min(total, 100));
+    assert.equal(changes.totalCommits, total);
+    assert.equal(changes.commitsTruncated, total > 100);
+    assert.ok(Buffer.byteLength(text) <= 128 * 1024);
+  }
+  cached.clear();
+  const comparison = { ...ahead(), total_commits: 100, commits: Array(100).fill({ sha: manifest.commitSha, commit: { message: "\ud800".repeat(200) } }) };
+  responses.push(Response.json({ ...withManifest(), body: "\ud800".repeat(4001) }), new Response(JSON.stringify(manifest)), Response.json(comparison));
+  const text = await (await request(changesPath)).text();
+  const changes = JSON.parse(text);
+  assert.ok(Buffer.byteLength(text) <= 128 * 1024);
+  assert.equal(changes.notes.length, 4000);
+  assert.equal(changes.notesTruncated, true);
+  assert.equal(changes.commitsTruncated, true);
+  assert.equal(changes.totalCommits, 100);
+  assert.ok(changes.commits.length > 0 && changes.commits.length < 100);
+  assert.equal(changes.comparison, "compared");
+  assert.equal(await (await request(changesPath)).text(), text);
+});
+
+test("changes reject missing, duplicate, malformed or extra query inputs without any upstream request", async () => {
+  for (const query of ["", "?from=", "?from=master", "?from=build-42", `?from=${fromSha.slice(1)}`, `?from=${fromSha}0`,
+    `?from=${"g".repeat(40)}`, `?from=${fromSha}%0A`, `?from=${fromSha}%00`, `?from=${fromSha}%20`,
+    `?from=${fromSha}...master`, "?from=https://evil.example", `?from=${fromSha}&from=${fromSha}`,
+    `?from=${fromSha}&%66rom=${fromSha}`, `?from=${fromSha}&repo=other/repo`, `?from=${fromSha}&tag=build-43`,
+    `?from=${fromSha}&branch=master`, `?from=${fromSha}&url=https://evil.example`, `?From=${fromSha}`,
+  ]) assert.equal((await request(`/releases/build-42/changes.json${query}`)).status, 404);
+  for (const path of ["master", "build-0", "build-01", "build-10000000000", "build-42%2Fother", "%62uild-42"]) {
+    assert.equal((await request(`/releases/${path}/changes.json?from=${fromSha}`)).status, 404);
+  }
+  assert.equal((await request(`/latest.json?from=${fromSha}`)).status, 404);
+  assert.equal((await request(`/releases/build-42.apk?from=${fromSha}`)).status, 404);
+  const post = await request(changesPath, { method: "POST" });
+  assert.equal(post.status, 405);
+  assert.equal(post.headers.get("Allow"), "GET, HEAD");
+  const head = await request("/releases/build-42/changes.json", { method: "HEAD" });
+  assert.equal(head.status, 404);
+  assert.equal(await head.text(), "");
+  assert.equal((await worker.fetch(new Request(`${origin}${changesPath}`), {})).status, 503);
+  assert.equal(calls.length, 0);
+});
+
+test("comparison cache failures do not prevent release notes from being returned", async () => {
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(ahead()));
+  mock.method(globalThis.caches.default, "put", async (key, response) => {
+    if (key.url.includes("_compare-cache")) throw new Error("DO NOT EXPOSE");
+    cached.set(key.url, response.clone());
+  });
+  assert.equal((await (await request(changesPath)).json()).comparison, "compared");
+  mock.method(globalThis.caches.default, "match", async key => {
+    if (key.url.includes("_compare-cache")) throw new Error("DO NOT EXPOSE");
+    return cached.get(key.url)?.clone();
+  });
+  const changes = await (await request(changesPath)).json();
+  assert.equal(changes.notes, release.body);
+  assert.equal(changes.comparison, "unavailable");
+  assert.deepEqual(changes.commits, []);
 });

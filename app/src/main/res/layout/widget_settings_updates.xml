@@ -38,6 +38,34 @@
                 <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:layout_marginTop="20dp" android:text="@string/updater_install_hint"
                     android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView" />
+                <LinearLayout android:id="@+id/updater_changes" android:layout_marginTop="24dp"
+                    android:visibility="gone" style="@style/UiKit.ViewGroup.LinearLayout">
+                    <TextView android:id="@+id/updater_notes_title" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:text="@string/updater_notes_title"
+                        style="@style/UiKit.TextView.Semibold" />
+                    <TextView android:id="@+id/updater_changes_status" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:accessibilityLiveRegion="polite" style="@style/UiKit.TextView" />
+                    <com.discord.utilities.view.text.LinkifiedTextView android:id="@+id/updater_notes"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp" style="@style/UiKit.TextView" />
+                    <TextView android:id="@+id/updater_notes_truncated" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:text="@string/updater_notes_truncated"
+                        android:visibility="gone" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView" />
+                    <TextView android:id="@+id/updater_commits_title" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="20dp"
+                        android:text="@string/updater_commits_title" style="@style/UiKit.TextView.Semibold" />
+                    <TextView android:id="@+id/updater_commit_summary" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView" />
+                    <TextView android:id="@+id/updater_commits" android:layout_width="match_parent"
+                        android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                        android:textIsSelectable="true" style="@style/UiKit.TextView" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/updater_changes_retry"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp" android:visibility="gone"
+                        android:text="@string/updater_changes_retry" style="@style/UiKit.Material.Button.Outline" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>

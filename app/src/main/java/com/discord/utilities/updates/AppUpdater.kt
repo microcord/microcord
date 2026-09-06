@@ -22,6 +22,7 @@ import com.discord.widgets.settings.WidgetSettingsUpdates
 import com.google.gson.Gson
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -72,12 +73,7 @@ object AppUpdater {
         states.onNext(State(Phase.CHECKING, state.update))
         Observable.fromCallable {
             http.newCall(Request.Builder().url(UPDATE_FEED_URL).build()).execute().use { response ->
-                kotlin.check(response.isSuccessful)
-                val body = requireNotNull(response.body)
-                val source = body.source()
-                source.request(16_385)
-                require(source.buffer.size <= 16_384)
-                requireNotNull(gson.fromJson(source.readUtf8(), AppUpdate::class.java)).validate()
+                readJson(response, AppUpdate::class.java, 16_384).validate()
             }
         }.subscribeOn(Schedulers.io()).ui().subscribe({ update ->
             preferences(app).edit().putLong("next_check", System.currentTimeMillis() + SIX_HOURS).apply()
@@ -91,6 +87,24 @@ object AppUpdater {
         }, {
             states.onNext(State(Phase.ERROR, state.update, error = R.string.updater_check_failed))
         })
+    }
+
+    fun loadChanges(update: AppUpdate): Observable<AppUpdateChanges> = Observable.defer {
+        update.validate()
+        val from = BuildConfig.UPDATE_COMMIT_SHA
+        val url = requireNotNull(update.apkUrl).removeSuffix(".apk") + "/changes.json?from=$from"
+        val call = http.newCall(Request.Builder().url(url).build())
+        Observable.fromCallable {
+            call.execute().use { readJson(it, AppUpdateChanges::class.java, 128 * 1024).validate(update, from) }
+        }.doOnUnsubscribe(call::cancel)
+    }.subscribeOn(Schedulers.io())
+
+    private fun <T> readJson(response: Response, type: Class<T>, maxBytes: Long): T {
+        kotlin.check(response.isSuccessful)
+        val source = requireNotNull(response.body).source()
+        source.request(maxBytes + 1)
+        require(source.buffer.size <= maxBytes)
+        return requireNotNull(gson.fromJson(source.readUtf8(), type))
     }
 
     private fun notifyUpdate(context: Context, update: AppUpdate) {

@@ -3,10 +3,16 @@ const DOWNLOAD_ORIGIN = "https://media.git.hoodnet.work";
 const APK_NAME = "app-release.apk";
 const MANIFEST_NAME = "update-manifest.json";
 const MAX_MANIFEST_BYTES = 16 * 1024;
+const MAX_COMPARE_BYTES = 4 * 1024 * 1024;
+const MAX_CHANGES_BYTES = 128 * 1024;
 const PACKAGE_NAME = "dev.mantikafasi.manticord";
 const VERSION_EPOCH = 1577836800;
 const MAX_VERSION_CODE = 2147483647;
 const RELEASE_TAG = /^build-[1-9]\d{0,9}$/;
+
+function isSha(value) {
+  return typeof value === "string" && value.length === 40 && /^[a-f0-9]{40}$/i.test(value);
+}
 
 function error(status, message) {
   return Response.json({ error: message }, {
@@ -93,7 +99,7 @@ async function readManifest(asset, token, metadata) {
 }
 
 async function releaseMetadata(tag, token, origin) {
-  const cacheKey = new Request(`${origin}/_release-cache/v2/${tag ?? "latest"}`);
+  const cacheKey = new Request(`${origin}/_release-cache/v3/${tag ?? "latest"}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
@@ -119,13 +125,15 @@ async function releaseMetadata(tag, token, origin) {
       typeof release.published_at !== "string" || !Number.isFinite(Date.parse(release.published_at))) {
     throw new Error("Invalid release metadata");
   }
-  // Cache only the public APK metadata, never private release notes or signed download URLs.
+  // Release notes are intentionally public; cache only bounded notes and validated APK metadata.
   const metadata = {
     release: release.tag_name,
     publishedAt: release.published_at,
     assetId: apk.id,
     sha256: digest[1].toLowerCase(),
     size: apk.size,
+    notes: typeof release.body === "string" ? release.body.slice(0, 4000) : "",
+    notesTruncated: typeof release.body === "string" && release.body.length > 4000,
   };
   const manifests = release.assets.filter(asset => asset.name === MANIFEST_NAME);
   if (manifests.length > 1) throw new Error("Ambiguous update manifest");
@@ -135,11 +143,77 @@ async function releaseMetadata(tag, token, origin) {
   return metadata;
 }
 
+async function compareCommits(fromSha, toSha, token, origin) {
+  let result = { commits: [], comparison: "unavailable", totalCommits: null, commitsTruncated: false };
+  if (!toSha) return result;
+  if (fromSha === toSha) return { ...result, comparison: "identical", totalCommits: 0 };
+  const cacheKey = new Request(`${origin}/_compare-cache/v1/${fromSha}/${toSha}`);
+  try {
+    const cached = await caches.default.match(cacheKey);
+    if (cached) return await cached.json();
+    const response = await fetch(`${API}/compare/${fromSha}...${toSha}?per_page=100&page=1`, {
+      headers: githubHeaders(token, "application/vnd.github+json"),
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const contentLength = response.headers.get("Content-Length");
+    if (response.status !== 200 || !response.body ||
+        (contentLength !== null && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_COMPARE_BYTES))) {
+      await response.body?.cancel();
+      throw new Error("Comparison unavailable");
+    }
+    // The compare API includes private diff/file data even though we only need commit titles.
+    const bytes = new Uint8Array(MAX_COMPARE_BYTES);
+    const reader = response.body.getReader();
+    let size = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (size + value.byteLength > bytes.length) throw new Error("Comparison is too large");
+        bytes.set(value, size);
+        size += value.byteLength;
+      }
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+    const comparison = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, size)));
+    if (!comparison || comparison.status !== "ahead" ||
+        !isSha(comparison.base_commit?.sha) || comparison.base_commit.sha.toLowerCase() !== fromSha ||
+        !isSha(comparison.merge_base_commit?.sha) || comparison.merge_base_commit.sha.toLowerCase() !== fromSha ||
+        !Number.isSafeInteger(comparison.total_commits) || comparison.total_commits <= 0 ||
+        !Array.isArray(comparison.commits) || comparison.commits.length !== Math.min(comparison.total_commits, 100)) {
+      throw new Error("Invalid comparison");
+    }
+    const commits = comparison.commits.map(commit => {
+      if (!isSha(commit?.sha) || /^0{40}$/.test(commit.sha) || typeof commit.commit?.message !== "string") {
+        throw new Error("Invalid commit");
+      }
+      return { sha: commit.sha.toLowerCase(), title: commit.commit.message.split(/[\r\n\v\f\u0085\u2028\u2029]/, 1)[0].trim().slice(0, 200) };
+    });
+    result = { commits, comparison: "compared", totalCommits: comparison.total_commits, commitsTruncated: comparison.total_commits > 100 };
+  } catch {
+    // Unknown bases, redirects and upstream failures must not hide notes or reveal error payloads.
+  }
+  try {
+    await caches.default.put(cacheKey, Response.json(result, {
+      headers: { "Cache-Control": `public, max-age=${result.comparison === "compared" ? 600 : 60}` },
+    }));
+  } catch {
+    // Comparison cache failures must not hide release notes either.
+  }
+  return result;
+}
+
 async function handle(request, env) {
   const url = new URL(request.url);
   const latest = url.pathname === "/latest.json";
   const download = /^\/releases\/(build-[1-9]\d{0,9})\.apk$/.exec(url.pathname);
-  if (url.search || (!latest && !download)) return error(404, "Not found");
+  const changes = /^\/releases\/(build-[1-9]\d{0,9})\/changes\.json$/.exec(url.pathname);
+  const from = url.searchParams.get("from");
+  if ((!latest && !download && !changes) ||
+      (changes ? !isSha(from) || [...url.searchParams].length !== 1 : url.search)) return error(404, "Not found");
   if (request.method !== "GET" && request.method !== "HEAD") {
     const response = error(405, "Only GET and HEAD are supported");
     response.headers.set("Allow", "GET, HEAD");
@@ -150,8 +224,27 @@ async function handle(request, env) {
   if (range && (range.length > 80 || !/^bytes=(?:\d+-\d*|-\d+)$/.test(range))) {
     return error(416, "Invalid byte range");
   }
-  const release = await releaseMetadata(download?.[1], env.GITHUB_TOKEN, url.origin);
+  const release = await releaseMetadata(download?.[1] ?? changes?.[1], env.GITHUB_TOKEN, url.origin);
   if (!release) return error(404, "No published APK available");
+
+  if (changes) {
+    const fromSha = from.toLowerCase();
+    const toSha = release.commitSha ?? null;
+    const body = {
+      release: release.release, fromSha, toSha, notes: release.notes, notesTruncated: release.notesTruncated,
+      ...await compareCommits(fromSha, toSha, env.GITHUB_TOKEN, url.origin),
+    };
+    let json = JSON.stringify(body);
+    // JSON escaping can expand even bounded UTF-16 strings beyond the app's response limit.
+    while (new TextEncoder().encode(json).byteLength > MAX_CHANGES_BYTES && body.commits.length) {
+      body.commits.pop();
+      body.commitsTruncated = true;
+      json = JSON.stringify(body);
+    }
+    return new Response(json, { headers: {
+      "Content-Type": "application/json", "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff",
+    } });
+  }
 
   if (latest) {
     return Response.json({
