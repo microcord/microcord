@@ -31,6 +31,51 @@ class GatewaySocketTest {
     }
 
     @Test
+    fun helloTimeoutStillRunsAfterFastConnectIdentifies() {
+        for (fast in listOf(false, true)) {
+            val harness = Harness(identifyOnOpen = fast)
+            harness.connect()
+            val stalled = harness.socket
+            harness.scheduler.advanceBy(19_999)
+            assertFalse(stalled.closed)
+            harness.scheduler.advanceBy(1)
+            assertTrue("Missing HELLO must time out even after early IDENTIFY", stalled.closed)
+            harness.scheduler.advanceBy(3_000)
+            assertEquals(2, harness.factory.sockets.size)
+            assertFalse(harness.gateway.isSessionEstablished())
+        }
+    }
+
+    @Test
+    fun helloCancelsTheDeadlineAndClosingDoesNotResurrectFastConnect() {
+        val healthy = Harness(identifyOnOpen = true)
+        healthy.connectReady(1, "fixture-session", heartbeatInterval = 60_000)
+        healthy.scheduler.advanceBy(23_000)
+        assertFalse(healthy.socket.closed)
+        assertEquals(1, healthy.factory.sockets.size)
+
+        val closed = Harness(identifyOnOpen = true)
+        closed.connect()
+        closed.gateway.close()
+        closed.scheduler.runCurrent()
+        closed.scheduler.advanceBy(23_000)
+        assertEquals(1, closed.factory.sockets.size)
+        assertFalse(closed.gateway.isSessionEstablished())
+    }
+
+    @Test
+    fun earlyReadyCannotDisableTheMissingHelloWatchdog() {
+        val harness = Harness(identifyOnOpen = true)
+        harness.connect()
+        harness.socket.serverMessage("{\"op\":0,\"s\":1,\"t\":\"READY\",\"d\":{\"session_id\":\"fixture-session\"}}")
+        harness.scheduler.runCurrent()
+        assertTrue(harness.gateway.isSessionEstablished())
+        harness.scheduler.advanceBy(20_000)
+        assertTrue(harness.socket.closed)
+        assertFalse(harness.gateway.isSessionEstablished())
+    }
+
+    @Test
     fun deferredHandlerReplaysEventsInOrderBeforeGoingLive() {
         val deferred = DeferredGatewayEventHandler()
         val events = mutableListOf<String>()

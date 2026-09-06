@@ -104,11 +104,7 @@ class NetworkMonitor(context: Context) {
     }
 
     private fun readState(context: Context, intent: Intent?): State {
-        val state = when {
-            isAirplaneModeOn(context) -> State.OFFLINE_AIRPLANE_MODE
-            isDeviceConnected(context, intent) -> State.ONLINE
-            else -> State.OFFLINE
-        }
+        val state = resolveNetworkState(isDeviceConnected(context, intent), isAirplaneModeOn(context))
         runCatching { Log.i(TAG, "network state -> $state (API ${Build.VERSION.SDK_INT})") }
         return state
     }
@@ -124,9 +120,12 @@ class NetworkMonitor(context: Context) {
     private fun isDeviceConnected(context: Context, intent: Intent?): Boolean = try {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = connectivityManager.activeNetwork ?: return false
-            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            // Match the reference: a transient/missing default must not hide another usable network.
+            connectivityManager.allNetworks.any { network ->
+                connectivityManager.getNetworkCapabilities(network)?.let { capabilities ->
+                    isConnectedNetwork(capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET), capabilities::hasTransport)
+                } == true
+            }
         } else {
             @Suppress("DEPRECATION")
             val candidates: List<NetworkInfo?> = listOf(
@@ -144,3 +143,15 @@ class NetworkMonitor(context: Context) {
         const val TAG = "NetworkMonitor"
     }
 }
+
+internal fun resolveNetworkState(connected: Boolean, airplaneMode: Boolean): NetworkMonitor.State = when {
+    connected -> NetworkMonitor.State.ONLINE // Wi-Fi can remain enabled in airplane mode.
+    airplaneMode -> NetworkMonitor.State.OFFLINE_AIRPLANE_MODE
+    else -> NetworkMonitor.State.OFFLINE
+}
+
+internal fun isConnectedNetwork(hasInternet: Boolean, hasTransport: (Int) -> Boolean): Boolean =
+    hasInternet || hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+        hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+        hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+        hasTransport(NetworkCapabilities.TRANSPORT_VPN)

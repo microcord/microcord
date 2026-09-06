@@ -320,7 +320,8 @@ class GatewaySocket(
         val endpoint = url.trimEnd('/') + "/?encoding=json&v=9&compress=${compression.queryValue}"
         logInfo("connecting host=${runCatching { java.net.URI(url).host }.getOrNull().orEmpty()}")
         helloTimeoutTask = scheduler.schedule(HELLO_TIMEOUT_MS) {
-            if (currentGeneration == generation && state == State.CONNECTING) {
+            // Fast Connect sends IDENTIFY before HELLO, so socket state cannot guard this deadline.
+            if (currentGeneration == generation) {
                 reconnect("Gateway HELLO timeout", immediate = false)
             }
         }
