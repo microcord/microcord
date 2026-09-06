@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="updater_title">Updates</string>
+    <string name="updater_automatic">Automatically check for updates</string>
+    <string name="updater_automatic_hint">Check when you open the app, at most once every six hours. Downloads only start when you choose.</string>
+    <string name="updater_current_build">Installed: %1$s (%2$s)</string>
+    <string name="updater_release_details">%1$s / %2$s / %3$s</string>
+    <string name="updater_unknown_commit">Source revision unavailable</string>
+    <string name="updater_idle">Check for a new release.</string>
+    <string name="updater_check">Check for updates</string>
+    <string name="updater_checking">Checking for updates...</string>
+    <string name="updater_available">An update is available</string>
+    <string name="updater_notice_body">%1$s is ready. Tap to download and update.</string>
+    <string name="updater_current">You already have this source revision or a newer build.</string>
+    <string name="updater_legacy">This release predates the updater and has no verified source metadata. Automatic updates will be available with the next updater-enabled release.</string>
+    <string name="updater_download">Download update</string>
+    <string name="updater_download_title">App update: %1$s</string>
+    <string name="updater_downloading">Downloading update...</string>
+    <string name="updater_waiting">Download paused. Waiting for Android to resume it.</string>
+    <string name="updater_download_progress">%1$s of %2$s</string>
+    <string name="updater_verifying">Verifying download and app signature...</string>
+    <string name="updater_ready">Update verified and ready to install.</string>
+    <string name="updater_allow_install">Allow installation from this app</string>
+    <string name="updater_install">Install update</string>
+    <string name="updater_install_hint">Android will ask you to confirm installation. Your settings and accounts are kept. If Android asks for permission to install from this app, allow it, return here, and tap Install update.</string>
+    <string name="updater_check_failed">Could not check for updates. Check your connection and try again.</string>
+    <string name="updater_download_failed">Download failed. Check your connection and free storage, then try again.</string>
+    <string name="updater_verification_failed">The download could not be verified. It was discarded; please download it again.</string>
+    <string name="updater_install_failed">Could not open the Android installer. Check installation permission and try again.</string>
+</resources>

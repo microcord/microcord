@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar" />
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <com.discord.views.CheckedSetting android:id="@+id/updater_automatic"
+                app:cs_text="@string/updater_automatic" app:cs_subtext="@string/updater_automatic_hint"
+                app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed" />
+            <View style="@style/UiKit.Settings.Divider" />
+            <LinearLayout android:padding="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:id="@+id/updater_current" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView" />
+                <TextView android:id="@+id/updater_release" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:layout_marginTop="16dp" style="@style/UiKit.TextView.Semibold" />
+                <TextView android:id="@+id/updater_status" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:layout_marginTop="12dp"
+                    android:accessibilityLiveRegion="polite" style="@style/UiKit.TextView" />
+                <com.google.android.material.progressindicator.LinearProgressIndicator android:id="@+id/updater_progress"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp" android:visibility="gone" android:max="100"
+                    android:contentDescription="@string/updater_downloading"
+                    app:indicatorColor="?attr/color_brand" app:trackColor="?attr/colorBackgroundModifierAccent" />
+                <TextView android:id="@+id/updater_bytes" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                    android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/updater_action"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp" android:text="@string/updater_download" style="@style/UiKit.Material.Button" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/updater_check"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" android:text="@string/updater_check" style="@style/UiKit.Material.Button.Outline" />
+                <com.google.android.material.button.MaterialButton android:id="@+id/updater_cancel"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp" android:text="@string/cancel" style="@style/UiKit.Material.Button.Outline" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp" android:text="@string/updater_install_hint"
+                    android:textColor="?attr/colorTextMuted" style="@style/UiKit.TextView" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

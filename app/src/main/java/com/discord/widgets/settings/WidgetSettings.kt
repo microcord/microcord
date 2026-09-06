@@ -94,6 +94,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         bindRoute(binding.activityStatus, ::WidgetSettingsActivityStatus)
         bindRoute(binding.featureFlags, ::WidgetSettingsFeatureFlags)
         bindRoute(binding.plugins, ::WidgetSettingsPlugins)
+        bindRoute(binding.updates, ::WidgetSettingsUpdates)
         bindRoute(binding.notifications, ::WidgetSettingsNotifications)
         bindRoute(binding.privacy, ::WidgetSettingsPrivacy)
         bindRoute(binding.developerOptions, ::WidgetSettingsDeveloper)
@@ -270,6 +271,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.activity_status,
             R.id.feature_flags,
             R.id.plugins,
+            R.id.updates,
             R.id.notifications,
             R.id.privacy,
             R.id.qr_scanner,

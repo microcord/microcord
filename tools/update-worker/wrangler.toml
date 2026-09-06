@@ -1,0 +1,10 @@
+name = "manticord-updates"
+main = "worker.mjs"
+account_id = "19a7fb38f1bb1b93c97d56a4b31445ac"
+compatibility_date = "2026-09-06"
+workers_dev = true
+preview_urls = false
+routes = [{ pattern = "microcord.mantikafasi.dev", custom_domain = true }]
+
+[observability]
+enabled = false

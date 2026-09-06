@@ -155,6 +155,7 @@ object ClientSettings {
         }
 
     val syncTextAndImages = register(BooleanSetting("CACHE_KEY_SYNC_TEXT_AND_IMAGES", true))
+    val automaticUpdateChecks = register(BooleanSetting("automatic_update_checks", true))
 
     // ponytail: metadata only for legacy store/native owners; migrate their accessors in their owning slice.
     init {

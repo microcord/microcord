@@ -1,3 +1,7 @@
+import com.android.build.api.artifact.SingleArtifact
+import groovy.json.JsonOutput
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.androidx.baselineprofile)
@@ -13,11 +17,22 @@ if (firebaseConfig.exists()) {
 }
 
 val buildId = providers.environmentVariable("MANTICORD_BUILD_ID").orElse("local")
-val commitHash = providers.environmentVariable("MANTICORD_COMMIT_SHA").orElse(
-    providers.exec {
-        commandLine("git", "rev-parse", "--short=8", "HEAD")
-    }.standardOutput.asText.map { it.trim() }
-)
+val headCommit = providers.exec {
+    workingDir(rootDir)
+    commandLine("git", "rev-parse", "--verify", "HEAD")
+}.standardOutput.asText.get().trim().lowercase()
+val commitHash = providers.environmentVariable("MANTICORD_COMMIT_SHA").orElse(headCommit).get().lowercase()
+require(Regex("[0-9a-f]{40}").matches(commitHash) && commitHash == headCommit) {
+    "MANTICORD_COMMIT_SHA must be the full SHA of the checked-out HEAD"
+}
+val commitTimestamp = providers.exec {
+    workingDir(rootDir)
+    commandLine("git", "show", "--no-patch", "--format=%ct", commitHash)
+}.standardOutput.asText.get().trim().toLong()
+// Commit time, not CI run order or wall clock, keeps local and CI APKs on the same scale.
+val updateVersionCode = (commitTimestamp - 1_577_836_800L).also {
+    require(it in 1L..Int.MAX_VALUE.toLong()) { "Commit timestamp is outside the Android versionCode range" }
+}.toInt()
 
 android {
     namespace = "com.discord"
@@ -33,9 +48,12 @@ android {
         applicationId = "dev.mantikafasi.manticord"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
+        versionCode = updateVersionCode
         versionName = "1.0"
-        resValue("string", "manticord_build_label", "Dev ${buildId.get()} ${commitHash.get().take(8)}")
+        resValue("string", "manticord_build_label", "Dev ${buildId.get()} ${commitHash.take(8)}")
+        buildConfigField("String", "UPDATE_COMMIT_SHA", JsonOutput.toJson(commitHash))
+        buildConfigField("long", "UPDATE_COMMIT_TIMESTAMP", "${commitTimestamp}L")
+        buildConfigField("String", "UPDATE_BUILD_ID", JsonOutput.toJson(buildId.get()))
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -103,6 +121,64 @@ android {
     splits {
         abi {
             isEnable = false
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        val apkDirectory = variant.artifacts.get(SingleArtifact.APK)
+        val artifactsLoader = variant.artifacts.getBuiltArtifactsLoader()
+        val manifestFile = layout.buildDirectory.file("outputs/update/${variant.name}/update-manifest.json")
+        val sourceSha = commitHash
+        val sourceTimestamp = commitTimestamp
+        val expectedVersionCode = updateVersionCode
+        tasks.register("generateReleaseUpdateManifest") {
+            group = "build"
+            description = "Generate updater metadata for the exact signed release APK"
+            dependsOn("assembleRelease")
+            inputs.dir(apkDirectory)
+            inputs.property("commitSha", sourceSha)
+            inputs.property("commitTimestamp", sourceTimestamp)
+            inputs.property("versionCode", expectedVersionCode)
+            outputs.file(manifestFile)
+            doLast {
+                val directory = apkDirectory.get().asFile.canonicalFile
+                val artifacts = requireNotNull(artifactsLoader.load(apkDirectory.get())) {
+                    "Release APK output metadata is missing"
+                }
+                val output = artifacts.elements.single()
+                val apk = File(output.outputFile).canonicalFile
+                require(apk.parentFile == directory && apk.name == "app-release.apk" && apk.isFile) {
+                    "Expected exactly one produced app-release.apk"
+                }
+                require(artifacts.applicationId == "dev.mantikafasi.manticord" &&
+                    output.versionCode == expectedVersionCode && !output.versionName.isNullOrBlank()) {
+                    "Release APK metadata does not match this build"
+                }
+                val digest = MessageDigest.getInstance("SHA-256")
+                apk.inputStream().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    var count = input.read(buffer)
+                    while (count != -1) {
+                        digest.update(buffer, 0, count)
+                        count = input.read(buffer)
+                    }
+                }
+                val manifest = linkedMapOf(
+                    "commitSha" to sourceSha,
+                    "commitTimestamp" to sourceTimestamp,
+                    "versionCode" to output.versionCode,
+                    "versionName" to output.versionName,
+                    "sha256" to digest.digest().joinToString("") { "%02x".format(it) },
+                    "size" to apk.length(),
+                    "packageName" to artifacts.applicationId,
+                )
+                manifestFile.get().asFile.apply {
+                    parentFile.mkdirs()
+                    writeText(JsonOutput.toJson(manifest) + "\n")
+                }
+            }
         }
     }
 }

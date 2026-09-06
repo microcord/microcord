@@ -3995,3 +3995,151 @@ Reconnect and visually verify icon-inside-pill and the message-jump glyph.
   | modern channel-media browser extension (no direct 126.21 owner) | its separate URL-suffix
   filter still excludes extensionless videos from the media grid; reconcile with typed embed
   metadata while retaining external-player exclusions. This chat-rendering fix does not change it.
+
+### 2026-09-06 - Private Release Download Worker
+
+- User approved a Cloudflare Worker exposing APK downloads from the private repository. Actual
+  origin is GitHub Enterprise `git.hoodnet.work/firecord/microcord`, not github.com. No Android
+  updater, signing-key change, CI publication change, git commit or push is included.
+- Added [Worker setup and API documentation](tools/update-worker/README.md), a dependency-free
+  module Worker, native Node tests, pinned Wrangler account/config and local secret ignores.
+  Only non-draft/non-prerelease `build-N` releases containing uploaded `app-release.apk` assets
+  are exposed. Public metadata omits raw private release notes and other assets, requires a
+  SHA-256 digest, and caches for 60 seconds. Release tags are not represented as Android version
+  codes: `app/build.gradle.kts` still has versionCode 1, and the tracked development signing key
+  still needs a deliberate migration before a production Android updater rollout.
+- Runtime evidence: authenticated read-only GitHub inspection confirmed Enterprise 3.21.1,
+  latest release `build-163`, uploaded APK asset 42 (165599218 bytes), and a valid SHA-256 digest.
+  A controlled binary API request returned 302 to `https://media.git.hoodnet.work`; only that
+  origin is allowed. No credentials or signed download URLs were printed or persisted. The
+  existing gh credential was used locally for inspection, not copied into Cloudflare.
+- Deployed `manticord-updates` to the user's single authenticated Cloudflare account. The user
+  added `GITHUB_TOKEN` through Wrangler's secret prompt and explicitly selected
+  `microcord.mantikafasi.dev`. Primary https://microcord.mantikafasi.dev and fallback
+  https://manticord-updates.mantikafasi.workers.dev are active (Worker version
+  `a65375c9-899d-463c-9a7f-714307b44064`). The custom domain was connected through Wrangler;
+  no paid storage or additional domains were configured. Server setup is COMPLETE; the Android
+  updater itself is not implemented.
+- Live lookup initially failed with a Worker TypeError before receiving an API response.
+  Replacing metadata fetch's `redirect=error` with `redirect=manual` resolved it; unexpected
+  metadata redirects still fail closed without forwarding credentials. Temporary stage probes
+  were removed; remaining warnings log only upstream status or allowlisted error type.
+- Public verification: `/latest.json` returns 200 for build-163 with a versioned URL on the
+  custom domain; APK HEAD returns 302/no-store to the allowed media origin; a four-byte Range
+  request returns 206 with the APK ZIP header and correct Content-Range. A full 165599218-byte
+  download succeeds and matches both the advertised size and SHA-256. No GitHub authentication
+  was used on these public checks, and no signed URLs or APK contents were logged/saved.
+  Unknown routes were verified to return 404; the missing-secret state was verified as 503.
+- Verification: eight Node test cases pass, including metadata privacy/caching, exact-release
+  routing, redirect host/scheme/credential rejection, binary and range streaming, missing
+  digest/invalid asset rejection, HEAD, unknown routes/methods and sanitized upstream failures.
+  `wrangler deploy --dry-run` and deployment succeed. No Gradle check was needed or run because
+  Android sources, resources and builds are unchanged.
+- Resumable: `tools/update-worker/worker.mjs` | GitHub Enterprise release-assets API and observed
+  media.git.hoodnet.work redirect (no 126.21 reference owner) | no server implementation blocker
+  remains; reverify the allowlist and digest contract if Enterprise hosting changes.
+- Next separately approved slice: `app/build.gradle.kts` | Android package update/signing
+  contract (no 126.21 updater owner) | establish monotonic APK version codes and a private
+  release-key migration before wiring this feed to an Android updater; do not treat build tags
+  as existing APK version codes or silently switch the signing key.
+
+### 2026-09-06 - In-App Update Checks And Installer
+
+- User requested default-on update checking with an off switch, an in-app update notification,
+  and a tappable download/install screen. Added Settings > Updates with generated bindings,
+  the existing CheckedSetting/Material styles, current and available source revisions, manual
+  checks, progress/paused states, cancellation, verification/errors and Android install handoff.
+  The existing NoticePopup/StoreNotices queue presents a clickable banner on Home or Settings;
+  it is deduplicated by commit within the process. No stock alert or background service added.
+- `ClientSettings.automaticUpdateChecks` is a registered default-true Boolean in the default
+  preference scope, included in cloud settings backup. Download IDs, pending release metadata
+  and check timing live separately in device-local updater runtime preferences, not backup.
+  AppActivity foreground triggers checks at most every six hours, with a 15-minute failure
+  retry interval. Disabling suppresses automatic checks and notification delivery; manual checks remain.
+- The app uses an unauthenticated, redirect-disabled OkHttp client for the public update feed,
+  not Discord's token-bearing transport. Metadata is bounded and validated against the exact
+  HTTPS update host, release path, digest, size, package and build identity. Only a different
+  full commit SHA with strictly newer commit time and a nondecreasing APK version is offered,
+  avoiding downgrade prompts and identical-source reinstall loops on local/development builds.
+- Android DownloadManager owns downloads, including background continuation. The screen alone
+  polls progress, and a persisted pending ID is restored after process death. Completed bytes
+  are copied into private files through a size-bounded SHA-256 verification; package name,
+  archive version and current signing certificates must also match. Bytes/package/signers are
+  rechecked before a narrow FileProvider grant to Android's installer. Added only the
+  REQUEST_INSTALL_PACKAGES permission and private updates/ provider path. The existing signing
+  key is unchanged; its tracked-development-key risk remains and requires an explicit migration.
+- Source identity now comes from BuildConfig UPDATE_COMMIT_SHA, UPDATE_COMMIT_TIMESTAMP and
+  UPDATE_BUILD_ID. APK versionCode is commit epoch seconds minus 1577836800, validated as a
+  positive Android int, identically for local and CI builds. This advances historical version 1.
+  Normal trunk commit time provides ordering; backdated commits and same-second commits are not
+  automatic upgrade candidates. There is no silent key rotation or forced data-clearing install.
+- `:app:generateReleaseUpdateManifest` consumes AGP's exact signed release APK metadata and
+  emits update-manifest.json with commit identity, package/version, size and SHA-256. CI keeps
+  push=debug artifact and workflow_dispatch=release, uses scripts/build.sh, pins release tags to
+  github.sha and uploads the manifest alongside app-release.apk. No release was published and
+  no commit/push was made during this session.
+- Extended/deployed the Worker to validate the optional named manifest against its APK digest
+  and size, bounded to 16 KiB and fetched without leaking GitHub credentials across redirects.
+  Deployment `2722630b-eeef-459e-8c04-c703dd4c4404` serves microcord.mantikafasi.dev and the
+  existing workers.dev fallback. Live feed/HEAD still work for legacy build-163. That historical
+  APK has no source manifest, so the app explains the limitation and does not offer it as an
+  automatic update. The next release published by the updated CI enables automatic prompts.
+- Verification: AppUpdateTest 5 + ClientSettingsTest 6 + Worker Node tests 18 + device updater
+  UI test 1 pass, with no skips. Debug/release assembly, manifest generation and debug install
+  on A065 / Android 16 pass through scripts/build.sh. Local release manifest size is 165634426
+  bytes; its SHA-256 matches an independent Get-FileHash result. Device UI fixture covers
+  toggle persistence, fragment restoration, available/downloading/paused/verifying/ready/legacy
+  and error states and launch routing, without downloads, installation or account mutations.
+- The normal instrumentation compilation remains blocked by unrelated EmbeddedActivity, native
+  engine, command attachment, nameplate, FlexInput and profile-theme test drift. The focused
+  test ran through a temporary init script restricting compileDebugAndroidTestKotlin to the
+  updater test and excluding unrelated Java test sources, with --no-configuration-cache. The
+  script was removed; no production/test suite exclusions were committed. Full suite, live
+  banner-to-download-to-install, permission rejection and process-death download recovery are
+  not claimed device-verified. Pre-existing missing startup-profile entries still warn in release.
+- Reference: `widgets/notice/NoticePopup.java:118-124`, target AppActivity notice delivery,
+  SettingsNavigation and generated settings layouts supply the reused UI/queue contracts.
+  The updater itself is a user-requested extension with no 126.21 first-party counterpart.
+- Resumable: `.github/workflows/continuous-release.yml` and `app/build.gradle.kts` | AGP APK
+  output metadata and GitHub release-assets API | after an explicitly approved commit/publish,
+  verify the first manifest-bearing release and its exact APK/source identity in the live feed.
+- Resumable: `app/src/main/java/com/discord/utilities/updates/AppUpdater.kt` and
+  `app/src/main/java/com/discord/widgets/settings/WidgetSettingsUpdates.kt` | NoticePopup.java
+  and Android DownloadManager/package-installer contracts | device-check a genuinely newer
+  release's banner tap, background/restart recovery, cancel/retry, unknown-source permission,
+  installer cancellation/success and account/settings retention; no fixture downgrade installs.
+
+### 2026-09-06 - First Live Updater Release And Banner Test
+
+- The user could not test against legacy build-163 and explicitly approved committing, pushing
+  and publishing the updater. Committed `a312bf23` (`feat: add in-app updater`) and pushed master,
+  including its previously local Cloudflare-worker parent commit. The installed debug baseline
+  was intentionally kept at source ecb3993e / versionCode 210862469.
+- Started release workflow run 266 (build number 166). CI was still compiling after 17 minutes;
+  the prior release took about 38 minutes. Built the exact clean pushed commit locally with
+  MANTICORD_BUILD_ID=166 through scripts/build.sh :app:generateReleaseUpdateManifest --offline,
+  then cancelled the duplicate CI release before its publication step. The normal push-triggered
+  debug workflow run 265 succeeded. This is not recorded as a successful CI release run.
+- Published https://git.hoodnet.work/firecord/microcord/releases/tag/build-166 with both assets
+  uploaded and verified while still a draft. GitHub CLI large uploads stalled; an authenticated
+  HTTP/1.1 API upload completed with HTTP 201. The credential stayed in memory/stdin and was not
+  printed or saved. APK: 165634424 bytes, SHA-256
+  89c63ba37820051e52d53d2187ef066566bdae2ab66476d0021e3263cd137d63. GitHub's digest matches the
+  independent local hash and release manifest. Source a312bf235ff755b49768731e97a1cdd379af4b9e,
+  commitTimestamp 1788703379, versionCode 210866579. Existing signing key and integrity rules remain.
+- Public /latest.json now returns build-166 with the real source/version fields. The versioned
+  download returns 302 to the allowed media origin; a byte-range request returns 206 with the
+  APK ZIP header and correct total size. No fake version, legacy bypass or device downgrade.
+- The user confirmed the app offers the new update. Manual checks intentionally do not queue
+  a banner and begin the six-hour cooldown, which explained the reported missing notification.
+  For the requested automatic-banner test, verified no download was pending, stopped the app,
+  reset only updater runtime next_check to zero, verified other preference data was unchanged,
+  and reopened AppActivity$Main. The actual automatic check queued InAppNotif-Update for a312bf23;
+  the user then confirmed the banner appeared on Home/main Settings. Accounts, user settings,
+  download verification and install permissions were not changed. Installation is left to the
+  user through the banner's download/install screen.
+- Resumable: `app/src/main/java/com/discord/utilities/updates/AppUpdater.kt` and
+  `app/src/main/java/com/discord/widgets/settings/WidgetSettingsUpdates.kt` | Android
+  DownloadManager/package installer and NoticePopup.java | if the user reports a failure while
+  installing build-166, inspect the actual download/verification/permission state; do not install
+  it over ADB first, because that would consume the test update and mask the real updater flow.

@@ -50,6 +50,7 @@ import com.discord.utilities.notifications.NotificationRenderer
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.user.UserUtils.isStaff
+import com.discord.utilities.updates.AppUpdater
 import com.discord.widgets.multiaccount.WidgetAccountSwitchSpinner
 import com.discord.views.ThemedColor
 import com.discord.views.ToolbarTitleLayout
@@ -312,6 +313,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
                 }
             }
         tryShowPendingNotice()
+        AppUpdater.onForeground(applicationContext)
     }
 
     private fun configureDeveloperShortcut() {
