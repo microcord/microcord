@@ -132,6 +132,27 @@ class WidgetMediaLaunchTest {
     }
 
     @Test
+    fun `a rich embed plays its extensionless video using the proxy or origin`() {
+        val origin = "https://example.com/stream/opaque-id"
+        for (proxy in listOf("https://proxy.example.com/stream/opaque-id", null)) {
+            val args = launchArgs(
+                embed(
+                    type = EmbedType.RICH,
+                    video = EmbedVideo(origin, proxy, 800, 1152),
+                    thumbnail = EmbedThumbnail("https://example.com/poster.jpg", "https://proxy.example.com/poster.jpg", 800, 1152),
+                ),
+            )
+
+            assertEquals(MediaType.VIDEO, args.mediaType)
+            assertEquals(proxy ?: origin, args.progressiveMediaUri)
+            assertEquals("https://proxy.example.com/poster.jpg", args.previewImageUri)
+            assertEquals("https://example.com/page", args.uri)
+            assertEquals(1152, args.width)
+            assertEquals(800, args.height)
+        }
+    }
+
+    @Test
     fun `image embed opens as a still even though its declared type is playable-adjacent`() {
         val args = launchArgs(
             embed(

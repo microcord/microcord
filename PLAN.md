@@ -3960,3 +3960,38 @@ Reconnect and visually verify icon-inside-pill and the message-jump glyph.
 - Resumable: `app/src/main/java/com/discord/stores/StoreSavedMessages.kt` |
   RN out.js:1331948-1332351 and 2135838-2136016 | opt-in live check card removal, sync from
   official-client changes, reconnect and account switch using sanitized logs.
+
+### 2026-09-06 - Rich Embed Video Playback
+
+- Report: a vxTwitter/fixvx embed carried `type=rich`, a thumbnail, and an extensionless video
+  URL, but no image field. The legacy preview helper ignored its video, the play affordance
+  recognized only VIDEO/GIFV, and the fullscreen launch arguments discarded the rich video.
+- Fix: the shared playable predicate now also accepts RICH with a nonblank video URL. Playable
+  embeds use the thumbnail as their large poster, falling back to the video resource, and the
+  fullscreen viewer uses the same predicate to retain the proxy/origin stream. Rich cards keep
+  their author, description and footer rather than being rewritten to VIDEO. Their small side
+  thumbnail is hidden to avoid duplicating the large poster. Ordinary rich images and existing
+  VIDEO/GIFV behavior are preserved; no hostname or file-extension guessing was added.
+- Reference: `discord-jadx/app/src/main/java/com/discord/utilities/embed/EmbedResourceUtils.java`
+  and Vineflower `out/com/discord/utilities/embed/EmbedResourceUtils.kt:198-285` confirm the old
+  type-specific preview rules; `WidgetChatListAdapterItemEmbed.java:534-623` supplies the existing
+  card/play/viewer path. Rich-video support is an intentional modern compatibility extension
+  supported by the user's supplied embed shape, not a claim about 126.21 behavior.
+- The touched embed holder and field rows now use generated bindings instead of cached manual
+  lookups. No XML, margins, size limits or native media code changed; the video occupies the
+  existing card media area, sized from the supplied dimensions.
+- Verification: 30 focused tests pass with no skips (EmbedResourceUtilsTest 16,
+  WidgetMediaLaunchTest 13, WidgetChatListAdapterItemEmbedTest 1), plus debug assembly and
+  installation on A065 / Android 16 through `scripts/build.sh --offline`. New sanitized checks
+  cover rich poster selection, retaining the card, extensionless proxy/origin streams, and
+  missing/empty video URLs. No original account/message data was saved as a fixture. No release
+  build, connected instrumentation or live video playback check was run.
+- Resumable: `app/src/main/java/com/discord/widgets/chat/list/adapter/WidgetChatListAdapterItemEmbed.kt`
+  and `app/src/main/java/com/discord/widgets/media/WidgetMedia.kt` | reference
+  `widgets/chat/list/adapter/WidgetChatListAdapterItemEmbed.java:534-623` and `widgets/media/WidgetMedia.java`
+  | reopen the reported embed, confirm one large poster/play affordance, tap to play, then check
+  row recycling, spoilers and ordinary image/GIF cards on device.
+- Separate follow-up: `app/src/main/java/com/discord/widgets/channels/WidgetChannelContent.kt:195-200`
+  | modern channel-media browser extension (no direct 126.21 owner) | its separate URL-suffix
+  filter still excludes extensionless videos from the media grid; reconcile with typed embed
+  metadata while retaining external-player exclusions. This chat-rendering fix does not change it.

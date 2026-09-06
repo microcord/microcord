@@ -48,20 +48,21 @@ object EmbedResourceUtils {
     /**
      * Which of an embed's three media slots supplies its still preview.
      *
-     * Videos and GIFVs preview from their thumbnail and fall back to the video itself; articles,
+     * Playable embeds preview from their thumbnail and fall back to the video itself; articles,
      * images and tweets only ever preview from the thumbnail; link and HTML embeds have no preview
      * at all; everything else previews from the image slot.
      */
-    fun MessageEmbed.getPreviewImage(): RenderableEmbedMedia? = when (type) {
-        EmbedType.ARTICLE, EmbedType.IMAGE, EmbedType.TWEET -> thumbnail?.asRenderableEmbedMedia()
-        EmbedType.VIDEO, EmbedType.GIFV ->
-            thumbnail?.asRenderableEmbedMedia() ?: video?.asRenderableEmbedMedia()
-        EmbedType.LINK, EmbedType.HTML -> null
+    fun MessageEmbed.getPreviewImage(): RenderableEmbedMedia? = when {
+        isPlayable() -> thumbnail?.asRenderableEmbedMedia() ?: video?.asRenderableEmbedMedia()
+        type == EmbedType.ARTICLE || type == EmbedType.IMAGE || type == EmbedType.TWEET ->
+            thumbnail?.asRenderableEmbedMedia()
+        type == EmbedType.LINK || type == EmbedType.HTML -> null
         else -> image?.asRenderableEmbedMedia()
     }
 
     /** Whether tapping the embed should start playback rather than open a still viewer. */
-    fun MessageEmbed.isPlayable(): Boolean = type in PLAYABLE_EMBED_TYPES
+    fun MessageEmbed.isPlayable(): Boolean = type in PLAYABLE_EMBED_TYPES ||
+        (type == EmbedType.RICH && !(video?.proxyUrl ?: video?.url).isNullOrBlank())
 
     /**
      * Whether the embed is nothing but media, and so renders without a card.

@@ -96,10 +96,30 @@ class EmbedResourceUtilsTest {
     }
 
     @Test
-    fun `only videos and gifvs are playable`() {
+    fun `video and gifv types are playable but a plain image is not`() {
         assertTrue(playable(embed(EmbedType.VIDEO)))
         assertTrue(playable(embed(EmbedType.GIFV)))
         assertFalse(playable(embed(EmbedType.IMAGE)))
+    }
+
+    @Test
+    fun `a rich video uses its poster and keeps the card while ordinary rich embeds stay images`() {
+        val thumbnail = EmbedThumbnail("https://example.com/poster.jpg", "https://proxy.example.com/poster.jpg", 800, 1152)
+        val video = EmbedVideo("https://example.com/stream/opaque-id", "https://proxy.example.com/stream/opaque-id", 800, 1152)
+        val image = EmbedImage("https://example.com/image.jpg", "https://proxy.example.com/image.jpg", 320, 240)
+        val subject = embed(EmbedType.RICH, thumbnail = thumbnail, video = video, image = image)
+
+        assertTrue(playable(subject))
+        assertFalse(inline(subject))
+        assertFalse(simple(subject))
+        assertNull(externalOpenUrl(subject))
+        assertEquals(RenderableEmbedMedia(thumbnail.proxyUrl, 1152, 800), previewOf(subject))
+        assertEquals(RenderableEmbedMedia(video.proxyUrl, 1152, 800), previewOf(subject.copy(thumbnail = null)))
+        assertFalse(playable(subject.copy(video = null)))
+        assertEquals(image.proxyUrl, previewOf(subject.copy(video = null))?.url)
+        assertNull(previewOf(subject.copy(video = null, image = null)))
+        assertFalse(playable(subject.copy(video = video.copy(url = null, proxyUrl = null))))
+        assertFalse(playable(subject.copy(video = video.copy(url = "", proxyUrl = null))))
     }
 
     @Test

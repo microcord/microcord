@@ -988,11 +988,9 @@ internal fun launchArgs(embed: MessageEmbed): MediaLaunchArgs {
     return MediaLaunchArgs(
         title = embed.title,
         uri = embed.url,
-        // Only the two playable embed kinds carry a stream; every other kind is a still.
-        progressiveMediaUri = when (embed.type) {
-            EmbedType.VIDEO, EmbedType.GIFV -> embed.video?.let { it.proxyUrl ?: it.url }
-            else -> null
-        },
+        progressiveMediaUri = if (with(EmbedResourceUtils) { embed.isPlayable() }) {
+            embed.video?.let { it.proxyUrl ?: it.url }
+        } else null,
         previewImageUri = preview?.url,
         width = preview?.width,
         height = preview?.height,

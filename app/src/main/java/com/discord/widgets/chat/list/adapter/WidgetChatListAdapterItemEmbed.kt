@@ -8,11 +8,8 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.cardview.widget.CardView
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import com.discord.R
@@ -25,6 +22,8 @@ import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.role.GuildRole
 import com.discord.api.utcdatetime.UtcDateTime
+import com.discord.databinding.WidgetChatListAdapterItemEmbedBinding
+import com.discord.databinding.WidgetChatListAdapterItemEmbedFieldBinding
 import com.discord.models.member.GuildMember
 import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.simpleast.core.node.Node
@@ -52,16 +51,12 @@ import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.view.extensions.fadeIn
 import com.discord.utilities.view.extensions.fadeOut
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
-import com.discord.utilities.view.text.LinkifiedTextView
-import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.InlineMediaView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.media.WidgetMedia
-import com.discord.views.VitoImageView
-import com.google.android.material.card.MaterialCardView
 import rx.Observable
 import rx.Subscription
 
@@ -87,27 +82,7 @@ class WidgetChatListAdapterItemEmbed(
 ) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_embed, adapter),
     FragmentLifecycleListener {
 
-    private val highlightedBackground: View = itemView.findViewById(R.id.chat_list_adapter_item_highlighted_bg)
-    private val gutterBackground: View = itemView.findViewById(R.id.chat_list_adapter_item_gutter_bg)
-    private val containerCard: MaterialCardView = itemView.findViewById(R.id.chat_list_item_embed_container_card)
-    private val content: ConstraintLayout = itemView.findViewById(R.id.chat_list_item_embed_content)
-    private val divider: View = itemView.findViewById(R.id.chat_list_item_embed_divider)
-    private val provider: TextView = itemView.findViewById(R.id.chat_list_item_embed_provider)
-    private val authorIcon: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_author_icon)
-    private val authorText: TextView = itemView.findViewById(R.id.chat_list_item_embed_author_text)
-    private val title: LinkifiedTextView = itemView.findViewById(R.id.chat_list_item_embed_title)
-    private val description: LinkifiedTextView = itemView.findViewById(R.id.chat_list_item_embed_description)
-    private val fields: LinearLayout = itemView.findViewById(R.id.chat_list_item_embed_fields)
-    private val imageContainer: CardView = itemView.findViewById(R.id.embed_image_container)
-    private val image: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_image)
-    private val imageIcons: ImageView = itemView.findViewById(R.id.chat_list_item_embed_image_icons)
-    private val thumbnail: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_image_thumbnail)
-    private val footerIcon: VitoImageView = itemView.findViewById(R.id.chat_list_item_embed_footer_icon)
-    private val footerText: TextView = itemView.findViewById(R.id.chat_list_item_embed_footer_text)
-    private val spoilerCover: View = itemView.findViewById(R.id.chat_list_item_embed_spoiler)
-    private val inlineMedia: InlineMediaView = itemView.findViewById(R.id.embed_inline_media)
-    private val inlineFavorite: ImageView = itemView.findViewById(R.id.chat_list_item_embed_inline_favorite)
-    private val imageFavorite: ImageView = itemView.findViewById(R.id.chat_list_item_embed_image_favorite)
+    private val binding = WidgetChatListAdapterItemEmbedBinding.bind(itemView)
 
     private val userSettings = StoreStream.getUserSettings()
     private val embedTinyIconSize = itemView.resources.getDimensionPixelSize(R.dimen.embed_tiny_icon_size)
@@ -125,7 +100,13 @@ class WidgetChatListAdapterItemEmbed(
     override val subscription: Subscription? get() = nameSubscription
 
     init {
-        listOf<TextView>(provider, title, authorText, description, footerText)
+        listOf<TextView>(
+            binding.chatListItemEmbedProvider,
+            binding.chatListItemEmbedTitle,
+            binding.chatListItemEmbedAuthorText,
+            binding.chatListItemEmbedDescription,
+            binding.chatListItemEmbedFooterText,
+        )
             .forEach { it.copyTextOnLongPress() }
     }
 
@@ -143,7 +124,12 @@ class WidgetChatListAdapterItemEmbed(
         itemView.setOnClickListener {
             adapter.eventHandler.onMessageClicked(entry.message, entry.isThreadStarterMessage)
         }
-        configureCellHighlight(entry.message, highlightedBackground, gutterBackground, entry.isPendingReply)
+        configureCellHighlight(
+            entry.message,
+            binding.chatListAdapterItemHighlightedBg,
+            binding.chatListAdapterItemGutterBg,
+            entry.isPendingReply,
+        )
 
         val improvedMarkdown = MarkupEligibility.allowsImprovedMarkdown(entry.message)
         val model = Model(
@@ -165,9 +151,9 @@ class WidgetChatListAdapterItemEmbed(
         ) { resolved -> configureUI(resolved) }
     }
 
-    override fun onPause() = inlineMedia.onPause()
+    override fun onPause() = binding.embedInlineMedia.onPause()
 
-    override fun onResume() = inlineMedia.onResume()
+    override fun onResume() = binding.embedInlineMedia.onResume()
 
     // region binding
 
@@ -177,11 +163,11 @@ class WidgetChatListAdapterItemEmbed(
         val renderContext = model.createRenderContext(itemView.context, adapter.eventHandler)
 
         if (model.isSpoilerHidden) {
-            spoilerCover.fadeIn(SPOILER_FADE_IN_MS, additionalAnimation = { it.scaleX(1f).scaleY(1f) })
+            binding.chatListItemEmbedSpoiler.fadeIn(SPOILER_FADE_IN_MS, additionalAnimation = { it.scaleX(1f).scaleY(1f) })
         } else {
-            spoilerCover.fadeOut(SPOILER_FADE_OUT_MS, additionalAnimation = { it.scaleX(0.9f).scaleY(0.9f) })
+            binding.chatListItemEmbedSpoiler.fadeOut(SPOILER_FADE_OUT_MS, additionalAnimation = { it.scaleX(0.9f).scaleY(0.9f) })
         }
-        spoilerCover.setOnClickListener {
+        binding.chatListItemEmbedSpoiler.setOnClickListener {
             if (adapter.data.isSpoilerClickAllowed) {
                 StoreStream.getMessageState().revealSpoilerEmbed(entry.message.id, entry.embedIndex)
             } else {
@@ -191,21 +177,21 @@ class WidgetChatListAdapterItemEmbed(
 
         try {
             if (with(EmbedResourceUtils) { embed.isInlineEmbed() }) {
-                content.visibility = View.GONE
-                divider.visibility = View.GONE
-                thumbnail.visibility = View.GONE
-                inlineMedia.visibility = View.VISIBLE
+                binding.chatListItemEmbedContent.visibility = View.GONE
+                binding.chatListItemEmbedDivider.visibility = View.GONE
+                binding.chatListItemEmbedImageThumbnail.visibility = View.GONE
+                binding.embedInlineMedia.visibility = View.VISIBLE
                 configureInlineEmbed(embed, entry.autoPlayGifs)
-                containerCard.setCardBackgroundColor(
+                binding.chatListItemEmbedContainerCard.setCardBackgroundColor(
                     androidx.core.content.ContextCompat.getColor(itemView.context, R.color.transparent),
                 )
-                containerCard.strokeWidth = 0
-                configureGifFavorite(embed, inlineFavorite)
-                imageFavorite.visibility = View.GONE
+                binding.chatListItemEmbedContainerCard.strokeWidth = 0
+                configureGifFavorite(embed, binding.chatListItemEmbedInlineFavorite)
+                binding.chatListItemEmbedImageFavorite.visibility = View.GONE
             } else {
-                content.visibility = View.VISIBLE
-                divider.visibility = View.VISIBLE
-                inlineMedia.visibility = View.GONE
+                binding.chatListItemEmbedContent.visibility = View.VISIBLE
+                binding.chatListItemEmbedDivider.visibility = View.VISIBLE
+                binding.embedInlineMedia.visibility = View.GONE
                 configureEmbedDivider(embed.color.takeUnless { model.isSpoilerHidden })
                 configureEmbedProvider(embed)
                 configureEmbedAuthor(embed.author)
@@ -215,13 +201,13 @@ class WidgetChatListAdapterItemEmbed(
                 configureEmbedImage(embed)
                 configureEmbedFields(model, renderContext)
                 configureFooter(embed.footer, embed.timestamp)
-                containerCard.setCardBackgroundColor(
+                binding.chatListItemEmbedContainerCard.setCardBackgroundColor(
                     ThemedColor.resolve(itemView.context, R.attr.colorBackgroundSecondary),
                 )
-                containerCard.strokeWidth =
-                    containerCard.resources.getDimensionPixelSize(R.dimen.chat_embed_card_stroke_width)
-                configureGifFavorite(embed, imageFavorite)
-                inlineFavorite.visibility = View.GONE
+                binding.chatListItemEmbedContainerCard.strokeWidth =
+                    itemView.resources.getDimensionPixelSize(R.dimen.chat_embed_card_stroke_width)
+                configureGifFavorite(embed, binding.chatListItemEmbedImageFavorite)
+                binding.chatListItemEmbedInlineFavorite.visibility = View.GONE
             }
             itemView.visibility = View.VISIBLE
         } catch (failure: Exception) {
@@ -241,15 +227,15 @@ class WidgetChatListAdapterItemEmbed(
                 actualHeight = height,
                 maxWidth = maxEmbedImageWidth,
                 maxHeight = MAX_EMBED_IMAGE_HEIGHT_PX,
-                resources = inlineMedia.resources,
+                resources = itemView.resources,
             )
-            inlineMedia.updateUIWithEmbed(embed, scaledWidth, scaledHeight, autoPlayGifs)
+            binding.embedInlineMedia.updateUIWithEmbed(embed, scaledWidth, scaledHeight, autoPlayGifs)
         } else {
-            inlineMedia.updateUIWithEmbed(embed, autoPlayGifs = autoPlayGifs)
+            binding.embedInlineMedia.updateUIWithEmbed(embed, autoPlayGifs = autoPlayGifs)
         }
         // An inline embed is nothing but its media, so tapping it opens the fullscreen viewer —
         // unlike the carded embed's picture below, which follows the embed's own link.
-        inlineMedia.setOnClickListener { view -> WidgetMedia.launch(view.context, embed) }
+        binding.embedInlineMedia.setOnClickListener { view -> WidgetMedia.launch(view.context, embed) }
     }
 
     private fun configureGifFavorite(embed: MessageEmbed, button: ImageView) {
@@ -296,11 +282,11 @@ class WidgetChatListAdapterItemEmbed(
     }
 
     private fun configureEmbedDivider(color: Int?) {
-        divider.setBackgroundColor(
+        binding.chatListItemEmbedDivider.setBackgroundColor(
             if (color != null) {
                 ColorUtils.setAlphaComponent(color, 255)
             } else {
-                ThemedColor.resolve(divider.context, R.attr.colorBackgroundModifierAccent)
+                ThemedColor.resolve(itemView.context, R.attr.colorBackgroundModifierAccent)
             },
         )
     }
@@ -308,43 +294,43 @@ class WidgetChatListAdapterItemEmbed(
     private fun configureEmbedProvider(embed: MessageEmbed) {
         val embedProvider = embed.provider
         if (embedProvider == null) {
-            provider.visibility = View.GONE
+            binding.chatListItemEmbedProvider.visibility = View.GONE
             return
         }
-        provider.text = embedProvider.name
-        provider.bindUrlOnClick(embedProvider.url, embedProvider.name)
-        provider.visibility = View.VISIBLE
+        binding.chatListItemEmbedProvider.text = embedProvider.name
+        binding.chatListItemEmbedProvider.bindUrlOnClick(embedProvider.url, embedProvider.name)
+        binding.chatListItemEmbedProvider.visibility = View.VISIBLE
     }
 
     private fun configureEmbedAuthor(author: EmbedAuthor?) {
         if (author != null) {
-            authorText.text = author.name
-            authorText.bindUrlOnClick(author.url, author.name)
-            authorText.visibility = View.VISIBLE
+            binding.chatListItemEmbedAuthorText.text = author.name
+            binding.chatListItemEmbedAuthorText.bindUrlOnClick(author.url, author.name)
+            binding.chatListItemEmbedAuthorText.visibility = View.VISIBLE
         } else {
-            authorText.visibility = View.GONE
+            binding.chatListItemEmbedAuthorText.visibility = View.GONE
         }
 
         val iconUrl = author?.proxyIconUrl
         if (iconUrl == null) {
-            authorIcon.visibility = View.GONE
+            binding.chatListItemEmbedAuthorIcon.visibility = View.GONE
             return
         }
-        authorIcon.visibility = View.VISIBLE
-        setScaledImage(authorIcon, embedTinyIconSize, embedTinyIconSize, embedTinyIconSize, iconUrl)
+        binding.chatListItemEmbedAuthorIcon.visibility = View.VISIBLE
+        setScaledImage(binding.chatListItemEmbedAuthorIcon, embedTinyIconSize, embedTinyIconSize, embedTinyIconSize, iconUrl)
     }
 
     private fun configureEmbedTitle(model: Model, renderContext: MessageRenderContext) {
         val embed = model.embedEntry.embed
         val titleText = embed.title
         if (titleText == null) {
-            title.visibility = View.GONE
+            binding.chatListItemEmbedTitle.visibility = View.GONE
             return
         }
         val embedIndex = model.embedEntry.embedIndex
         val ast = embed.parseTitle(titleText)
         model.preprocessorFor(embedIndex, PART_TITLE).process(ast)
-        title.setDraweeSpanStringBuilder(
+        binding.chatListItemEmbedTitle.setDraweeSpanStringBuilder(
             AstRenderer.render(
                 ast,
                 renderContext.copy(
@@ -358,27 +344,27 @@ class WidgetChatListAdapterItemEmbed(
                 ),
             ),
         )
-        title.movementMethod = LinkMovementMethod.getInstance()
-        title.setTextColor(
+        binding.chatListItemEmbedTitle.movementMethod = LinkMovementMethod.getInstance()
+        binding.chatListItemEmbedTitle.setTextColor(
             ThemedColor.resolve(
-                title.context,
+                itemView.context,
                 if (embed.url != null) R.attr.colorTextLink else R.attr.primary_100,
             ),
         )
-        title.bindUrlOnClick(embed.url, embed.title)
-        title.visibility = View.VISIBLE
+        binding.chatListItemEmbedTitle.bindUrlOnClick(embed.url, embed.title)
+        binding.chatListItemEmbedTitle.visibility = View.VISIBLE
     }
 
     private fun configureEmbedDescription(model: Model, renderContext: MessageRenderContext) {
         val parsed = model.parsedDescription
         if (parsed == null) {
-            description.visibility = View.GONE
+            binding.chatListItemEmbedDescription.visibility = View.GONE
             return
         }
         val messageId = model.embedEntry.message.id
         val embedIndex = model.embedEntry.embedIndex
         model.preprocessorFor(embedIndex, PART_DESCRIPTION).process(parsed)
-        description.setDraweeSpanStringBuilder(
+        binding.chatListItemEmbedDescription.setDraweeSpanStringBuilder(
             AstRenderer.render(
                 parsed,
                 renderContext.copy(
@@ -389,8 +375,8 @@ class WidgetChatListAdapterItemEmbed(
                 ),
             ),
         )
-        description.movementMethod = LinkMovementMethod.getInstance()
-        description.visibility = View.VISIBLE
+        binding.chatListItemEmbedDescription.movementMethod = LinkMovementMethod.getInstance()
+        binding.chatListItemEmbedDescription.visibility = View.VISIBLE
     }
 
     /**
@@ -401,23 +387,21 @@ class WidgetChatListAdapterItemEmbed(
      */
     private fun configureEmbedFields(model: Model, renderContext: MessageRenderContext) {
         val parsedFields = model.parsedFields
-        val existingRows = (0 until fields.childCount).map(fields::getChildAt)
-        fields.removeAllViews()
+        val existingRows = (0 until binding.chatListItemEmbedFields.childCount).map(binding.chatListItemEmbedFields::getChildAt)
+        binding.chatListItemEmbedFields.removeAllViews()
         if (parsedFields == null) {
-            fields.visibility = View.GONE
+            binding.chatListItemEmbedFields.visibility = View.GONE
             return
         }
-        fields.visibility = View.VISIBLE
+        binding.chatListItemEmbedFields.visibility = View.VISIBLE
 
-        val inflater = LayoutInflater.from(fields.context)
+        val inflater = LayoutInflater.from(binding.chatListItemEmbedFields.context)
         val messageId = model.embedEntry.message.id
         val embedIndex = model.embedEntry.embedIndex
 
         parsedFields.forEachIndexed { index, field ->
-            val row = existingRows.getOrNull(index)
-                ?: inflater.inflate(R.layout.widget_chat_list_adapter_item_embed_field, fields, false)
-            val name = row.findViewById<SimpleDraweeSpanTextView>(R.id.chat_list_item_embed_field_name)
-            val value = row.findViewById<SimpleDraweeSpanTextView>(R.id.chat_list_item_embed_field_value)
+            val row = existingRows.getOrNull(index)?.let(WidgetChatListAdapterItemEmbedFieldBinding::bind)
+                ?: WidgetChatListAdapterItemEmbedFieldBinding.inflate(inflater, binding.chatListItemEmbedFields, false)
 
             fun render(ast: MutableList<Node<MessageRenderContext>>, prefix: String) =
                 AstRenderer.render(
@@ -430,11 +414,11 @@ class WidgetChatListAdapterItemEmbed(
                     ),
                 )
 
-            name.setDraweeSpanStringBuilder(render(field.parsedName, "$PART_FIELD_NAME:$index"))
-            value.setDraweeSpanStringBuilder(render(field.parsedValue, "$PART_FIELD_VALUE:$index"))
-            name.movementMethod = LinkMovementMethod.getInstance()
-            value.movementMethod = LinkMovementMethod.getInstance()
-            fields.addView(row)
+            row.chatListItemEmbedFieldName.setDraweeSpanStringBuilder(render(field.parsedName, "$PART_FIELD_NAME:$index"))
+            row.chatListItemEmbedFieldValue.setDraweeSpanStringBuilder(render(field.parsedValue, "$PART_FIELD_VALUE:$index"))
+            row.chatListItemEmbedFieldName.movementMethod = LinkMovementMethod.getInstance()
+            row.chatListItemEmbedFieldValue.movementMethod = LinkMovementMethod.getInstance()
+            binding.chatListItemEmbedFields.addView(row.root)
         }
     }
 
@@ -443,13 +427,14 @@ class WidgetChatListAdapterItemEmbed(
             embed.type == EmbedType.HTML ||
             embed.type == EmbedType.RICH
         val embedThumbnail = embed.thumbnail
-        if (!hasThumbnailLayout || embedThumbnail == null) {
-            thumbnail.visibility = View.GONE
+        // A playable rich embed uses its thumbnail as the large video poster, not a second image.
+        if (!hasThumbnailLayout || embedThumbnail == null || with(EmbedResourceUtils) { embed.isPlayable() }) {
+            binding.chatListItemEmbedImageThumbnail.visibility = View.GONE
             return
         }
-        thumbnail.visibility = View.VISIBLE
+        binding.chatListItemEmbedImageThumbnail.visibility = View.VISIBLE
         setScaledImage(
-            view = thumbnail,
+            view = binding.chatListItemEmbedImageThumbnail,
             maxWidth = embedThumbnailMaxSize,
             width = embedThumbnail.width ?: 0,
             height = embedThumbnail.height ?: 0,
@@ -460,27 +445,27 @@ class WidgetChatListAdapterItemEmbed(
     private fun configureEmbedImage(embed: MessageEmbed) {
         val preview = with(EmbedResourceUtils) { embed.getPreviewImage() }
         if (preview == null) {
-            imageContainer.visibility = View.GONE
+            binding.embedImageContainer.visibility = View.GONE
             return
         }
         val renderMedia = shouldRenderMedia()
         val hasIntrinsicSize = (preview.width ?: 0) > 0 && (preview.height ?: 0) > 0
         if (renderMedia && hasIntrinsicSize) {
             setScaledImage(
-                view = image,
+                view = binding.chatListItemEmbedImage,
                 maxWidth = maxEmbedImageWidth,
                 width = preview.width ?: 0,
                 height = preview.height ?: 0,
                 imageProxyUrl = preview.url,
                 minWidth = maxEmbedImageWidth / 2,
             )
-            imageContainer.visibility = View.VISIBLE
+            binding.embedImageContainer.visibility = View.VISIBLE
         } else {
-            imageContainer.visibility = View.GONE
+            binding.embedImageContainer.visibility = View.GONE
         }
-        imageIcons.visibility =
+        binding.chatListItemEmbedImageIcons.visibility =
             if (with(EmbedResourceUtils) { embed.isPlayable() } && renderMedia) View.VISIBLE else View.GONE
-        image.setOnClickListener { view ->
+        binding.chatListItemEmbedImage.setOnClickListener { view ->
             val externalUrl = with(EmbedResourceUtils) { embed.getExternalOpenUrl() }
             if (externalUrl != null) {
                 UriHandler.handleOrUntrusted(view.context, externalUrl, embed.title)
@@ -496,21 +481,22 @@ class WidgetChatListAdapterItemEmbed(
     private fun configureFooter(footer: EmbedFooter?, timestamp: UtcDateTime?) {
         val iconUrl = footer?.proxyIconUrl
         if (footer?.text.isNullOrEmpty()) {
-            footerIcon.visibility = View.GONE
+            binding.chatListItemEmbedFooterIcon.visibility = View.GONE
         } else {
-            footerIcon.visibility = if (iconUrl != null) View.VISIBLE else View.GONE
-            setScaledImage(footerIcon, embedTinyIconSize, embedTinyIconSize, embedTinyIconSize, iconUrl)
+            binding.chatListItemEmbedFooterIcon.visibility = if (iconUrl != null) View.VISIBLE else View.GONE
+            setScaledImage(binding.chatListItemEmbedFooterIcon, embedTinyIconSize, embedTinyIconSize, embedTinyIconSize, iconUrl)
         }
 
         val readableTime = timestamp?.let {
-            TimeUtils.toReadableTimeString(footerText.context, it.dateTimeMillis, adapter.clock)
+            TimeUtils.toReadableTimeString(itemView.context, it.dateTimeMillis, adapter.clock)
         }
-        footerText.text = when {
+        binding.chatListItemEmbedFooterText.text = when {
             footer != null && readableTime != null -> "${footer.text} | $readableTime"
             footer != null -> footer.text
             else -> readableTime
         }
-        footerText.visibility = if (footerText.text.isNotEmpty()) View.VISIBLE else View.GONE
+        binding.chatListItemEmbedFooterText.visibility =
+            if (binding.chatListItemEmbedFooterText.text.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     /**
@@ -534,7 +520,7 @@ class WidgetChatListAdapterItemEmbed(
             actualHeight = height,
             maxWidth = maxWidth,
             maxHeight = maxWidth,
-            resources = inlineMedia.resources,
+            resources = itemView.resources,
             minWidth = minWidth,
         )
         val layoutParams = view.layoutParams
