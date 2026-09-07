@@ -45,6 +45,20 @@ object EmbedResourceUtils {
 
     private val PLAYABLE_EMBED_TYPES: List<EmbedType> = listOf(EmbedType.VIDEO, EmbedType.GIFV)
 
+    /** Modern multi-image unfurls arrive as a rich card followed by image-only same-URL embeds. */
+    fun MessageEmbed.getGalleryImages(embeds: List<MessageEmbed>): List<EmbedImage> {
+        if (type != EmbedType.RICH || video != null) return emptyList()
+        val companions = embeds.filter { candidate ->
+            url != null && candidate.url == url && candidate.type == EmbedType.RICH && candidate.video == null &&
+                candidate.title.isNullOrEmpty() && candidate.description.isNullOrEmpty() &&
+                candidate.author == null && candidate.provider == null && candidate.footer == null &&
+                candidate.thumbnail == null && candidate.fields.isNullOrEmpty()
+        }.mapNotNull { it.image }
+        return (listOfNotNull(image) + companions)
+            .filter { !it.url.isNullOrBlank() || !it.proxyUrl.isNullOrBlank() }
+            .distinctBy { it.url?.takeIf(String::isNotBlank) ?: it.proxyUrl }
+    }
+
     /**
      * Which of an embed's three media slots supplies its still preview.
      *
@@ -123,7 +137,7 @@ object EmbedResourceUtils {
         height: Int,
         shouldAnimate: Boolean = true,
     ): List<String> {
-        val sized = "$originalUrl?width=$width&height=$height"
+        val sized = "$originalUrl${if ('?' in originalUrl) '&' else '?'}width=$width&height=$height"
         // CDN URLs carry signed query strings (`...catsurf.gif?ex=…`), so the extension has to be
         // read from the path alone — an endsWith on the full URL never matched, every animated GIF
         // was downgraded to a still, and only the fullscreen viewer animated them.
@@ -244,8 +258,8 @@ object EmbedResourceUtils {
      * The proxy URL is preferred over the origin: it is the only one the CDN will resize, and the
      * only one guaranteed to be reachable from a client behind a restrictive network.
      */
-    private fun EmbedImage.asRenderableEmbedMedia() =
-        RenderableEmbedMedia((proxyUrl ?: url)?.let(MediaProxyUrl::forMedia), width, height)
+    internal fun EmbedImage.asRenderableEmbedMedia() =
+        RenderableEmbedMedia((proxyUrl?.takeIf(String::isNotBlank) ?: url)?.let(MediaProxyUrl::forMedia), width, height)
 
     private fun EmbedThumbnail.asRenderableEmbedMedia() =
         RenderableEmbedMedia((proxyUrl ?: url)?.let(MediaProxyUrl::forMedia), width, height)

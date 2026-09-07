@@ -212,6 +212,16 @@ class EmbedResourceUtilsTest {
     }
 
     @Test
+    fun `sized previews preserve existing origin and signed query parameters`() {
+        assertEquals(listOf(
+            "https://example.com/image.jpg?name=orig&width=10&height=20&format=webp",
+            "https://example.com/image.jpg?name=orig&width=10&height=20",
+        ), EmbedResourceUtils.getPreviewUrls("https://example.com/image.jpg?name=orig", 10, 20))
+        assertEquals(listOf("https://example.com/image.gif?ex=1&is=2&width=10&height=20"),
+            EmbedResourceUtils.getPreviewUrls("https://example.com/image.gif?ex=1&is=2", 10, 20))
+    }
+
+    @Test
     fun `shouldAnimate false forces the still variant even for a gif`() {
         assertEquals(
             listOf(

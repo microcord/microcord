@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageView
+import android.widget.GridLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -24,6 +25,7 @@ import com.discord.api.role.GuildRole
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.databinding.WidgetChatListAdapterItemEmbedBinding
 import com.discord.databinding.WidgetChatListAdapterItemEmbedFieldBinding
+import com.discord.databinding.WidgetChatListEmbedImageBinding
 import com.discord.models.member.GuildMember
 import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.simpleast.core.node.Node
@@ -161,6 +163,10 @@ class WidgetChatListAdapterItemEmbed(
         val entry = model.embedEntry
         val embed = entry.embed
         val renderContext = model.createRenderContext(itemView.context, adapter.eventHandler)
+        val accessibility = if (model.isSpoilerHidden) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+        binding.chatListItemEmbedContent.importantForAccessibility = accessibility
+        binding.embedInlineMedia.importantForAccessibility = accessibility
 
         if (model.isSpoilerHidden) {
             binding.chatListItemEmbedSpoiler.fadeIn(SPOILER_FADE_IN_MS, additionalAnimation = { it.scaleX(1f).scaleY(1f) })
@@ -177,6 +183,7 @@ class WidgetChatListAdapterItemEmbed(
 
         try {
             if (with(EmbedResourceUtils) { embed.isInlineEmbed() }) {
+                trimEmbedGallery(0)
                 binding.chatListItemEmbedContent.visibility = View.GONE
                 binding.chatListItemEmbedDivider.visibility = View.GONE
                 binding.chatListItemEmbedImageThumbnail.visibility = View.GONE
@@ -198,7 +205,7 @@ class WidgetChatListAdapterItemEmbed(
                 configureEmbedTitle(model, renderContext)
                 configureEmbedDescription(model, renderContext)
                 configureEmbedThumbnail(embed)
-                configureEmbedImage(embed)
+                configureEmbedImage(model)
                 configureEmbedFields(model, renderContext)
                 configureFooter(embed.footer, embed.timestamp)
                 binding.chatListItemEmbedContainerCard.setCardBackgroundColor(
@@ -442,8 +449,16 @@ class WidgetChatListAdapterItemEmbed(
         )
     }
 
-    private fun configureEmbedImage(embed: MessageEmbed) {
-        val preview = with(EmbedResourceUtils) { embed.getPreviewImage() }
+    private fun configureEmbedImage(model: Model) {
+        val embed = model.embedEntry.embed
+        val images = with(EmbedResourceUtils) { embed.getGalleryImages(model.embedEntry.message.embeds.orEmpty()) }
+        if (images.size > 1 && shouldRenderMedia()) {
+            configureEmbedGallery(model, images)
+            return
+        }
+        trimEmbedGallery(0)
+        binding.embedImageGrid.visibility = View.GONE
+        val preview = with(EmbedResourceUtils) { images.firstOrNull()?.asRenderableEmbedMedia() ?: embed.getPreviewImage() }
         if (preview == null) {
             binding.embedImageContainer.visibility = View.GONE
             return
@@ -466,15 +481,77 @@ class WidgetChatListAdapterItemEmbed(
         binding.chatListItemEmbedImageIcons.visibility =
             if (with(EmbedResourceUtils) { embed.isPlayable() } && renderMedia) View.VISIBLE else View.GONE
         binding.chatListItemEmbedImage.setOnClickListener { view ->
+            if (model.isSpoilerHidden) return@setOnClickListener
             val externalUrl = with(EmbedResourceUtils) { embed.getExternalOpenUrl() }
             if (externalUrl != null) {
                 UriHandler.handleOrUntrusted(view.context, externalUrl, embed.title)
+            } else if (images.size == 1 && images[0] != embed.image) {
+                WidgetMedia.launchEmbedGallery(view.context, embed, images, 0)
             } else {
                 // getExternalOpenUrl is non-null only for VIDEO and FILE embeds, so without this
                 // branch every actual image — a pasted image link, GIFV, RICH, LINK, ARTICLE —
                 // fell through to an empty lambda and tapping it did nothing at all.
                 WidgetMedia.launch(view.context, embed)
             }
+        }
+    }
+
+    private fun configureEmbedGallery(model: Model, images: List<EmbedImage>) {
+        val grid = binding.embedImageGrid
+        val gap = itemView.resources.getDimensionPixelSize(R.dimen.embed_item_margin)
+        val width = (maxEmbedImageWidth - binding.chatListItemEmbedContent.paddingStart -
+            binding.chatListItemEmbedContent.paddingEnd).coerceAtLeast(gap + 2)
+        val cell = (width - gap) / 2
+        val rows = (images.size + 1) / 2
+        grid.layoutParams = grid.layoutParams.apply {
+            this.width = width
+            height = rows * cell + (rows - 1) * gap
+        }
+        trimEmbedGallery(images.size)
+        val inflater = LayoutInflater.from(itemView.context)
+        images.forEachIndexed { index, image ->
+            val tile = (grid.getChildAt(index) as? ImageView)
+                ?: WidgetChatListEmbedImageBinding.inflate(inflater, grid, false).root.also(grid::addView)
+            val wide = index == images.lastIndex && images.size % 2 == 1
+            val tileWidth = if (wide) width else cell
+            tile.layoutParams = GridLayout.LayoutParams(
+                GridLayout.spec(index / 2, 1, GridLayout.FILL),
+                GridLayout.spec(index % 2, if (wide) 2 else 1, GridLayout.FILL),
+            ).apply {
+                this.width = tileWidth
+                height = cell
+                marginEnd = if (!wide && index % 2 == 0) gap else 0
+                topMargin = if (index >= 2) gap else 0
+            }
+            tile.contentDescription = itemView.context.getString(R.string.embed_gallery_image_description, index + 1, images.size)
+            val url = with(EmbedResourceUtils) { image.asRenderableEmbedMedia().url }
+            MGImages.setImage(tile, url?.let { EmbedResourceUtils.getPreviewUrls(it, tileWidth, cell, model.embedEntry.autoPlayGifs) }.orEmpty(),
+                width = tileWidth, height = cell, changeDetector = imageChangeDetector,
+                autoPlayAnimations = model.embedEntry.autoPlayGifs)
+            tile.setOnClickListener {
+                if (!model.isSpoilerHidden) WidgetMedia.launchEmbedGallery(it.context, model.embedEntry.embed, images, index)
+            }
+            tile.setOnLongClickListener { itemView.performLongClick() }
+        }
+        if (binding.chatListItemEmbedImage.visibility != View.GONE) {
+            MGImages.cancelImageRequests(binding.chatListItemEmbedImage)
+            imageChangeDetector.clear(binding.chatListItemEmbedImage)
+        }
+        binding.chatListItemEmbedImage.visibility = View.GONE
+        binding.chatListItemEmbedImageIcons.visibility = View.GONE
+        grid.visibility = View.VISIBLE
+        binding.embedImageContainer.visibility = View.VISIBLE
+    }
+
+    private fun trimEmbedGallery(size: Int) {
+        val grid = binding.embedImageGrid
+        while (grid.childCount > size) {
+            val tile = grid.getChildAt(grid.childCount - 1) as ImageView
+            tile.setOnClickListener(null)
+            tile.setOnLongClickListener(null)
+            MGImages.cancelImageRequests(tile)
+            imageChangeDetector.clear(tile)
+            grid.removeViewAt(grid.childCount - 1)
         }
     }
 

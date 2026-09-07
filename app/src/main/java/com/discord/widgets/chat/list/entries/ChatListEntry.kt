@@ -2,7 +2,6 @@ package com.discord.widgets.chat.list.entries
 
 import com.discord.api.channel.Channel
 import com.discord.api.message.embed.EmbedType
-import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.message.MessageTypes
 import com.discord.api.role.GuildRole
 import com.discord.models.botuikit.MessageComponent
@@ -107,9 +106,8 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
 
         /**
          * Attachments first, then embeds, sharing one running `embedIndex` because revealed-spoiler
-         * state is keyed on it. Embeds repeating a url already seen are dropped: Discord unfurls one
-         * embed per link occurrence, so a message that repeats a link would render the same card
-         * twice. Embeds with a null url are always kept, since they carry no identity to dedupe on.
+         * state is keyed on it. Same-URL embeds share one card; its binder collects their companion
+         * images from the original message. Null-URL cards are independent and always kept.
          */
         fun createEmbedEntries(
             message: Message,
@@ -130,16 +128,8 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                 return emptyList()
             }
 
-            val seenUrls = HashSet<String?>()
-            val embeds = ArrayList<MessageEmbed>()
-            message.embeds.orEmpty().forEach { embed ->
-                if (!seenUrls.contains(embed.url)) {
-                    seenUrls.add(embed.url)
-                    embeds.add(embed)
-                } else if (embed.url == null) {
-                    embeds.add(embed)
-                }
-            }
+            val seenUrls = HashSet<String>()
+            val embeds = message.embeds.orEmpty().filter { it.url == null || seenUrls.add(it.url) }
 
             val attachments = message.attachments.orEmpty()
             val entries = ArrayList<ChatListEntry>(embeds.size + attachments.size + if (message.poll != null) 1 else 0)

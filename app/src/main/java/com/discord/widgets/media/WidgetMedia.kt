@@ -26,6 +26,7 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import com.discord.R
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
+import com.discord.api.message.embed.EmbedImage
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.app.AppFragment
@@ -40,6 +41,7 @@ import com.discord.player.MediaType
 import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.images.MediaProxyUrl
 import com.discord.utilities.io.UserDownloadManager
 import com.discord.utilities.io.UserDownloadResult
 import com.discord.utilities.io.UserDownloadStartResult
@@ -866,6 +868,13 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         @JvmStatic
         fun launch(context: Context, embed: MessageEmbed) = launch(context, launchArgs(embed), null)
 
+        /** Opens ordered embed images as stills, sharing the embed's source page. */
+        @JvmStatic
+        fun launchEmbedGallery(context: Context, embed: MessageEmbed, images: List<EmbedImage>, selectedIndex: Int) {
+            val (items, selected) = embedGalleryArgs(embed, images, selectedIndex)
+            launchGalleryItems(context, items, selected)
+        }
+
         @JvmStatic
         @JvmOverloads
         fun launchGallery(
@@ -877,6 +886,10 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             val items = attachments.mapIndexed { index, attachment ->
                 MediaGalleryItem(launchArgs(attachment), viewerContexts.getOrNull(index))
             }
+            launchGalleryItems(context, items, selectedIndex)
+        }
+
+        private fun launchGalleryItems(context: Context, items: List<MediaGalleryItem>, selectedIndex: Int) {
             val selected = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
             items.getOrNull(selected)?.let { item ->
                 presentScreen(
@@ -997,6 +1010,34 @@ internal fun launchArgs(embed: MessageEmbed): MediaLaunchArgs {
         // An embed only reaches the viewer from a playable row, so a non-GIFV is a video.
         mediaType = if (embed.type == EmbedType.GIFV) MediaType.GIFV else MediaType.VIDEO,
     )
+}
+
+internal fun embedGalleryArgs(
+    embed: MessageEmbed,
+    images: List<EmbedImage>,
+    selectedIndex: Int,
+): Pair<List<MediaGalleryItem>, Int> {
+    var selected = 0
+    val items = images.mapIndexedNotNull { index, image ->
+        val url = image.proxyUrl?.takeIf { it.isNotBlank() }
+            ?: image.url?.takeIf { it.isNotBlank() }
+            ?: return@mapIndexedNotNull null
+        // Count surviving predecessors so a missing URL never shifts a valid selection.
+        if (index < selectedIndex) selected++
+        MediaGalleryItem(
+            MediaLaunchArgs(
+                title = embed.title,
+                uri = embed.url?.takeIf { it.isNotBlank() },
+                progressiveMediaUri = null,
+                previewImageUri = MediaProxyUrl.forMedia(url),
+                width = image.width,
+                height = image.height,
+                mediaType = null,
+            ),
+            viewerContext = null,
+        )
+    }
+    return items to selected.coerceAtMost(items.lastIndex.coerceAtLeast(0))
 }
 
 /**

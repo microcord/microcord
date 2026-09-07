@@ -1,11 +1,13 @@
 package com.discord.widgets.media
 
 import com.discord.api.message.attachment.MessageAttachment
+import com.discord.api.message.embed.EmbedImage
 import com.discord.api.message.embed.EmbedThumbnail
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.EmbedVideo
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.player.MediaType
+import com.discord.utilities.icon.IconUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -91,6 +93,10 @@ class WidgetMediaLaunchTest {
         assertEquals(MediaType.VIDEO, args.mediaType)
         assertEquals("https://media.discordapp.net/proxied", args.progressiveMediaUri)
         assertEquals("https://media.discordapp.net/proxied?format=webp&width=800&height=600", args.previewImageUri)
+        assertEquals("https://media.discordapp.net/proxied", args.uri)
+        assertEquals("clip.mp4", args.title)
+        assertEquals(800, args.width)
+        assertEquals(600, args.height)
     }
 
     @Test
@@ -192,6 +198,81 @@ class WidgetMediaLaunchTest {
         // WidgetMedia.launch substitutes the preview when `uri` is absent; assert the input to that.
         assertNull(args.uri)
         assertEquals("https://proxy/i.png", args.previewImageUri)
+    }
+
+    @Test
+    fun `four embed gallery images keep their order dimensions and selected identity as stills`() {
+        val images = listOf(
+            EmbedImage("https://example.com/1.png", "https://proxy.example.com/1.png?quality=lossless", 800, 600),
+            EmbedImage("https://example.com/2.jpg?format=jpg&name=a%2Fb", null, 600, 900),
+            EmbedImage("https://example.com/3.webp?quality=lossless", " ", 1024, 512),
+            EmbedImage(null, "https://proxy.example.com/4.avif?quality=lossless&format=avif", 400, 800),
+        )
+        val embed = embed(
+            type = EmbedType.RICH,
+            url = "https://example.com/page?view=gallery",
+            video = EmbedVideo("https://example.com/unused.mp4", null, 100, 200),
+            thumbnail = EmbedThumbnail("https://example.com/unused.png", null, 100, 200),
+        ).copy(image = images.first())
+
+        for (selectedIndex in images.indices) {
+            val (items, selected) = embedGalleryArgs(embed, images, selectedIndex)
+
+            assertEquals(selectedIndex, selected)
+            assertEquals(
+                listOf(
+                    "https://proxy.example.com/1.png?quality=lossless",
+                    "https://example.com/2.jpg?format=jpg&name=a%2Fb",
+                    "https://example.com/3.webp?quality=lossless",
+                    "https://proxy.example.com/4.avif?quality=lossless&format=${IconUtils.staticImageExtension}",
+                ),
+                items.map { it.args.previewImageUri },
+            )
+            assertEquals(images.map { it.width to it.height }, items.map { it.args.width to it.args.height })
+            items.forEach { item ->
+                assertEquals(embed.title, item.args.title)
+                assertEquals(embed.url, item.args.uri)
+                assertNull(item.args.progressiveMediaUri)
+                assertNull(item.args.mediaType)
+                assertNull(item.viewerContext)
+            }
+        }
+    }
+
+    @Test
+    fun `URL-less gallery entries are skipped without shifting the selected image`() {
+        val missing = EmbedImage(null, null, null, null)
+        val images = listOf(
+            missing,
+            EmbedImage("https://example.com/1.png", null, 800, 600),
+            missing.copy(url = " ", proxyUrl = ""),
+            EmbedImage("https://example.com/2.png", null, 600, 800),
+            missing,
+        )
+        val embed = embed(EmbedType.RICH)
+        for ((requested, expected) in listOf(-1 to 0, 0 to 0, 1 to 0, 2 to 1, 3 to 1, 4 to 1, Int.MAX_VALUE to 1)) {
+            val (items, selected) = embedGalleryArgs(embed, images, requested)
+
+            assertEquals(expected, selected)
+            assertEquals(listOf("https://example.com/1.png", "https://example.com/2.png"), items.map { it.args.previewImageUri })
+        }
+        assertEquals(emptyList<MediaGalleryItem>() to 0, embedGalleryArgs(embed, emptyList(), 0))
+        assertEquals(emptyList<MediaGalleryItem>() to 0, embedGalleryArgs(embed, listOf(missing), 0))
+    }
+
+    @Test
+    fun `gallery without a source page falls back to each image for sharing`() {
+        val images = listOf(EmbedImage("https://example.com/image.png?quality=lossless", "", null, null))
+        for (page in listOf(null, " ")) {
+            val (items, selected) = embedGalleryArgs(embed(EmbedType.RICH, url = page), images, 0)
+            val args = items[selected].args
+
+            // Both intentFor and bindMedia substitute this item's preview when the source is absent.
+            assertNull(args.uri)
+            assertEquals(images.single().url, args.previewImageUri)
+            assertNull(args.width)
+            assertNull(args.height)
+        }
     }
 
     @Test

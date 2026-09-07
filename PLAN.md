@@ -4143,3 +4143,51 @@ Reconnect and visually verify icon-inside-pill and the message-jump glyph.
   DownloadManager/package installer and NoticePopup.java | if the user reports a failure while
   installing build-166, inspect the actual download/verification/permission state; do not install
   it over ADB first, because that would consume the test update and mask the real updater flow.
+
+### 2026-09-07 - Multi-Image Rich Embed Galleries
+
+- Report: a FixupX post's desktop `images` array contained four photos but the Android row showed
+  only the first. A single read-only request for the supplied message through Vencord confirmed
+  the wire payload has four separate RICH embeds sharing a URL: the first carries description,
+  author/footer and image; the other three carry only type/url/image metadata. There is no wire
+  images array. The structural request result, not original message/account data, informed the fix.
+- Root cause: the legacy one-card-per-URL row filter discarded companion rows, and the card binder
+  only read its primary image. The binder now collects ordered unique image-only companions from
+  the original message, retaining the first card's text/metadata and existing spoiler index.
+  Null-URL cards remain independent; unrelated URLs, video embeds and separate text cards do not
+  contribute images. No API DTO fields, constructors, wire schema or persisted cache format changed.
+- Multi-image rich cards use generated-binding Vito tiles in a native two-column GridLayout,
+  within the existing chat/card width budget. Four images form a 2x2 grid; an odd final tile spans
+  both columns. This intentional multi-image geometry change is supported by the verified payload;
+  single-image/video geometry is unchanged. Tiles are reused, removed requests/listeners and
+  change-detector keys are cleared, and disabled media settings leave no stale grid. Hidden
+  spoilers block tile launches and descendant accessibility until revealed. Tile long-press
+  delegates to existing message actions; RTL follows native GridLayout ordering.
+- Added WidgetMedia.launchEmbedGallery using the existing ViewPager2 gallery, preserving selected
+  image, per-image dimensions, proxy/origin fallback, source-page sharing, and still-image media
+  type. No fake MessageAttachment objects or new player/gallery implementation were introduced.
+  Preview sizing now appends query parameters correctly when origin/signature parameters already
+  exist. Forwarded messages have a separate renderer and retain all original companion rows;
+  do not apply normal-row deduplication there without also changing that renderer.
+- Verification: 45 JVM tests pass (EmbedGalleryTest 3, EmbedResourceUtilsTest 17, FileTypeTest 6,
+  WidgetMediaLaunchTest 16, ForwardedMessageEntryTest 3), plus two ForwardedMessageBindTest device
+  checks with no skips. Tests cover sanitized wire parsing, ordered images/deduplication, forwarded
+  preservation, selection/fallback, four/three/single tile recycling, stale click removal, spoilers,
+  RTL and disabled media. The existing forwarded test's obsolete MaterialCardView root cast was
+  replaced with its generated binding, matching its current FrameLayout root. Device images use
+  local resources and viewer launches are intercepted, not real downloads or account mutations.
+- Debug assembly/install pass on A065 / Android 16 through scripts/build.sh. The device tests used
+  a temporary init script selecting the owned test file because broad instrumentation compilation
+  has pre-existing unrelated failures; that script was removed. No release build, git commit/push
+  or publication was performed. Actual remote-photo rendering and fullscreen swipe gestures for
+  the reported post remain a manual confirmation, not claimed from the intercepted intent test.
+- Reference: `widgets/chat/list/entries/ChatListEntry.java:152-201` confirms legacy URL deduplication;
+  `widgets/chat/list/adapter/WidgetChatListAdapterItemEmbed.java:534-578` supplies the single-image
+  path. Grouped multi-image display is a deliberate modern extension supported by the live payload.
+- Review cleanup: replaced the nested image accumulator with filter/mapNotNull/distinctBy,
+  removing nine production lines without changing ordering or URL fallback. All three
+  EmbedGalleryTest cases pass through scripts/build.sh; no device rebuild/install was repeated.
+- Resumable: `app/src/main/java/com/discord/widgets/chat/list/adapter/WidgetChatListAdapterItemEmbed.kt`
+  and `app/src/main/java/com/discord/widgets/media/WidgetMedia.kt` | reference embed image binder
+  and existing ViewPager2 gallery | reopen the supplied post, verify all remote thumbnails and
+  tap/swipe order, then check portrait/landscape, spoilers and row recycling with real images.
