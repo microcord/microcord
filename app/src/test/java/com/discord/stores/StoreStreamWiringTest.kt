@@ -14,6 +14,8 @@ import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.ModelPayload
+import com.discord.models.domain.ModelReadState
+import com.discord.models.domain.ModelReadySupplemental
 import com.discord.utilities.analytics.AnalyticsSink
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.time.Clock
@@ -44,6 +46,52 @@ class StoreStreamWiringTest {
         override fun deliver(token: String?, events: List<Science.Event>, onFailure: () -> Unit) {
             this.events += events
         }
+    }
+
+    @Test
+    fun supplementalPrivateChannelsRestoreAndIncrementMentionBadges() {
+        fun privateChannel(id: Long, type: Int) = gson.fromJson("""{"id":$id,"type":$type}""", Channel::class.java)
+        val initialDm = privateChannel(20, Channel.DM)
+        val lazyGroup = privateChannel(21, Channel.GROUP_DM)
+        val lazyDm = privateChannel(22, Channel.DM)
+        val removedGroup = privateChannel(23, Channel.GROUP_DM)
+        val managedGroup = privateChannel(24, Channel.GROUP_DM).copy(applicationId = 99)
+        val ready = gson.fromJson(READY_JSON, ModelPayload::class.java).apply {
+            privateChannels = listOf(initialDm)
+            readState = ModelPayload.VersionedReadStates().also {
+                it.entries = (20L..24L).map { id -> ModelReadState(id, 100, (id - 19).toInt(), 1) }
+            }
+        }
+        stream.dispatcher.schedule { StoreStream.getChannels().reset() }
+        stream.handleConnectionOpen(ready)
+        StoreStream.selectChannel(1, 10)
+        awaitSelectedChannel(10)
+        val mentions = StoreStream.getMentions()
+        assertEquals(mapOf(20L to 1), mentions.getMentionCounts())
+
+        stream.handleGatewayDispatch("READY_SUPPLEMENTAL", ModelReadySupplemental(
+            lazyPrivateChannels = listOf(lazyGroup, lazyDm, managedGroup),
+        ))
+        assertEquals(setOf(20L, 21L, 22L), StoreStream.getChannels().getChannelsForGuild(0).keys)
+        assertEquals(mapOf(20L to 1, 21L to 2, 22L to 3), mentions.getMentionCounts())
+
+        val groupMessage = apiMessage(101, lazyGroup.id).copy(guildId = null)
+        stream.handleGatewayDispatch("MESSAGE_CREATE", groupMessage)
+        stream.handleGatewayDispatch("MESSAGE_CREATE", groupMessage)
+        stream.handleGatewayDispatch("MESSAGE_CREATE", apiMessage(102, lazyDm.id).copy(guildId = null))
+        assertEquals(mapOf(20L to 1, 21L to 3, 22L to 4), mentions.getMentionCounts())
+
+        // A truly absent channel must not resurrect an old server badge when opened later.
+        stream.handleGatewayDispatch("CHANNEL_CREATE", removedGroup)
+        assertFalse(mentions.getMentionCounts().containsKey(removedGroup.id))
+
+        StoreStream.selectChannel(0, lazyGroup.id)
+        awaitSelectedChannel(lazyGroup.id)
+        assertFalse(mentions.getMentionCounts().containsKey(lazyGroup.id))
+        stream.handleGatewayDispatch("MESSAGE_ACK", ModelReadState(lazyGroup.id, 101, 0, 2))
+        StoreStream.selectChannel(1, 10)
+        awaitSelectedChannel(10)
+        assertEquals(mapOf(20L to 1, 22L to 4), mentions.getMentionCounts())
     }
 
     @Test

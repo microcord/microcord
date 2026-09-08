@@ -130,7 +130,17 @@ class StoreMentions @JvmOverloads constructor(
         serverInitReadStates += readState?.entries.orEmpty()
             .filter { it.isChannelReadState && it.isMentioned }
 
-        // Read states for channels the client cannot see would otherwise pin an unclearable badge.
+        // READY can contain read states for DMs supplied only by READY_SUPPLEMENTAL.
+        markChanged()
+    }
+
+    @StoreThread
+    fun handleConnectionOpenSupplemental() {
+        privateChannels.clear()
+        storeChannels.getChannelsForGuildInternal(0L).orEmpty().values
+            .filterNot(Channel::isManaged)
+            .mapTo(privateChannels, Channel::id)
+        // Prune only after StoreChannels has reconciled the complete private-channel list.
         val knownChannels = storeChannels.getChannelNamesInternal()
         serverInitReadStates.removeAll { it.channelId !in knownChannels }
         markChanged()

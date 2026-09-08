@@ -3574,6 +3574,7 @@ class StoreStream private constructor(
         )
         gameParty.handleConnectionOpenSupplemental(payload.mergedPresences?.friends.orEmpty())
         channels.handleConnectionOpenSupplemental(payload.lazyPrivateChannels.orEmpty(), readyUsers)
+        mentions.handleConnectionOpenSupplemental()
         updateSortedGuilds()
     }
 
