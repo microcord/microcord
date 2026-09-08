@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/UiKit.ViewGroup.Page.LinearLayout"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:padding="16dp">
+
+    <TextView
+        style="@style/UiKit.TextView"
+        android:layout_marginBottom="12dp"
+        android:gravity="center"
+        android:text="@string/attachment_media_access_body" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/pick_media_btn"
+        style="@style/UiKit.Material.Button.Fit"
+        android:text="@string/attachment_media_pick" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/action_btn"
+        style="@style/UiKit.Material.Button.Outline"
+        android:layout_width="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/attachment_media_allow" />
+</LinearLayout>

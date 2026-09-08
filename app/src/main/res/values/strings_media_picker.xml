@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="attachment_media_access_body">Select photos and videos without giving access to your gallery, or allow gallery access to browse here.</string>
+    <string name="attachment_media_pick">Select photos or videos</string>
+    <string name="attachment_media_allow">Allow gallery access</string>
+    <string name="attachment_media_pick_failed">Could not open the selected media. Please try again.</string>
+</resources>

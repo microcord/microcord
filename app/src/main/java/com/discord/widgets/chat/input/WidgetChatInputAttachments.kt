@@ -27,6 +27,11 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.core.view.inputmethod.InputContentInfoCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -42,10 +47,12 @@ import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.databinding.FragmentCameraBinding
 import com.discord.databinding.WidgetChatInputGridImageBinding
+import com.discord.databinding.WidgetChatInputPermReqMediaBinding
 import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.attachments.AttachmentLimits.MAX_UPLOAD_COUNT
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.input.attachments.AttachmentBottomSheet
 import com.discord.widgets.chat.input.attachments.PhotoEditorDialog
@@ -507,17 +514,61 @@ class WidgetChatInputAttachments(
     open class DiscordMediaFragment : PhotosFragment() {
         private var grantedSelectionCoordinator: SelectionCoordinator<Attachment<Any>, Attachment<Any>>? = null
         private var mediaSizeDecoration: RecyclerView.ItemDecoration? = null
+        private val photoPicker = registerForActivityResult(StartActivityForResult()) { result ->
+            val uris = PickMultipleVisualMedia(MAX_UPLOAD_COUNT).parseResult(result.resultCode, result.data).distinct()
+            if (uris.isEmpty()) return@registerForActivityResult
+            val context = context ?: return@registerForActivityResult
+            val coordinator = flexInputCoordinator() ?: return@registerForActivityResult
+            if (uris.size + coordinator.selectionAggregator.size > MAX_UPLOAD_COUNT) {
+                Toast.makeText(context, R.string.attachment_too_many_error_title, Toast.LENGTH_SHORT).show()
+                return@registerForActivityResult
+            }
+            lifecycleScope.launch {
+                val attachments = withContext(Dispatchers.IO) {
+                    runCatching {
+                        uris.map { uri ->
+                            require(uri.scheme == ContentResolver.SCHEME_CONTENT)
+                            // Keep access for deferred sends and retries, without copying large videos.
+                            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            SourcedAttachment(uri.toAttachment(context.contentResolver), SOURCE_MEDIA_PICKER)
+                        }
+                    }.getOrNull()
+                }
+                when {
+                    attachments == null -> Toast.makeText(context, R.string.attachment_media_pick_failed, Toast.LENGTH_SHORT).show()
+                    attachments.size + coordinator.selectionAggregator.size > MAX_UPLOAD_COUNT ->
+                        Toast.makeText(context, R.string.attachment_too_many_error_title, Toast.LENGTH_SHORT).show()
+                    else -> attachments.forEach(coordinator::addExternalAttachment)
+                }
+            }
+        }
 
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? =
             super.onCreateView(inflater, container, savedInstanceState).also { view ->
-                view?.post { if (hasPermissions()) refreshAfterGrant() else requestGallery() }
+                view?.post { if (hasPermissions()) refreshAfterGrant() }
             }
 
         override fun hasPermissions(vararg requiredPermissionList: String): Boolean =
             appFragment()?.hasGallery() == true
 
         override fun newPermissionsRequestAdapter(onClickListener: View.OnClickListener): EmptyListAdapter =
-            PermissionsEmptyListAdapter(View.OnClickListener { requestGallery() })
+            PermissionsEmptyListAdapter(View.OnClickListener { requestGallery() }, View.OnClickListener { openPhotoPicker() })
+
+        private fun openPhotoPicker() {
+            val remaining = MAX_UPLOAD_COUNT - (flexInputCoordinator()?.selectionAggregator?.size ?: return)
+            if (remaining <= 0) {
+                Toast.makeText(requireContext(), R.string.attachment_too_many_error_title, Toast.LENGTH_SHORT).show()
+                return
+            }
+            val request = PickVisualMediaRequest(PickVisualMedia.ImageAndVideo)
+            runCatching {
+                val intent = if (remaining == 1) PickVisualMedia().createIntent(requireContext(), request)
+                else PickMultipleVisualMedia(remaining).createIntent(requireContext(), request)
+                photoPicker.launch(intent)
+            }.onFailure {
+                Toast.makeText(requireContext(), R.string.default_failure_to_perform_action_message, Toast.LENGTH_SHORT).show()
+            }
+        }
 
         private fun requestGallery() {
             requestGalleryPermission(::refreshAfterGrant)
@@ -842,13 +893,14 @@ class WidgetChatInputAttachments(
         }
     }
 
-    private class PermissionsEmptyListAdapter(onClickListener: View.OnClickListener) :
-        EmptyListAdapter(R.layout.widget_chat_input_perm_req_files, R.id.action_btn, onClickListener) {
+    private class PermissionsEmptyListAdapter(
+        onClickListener: View.OnClickListener,
+        private val onPickMedia: View.OnClickListener,
+    ) : EmptyListAdapter(R.layout.widget_chat_input_perm_req_media, R.id.action_btn, onClickListener) {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EmptyListAdapter.ViewHolder =
             super.onCreateViewHolder(parent, viewType).also {
-                it.itemView.findViewById<TextView>(R.id.perm_req_text)
-                    .setI18nText(R.string.system_permission_request_files)
+                WidgetChatInputPermReqMediaBinding.bind(it.itemView).pickMediaBtn.setOnClickListener(onPickMedia)
             }
     }
 
