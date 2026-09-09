@@ -99,6 +99,7 @@ object ClientSettings {
     val profileFrames = register(BooleanSetting("feature_profile_frames", true))
     val nitroSpoof = register(BooleanSetting("feature_nitro_spoof"))
     val silentTyping = register(BooleanSetting("feature_silent_typing"))
+    val smoothKeyboard = register(BooleanSetting("feature_smooth_keyboard"))
     val cloudSettingsBackup = register(BooleanSetting("feature_cloud_settings_backup", backupPolicy = BackupPolicy.EXCLUDE))
 
     const val CHAT_INPUT_LAYOUT_KEY = "feature_chatbox_customizations_layout"

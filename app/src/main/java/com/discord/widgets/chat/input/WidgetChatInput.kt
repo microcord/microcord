@@ -1,5 +1,8 @@
 package com.discord.widgets.chat.input
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
@@ -17,6 +20,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.WindowManager
+import android.view.animation.AnimationUtils
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.Chronometer
@@ -191,6 +196,14 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var voiceRecordingChannelId: Long? = null
     private var voiceGestureState = VoiceGestureState.SENDING
     private var voiceGestureActive = false
+
+    // Expression-tray smooth animation (see renderExpressionTray).
+    private var panelAnimator: ValueAnimator? = null
+    private var lastKnownKeyboardHeight = 0
+    private var panelSyncToken = 0
+    private var pendingKeyboardSwap = false
+    private data class PanelSwap(val container: View, val target: Int)
+    private var activePanelSwap: PanelSwap? = null
     private var voiceGestureStartX = 0f
     private var voiceGestureStartY = 0f
     private val pluginComposerViews = mutableMapOf<String, View>()
@@ -323,15 +336,37 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         view.post {
             if (isAdded && this.view === view) bindFlexInput()
         }
-        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
-            val bottom = insets.getInsets(
-                WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.navigationBars(),
-            ).bottom
+        fun applyBottomInset(bottom: Int) {
             view.rootView.findViewById<View>(R.id.widget_chat_bottom_space)
                 ?.updateLayoutParams { height = bottom }
+            // Mirrors the panel-swap sync loop's own math, but from directly inside the same
+            // callback that just set bottom_space's height — zero extra latency, vs. the polling
+            // loop's inherent one-frame lag reading bottom_space back out after the fact. The
+            // loop still runs concurrently as a fallback for when this callback never fires.
+            activePanelSwap?.let { swap ->
+                swap.container.updateLayoutParams { height = (swap.target - bottom).coerceIn(0, swap.target) }
+            }
+            // Tracks the keyboard's peak height, not just its latest sample: this fires on every
+            // frame of both the opening AND closing animation, and closing ends with a run of
+            // small-but-positive values ticking down to 0 — overwriting unconditionally would leave
+            // this holding one of those near-zero tail values instead of the real keyboard height.
+            if (bottom > lastKnownKeyboardHeight) lastKnownKeyboardHeight = bottom
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
+            // The panel already reserves the nav-bar's own height as padding (see
+            // WidgetHome.applyPanelInsets); ime()'s bottom inset overlaps that same region, so
+            // subtract it out rather than reserving it a second time here.
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            applyBottomInset((ime - navBar).coerceAtLeast(0))
             insets
         }
         ViewCompat.requestApplyInsets(view)
+        if (FeatureFlags.smoothKeyboardEnabled()) {
+            // Drives widget_chat_bottom_space's height from every frame of the real IME animation
+            // (not just its settled value), so the resize tracks the keyboard instead of jumping.
+            SmoothKeyboardReactionHelper.install(view, ::applyBottomInset)
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -353,6 +388,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                             inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
                         }
 
+                        AppFlexInputViewModel.Event.ShowKeyboardAfterExpressionTray -> {
+                            pendingKeyboardSwap = true
+                            input?.requestFocus()
+                            inputMethodManager().showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+                        }
+
                         AppFlexInputViewModel.Event.HideKeyboard -> {
                             val token = activity?.currentFocus?.windowToken ?: view?.windowToken
                             if (token != null) inputMethodManager().hideSoftInputFromWindow(token, 0)
@@ -362,6 +403,25 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 { /* keyboard state is best-effort */ },
             )
         view?.post(::updateSendButtonVisibility)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (FeatureFlags.smoothKeyboardEnabled()) {
+            // adjustResize performs its own window resize in lockstep with our manual
+            // widget_chat_bottom_space resize, doubling the offset on API 35+ edge-to-edge
+            // devices; owning IME positioning exclusively through insets avoids the stacking.
+            @Suppress("DEPRECATION")
+            requireActivity().window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+        }
+    }
+
+    override fun onPause() {
+        if (FeatureFlags.smoothKeyboardEnabled()) {
+            @Suppress("DEPRECATION")
+            requireActivity().window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        super.onPause()
     }
 
     override fun onStart() {
@@ -409,6 +469,10 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onDestroyView() {
+        panelAnimator?.cancel()
+        panelAnimator = null
+        panelSyncToken++
+        activePanelSwap = null
         flexInputViewModel.updateMessageLimitCounter(AppFlexInputViewModel.MessageLimitCounter())
         view?.removeCallbacks(pluginComposerBinder)
         input?.removeTextChangedListener(watcher)
@@ -786,6 +850,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         hasAttachments = flex.selectionAggregator.size > 0
         updateSendButtonVisibility()
 
+        // Deterministic starting point for the smooth open/close animation in
+        // renderExpressionTray: a GONE view keeps whatever height its LayoutParams last had (its
+        // XML-declared default_keyboard_height here), so without this the very first open would
+        // animate from that stale full height back down to itself — reading as "nothing happened".
+        flexBinding.emojiContainer.updateLayoutParams { height = 0 }
+
         button.visibility = View.VISIBLE
         button.setOnClickListener { flexInputViewModel.toggleExpressionTray() }
     }
@@ -1038,12 +1108,105 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private fun renderExpressionTray(shown: Boolean) {
         val flexBinding = flexInputBinding ?: return
         val button = flexBinding.emojiBtn
+        val container = flexBinding.emojiContainer
 
-        flexBinding.emojiContainer.visibility = if (shown) View.VISIBLE else View.GONE
         configureExpressionTrayButton(button, shown)
-        flexBinding.defaultWindowInsetsHandler.visibility =
-            if (shown) View.GONE else View.VISIBLE
+        flexBinding.defaultWindowInsetsHandler.visibility = if (shown) View.GONE else View.VISIBLE
+
+        val swapWithKeyboard = pendingKeyboardSwap
+        pendingKeyboardSwap = false
+
+        if (!FeatureFlags.smoothKeyboardEnabled()) {
+            panelAnimator?.cancel()
+            panelSyncToken++
+            activePanelSwap = null
+            // bindExpressionTray zeroes this height as the smooth-open animation's starting point;
+            // this path never animates, so without restoring it here the tray would be VISIBLE but
+            // 0px tall — i.e. not actually shown — the first time it opens.
+            if (shown) container.updateLayoutParams { height = panelHeight() }
+            container.visibility = if (shown) View.VISIBLE else View.GONE
+            expressionTray?.takeIf { it.isAdded }?.isShown(shown)
+            return
+        }
+
+        panelAnimator?.cancel()
+        panelSyncToken++
+        activePanelSwap = null
+        val target = panelHeight()
+        val bottomSpace = view?.rootView?.findViewById<View>(R.id.widget_chat_bottom_space)
+        val keyboardCurrentlyOpen = (bottomSpace?.height ?: 0) > 0
+
+        if (shown) {
+            container.visibility = View.VISIBLE
+            if (keyboardCurrentlyOpen) {
+                // Slaved to the keyboard's own live height every frame, rather than an
+                // independently-timed animation guessed to match it — two animations picked to
+                // look similar still drift apart frame to frame and read as a bounce at the
+                // crossover; reading the real value each frame cannot drift from it.
+                syncPanelToKeyboard(container, bottomSpace, target, opening = true)
+            } else {
+                val current = container.height.takeIf { it in 1 until target } ?: 0
+                animatePanelHeight(container, from = current, to = target)
+            }
+        } else if (swapWithKeyboard) {
+            syncPanelToKeyboard(container, bottomSpace, target, opening = false)
+        } else {
+            val current = container.height.takeIf { it > 0 } ?: target
+            animatePanelHeight(container, from = current, to = 0) { container.visibility = View.GONE }
+        }
         expressionTray?.takeIf { it.isAdded }?.isShown(shown)
+    }
+
+    /**
+     * Slaves [container]'s height to [bottomSpace]'s live height. [activePanelSwap] gets it mirrored
+     * with zero extra latency directly from applyBottomInset's own WindowInsetsAnimation callback
+     * while that's actually firing; this polling loop is the fallback that drives it the rest of the
+     * time and, via its timeout, guarantees this always finishes at the correct final state even if
+     * the keyboard's own animation never runs (hideSoftInputFromWindow/showSoftInput are no-ops when
+     * it's already mid-transition, which would otherwise leave nothing to finish this at all).
+     */
+    private fun syncPanelToKeyboard(container: View, bottomSpace: View?, target: Int, opening: Boolean) {
+        val token = panelSyncToken
+        val startTime = SystemClock.uptimeMillis()
+        activePanelSwap = PanelSwap(container, target)
+        val tick = object : Runnable {
+            override fun run() {
+                if (token != panelSyncToken) return
+                val bottom = bottomSpace?.height ?: 0
+                val elapsed = SystemClock.uptimeMillis() - startTime
+                if (elapsed < PANEL_SYNC_TIMEOUT_MS) {
+                    container.updateLayoutParams { height = (target - bottom).coerceIn(0, target) }
+                    container.postOnAnimation(this)
+                } else {
+                    activePanelSwap = null
+                    container.updateLayoutParams { height = if (opening) target else 0 }
+                    if (!opening) container.visibility = View.GONE
+                }
+            }
+        }
+        container.postOnAnimation(tick)
+    }
+
+    private fun panelHeight(): Int {
+        // Prefer the keyboard's own live space over the cached peak: falling back to a stale
+        // remembered height when the real one is available is exactly what produces a mismatched
+        // final size — and a visible jump — the moment this swaps places with the keyboard.
+        val liveKeyboardHeight = view?.rootView?.findViewById<View>(R.id.widget_chat_bottom_space)?.height ?: 0
+        return liveKeyboardHeight.takeIf { it > 0 }
+            ?: lastKnownKeyboardHeight.takeIf { it > 0 }
+            ?: resources.getDimensionPixelSize(R.dimen.default_keyboard_height)
+    }
+
+    private fun animatePanelHeight(container: View, from: Int, to: Int, onEnd: (() -> Unit)? = null) {
+        panelAnimator = ValueAnimator.ofInt(from, to).apply {
+            duration = PANEL_ANIMATION_DURATION_MS
+            interpolator = AnimationUtils.loadInterpolator(container.context, android.R.interpolator.fast_out_slow_in)
+            addUpdateListener { container.updateLayoutParams { height = it.animatedValue as Int } }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) = onEnd?.invoke() ?: Unit
+            })
+            start()
+        }
     }
 
     private fun updateSendButtonVisibility() {
@@ -1842,6 +2005,10 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             "https://support.discord.com/hc/articles/360045138571"
         private const val DEFAULT_THREAD_ARCHIVE_DURATION = 1_440
         private const val THREAD_CREATE_RATE_LIMIT_CODE = 20016
+        private const val PANEL_ANIMATION_DURATION_MS = 250L
+        /** Generous upper bound on a real IME transition across devices/OEM keyboards; the panel
+         * sync loop force-settles at its correct final state once this elapses either way. */
+        private const val PANEL_SYNC_TIMEOUT_MS = 400L
 
         private val mentionRequests = PublishSubject.create<Long>().toSerialized()
 

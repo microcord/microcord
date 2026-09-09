@@ -14,6 +14,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.viewpager.widget.ViewPager
 import com.discord.R
+import com.discord.app.appActivityViewModels
 import com.discord.widgets.chat.input.applauncher.AppLauncherEntrypoint
 import com.discord.widgets.chat.input.applauncher.WidgetAppLauncher
 import com.google.android.material.tabs.TabLayout
@@ -27,6 +28,10 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
     private var inflatedFromXml = false
     var onAttachmentsCleared: () -> Unit = {}
 
+    private val flexInputViewModel: AppFlexInputViewModel by appActivityViewModels {
+        AppFlexInputViewModel()
+    }
+
     private val addContentTabCallbacks = object : FragmentManager.FragmentLifecycleCallbacks() {
         override fun onFragmentViewCreated(
             fragmentManager: FragmentManager,
@@ -35,6 +40,10 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
             savedInstanceState: Bundle?,
         ) {
             if (fragment !is AddContentDialogFragment) return
+            // The attachment dialog hides the emoji tray through the library's own state, which
+            // this app doesn't otherwise observe — routing it through the shared view model too
+            // keeps the composer's own tray height in sync instead of leaving it stuck open.
+            flexInputViewModel.hideExpressionTray()
             view.post {
                 val tabs = view.findViewById<TabLayout>(com.lytefast.flexinput.R.id.content_tabs) ?: return@post
                 val pager = view.findViewById<ViewPager>(com.lytefast.flexinput.R.id.content_pager) ?: return@post

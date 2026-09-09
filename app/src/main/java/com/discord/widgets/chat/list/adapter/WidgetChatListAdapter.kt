@@ -3,6 +3,8 @@ package com.discord.widgets.chat.list.adapter
 import android.content.Context
 import android.graphics.drawable.TransitionDrawable
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
@@ -109,14 +111,29 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private var pendingStickToBottom = false
     private var atBottomBeforeResize = true
 
+    private val resizeSettleHandler = Handler(Looper.getMainLooper())
+    private val resizeSettle = Runnable {
+        atBottomBeforeResize = StoreChat.InteractionState.getScrollState(layoutManager)
+            .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
+    }
+
+    /**
+     * A smooth keyboard-driven resize fires this listener once per animation frame. As the
+     * viewport shrinks, fewer rows are needed to fill it, so the last row can drift into view
+     * from reduced space alone — with no real scrolling. Re-deriving [atBottomBeforeResize] from
+     * that on every frame turns it into a feedback loop that falsely flips to "at bottom" partway
+     * through the animation and then hard-snaps there. Deferring the re-derivation until the burst
+     * of layout changes goes quiet keeps the whole burst judged against the scroll state from
+     * before it started.
+     */
     private val handlerOfResize = View.OnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
         val oldHeight = oldBottom - oldTop
         val newHeight = bottom - top
         if (stickToBottom && oldHeight != newHeight && itemCount > 0 && atBottomBeforeResize) {
             layoutManager?.scrollToPosition(itemCount - 1)
         }
-        atBottomBeforeResize = StoreChat.InteractionState.getScrollState(layoutManager)
-            .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
+        resizeSettleHandler.removeCallbacks(resizeSettle)
+        resizeSettleHandler.postDelayed(resizeSettle, RESIZE_SETTLE_DELAY_MS)
     }
 
     private data class ScrollAnchor(val messageId: Long, val offset: Int)
@@ -270,6 +287,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         recycler.setOnTouchListener(null)
         recycler.removeOnScrollListener(handlerOfScrolls)
         recycler.removeOnLayoutChangeListener(handlerOfResize)
+        resizeSettleHandler.removeCallbacks(resizeSettle)
         eventHandler.onInteractionStateUpdated(
             StoreChat.InteractionState(data.channelId, 0L, isTouchedSinceLastJump, null),
         )
@@ -577,6 +595,11 @@ class WidgetChatListAdapter @JvmOverloads constructor(
 
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             val next = StoreChat.InteractionState.getScrollState(layoutManager)
+            // atBottomBeforeResize otherwise only refreshes from a resize event, so a plain touch
+            // scroll away from the bottom (no resize involved) left it stuck at whatever it was
+            // from the last resize — often its `true` initial value — and the next keyboard-driven
+            // resize would then wrongly snap back to the newest message.
+            atBottomBeforeResize = (next and StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
             if (next != positionState) {
                 positionState = next
                 publishInteractionState()
@@ -761,6 +784,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     companion object {
         private const val NEW_MESSAGES_MIN_SCROLLBACK_COUNT = 10
         private const val NEW_MESSAGES_MAX_SCROLLBACK_COUNT = 30
+
+        /** Longer than the gap between consecutive frames of a resize animation (~16ms), short
+         * enough to feel instant once the resize actually settles. */
+        private const val RESIZE_SETTLE_DELAY_MS = 120L
 
         /**
          * Where to land when the unread marker is not in the loaded window.

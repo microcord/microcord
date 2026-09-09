@@ -105,6 +105,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.silentTypingEnabled()
             setOnCheckedListener(FeatureFlags::setSilentTypingEnabled)
         }
+        binding.settingsFeatureSmoothKeyboard.apply {
+            isChecked = FeatureFlags.smoothKeyboardEnabled()
+            setOnCheckedListener(FeatureFlags::setSmoothKeyboardEnabled)
+        }
         binding.settingsFeatureChatboxCustomizations.apply {
             isChecked = FeatureFlags.chatboxCustomizationsEnabled()
             setOnCheckedListener { enabled ->

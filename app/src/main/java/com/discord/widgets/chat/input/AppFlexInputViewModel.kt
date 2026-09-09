@@ -34,6 +34,10 @@ class AppFlexInputViewModel : AppViewModel<AppFlexInputViewModel.ViewState>(View
     /** Things only the view holding the `EditText` can carry out. */
     sealed class Event {
         object ShowKeyboard : Event()
+        /** Same as [ShowKeyboard], but fired specifically by [showKeyboardAndHideExpressionTray] so
+         * the composer can tell this keyboard-show apart from an unrelated focus request and slave
+         * the expression tray's shrink to the keyboard's own live opening height. */
+        object ShowKeyboardAfterExpressionTray : Event()
         object HideKeyboard : Event()
     }
 
@@ -71,8 +75,11 @@ class AppFlexInputViewModel : AppViewModel<AppFlexInputViewModel.ViewState>(View
      * dropping them onto the tray they never asked to return to.
      */
     fun showKeyboardAndHideExpressionTray() {
+        // Fired before the view-state update so the composer's expressionTrayShown subscriber sees
+        // pendingKeyboardSwap already set and can slave the tray's shrink to the keyboard's live
+        // opening height instead of running its own independently-timed animation.
+        eventSubject.onNext(Event.ShowKeyboardAfterExpressionTray)
         updateViewState(ViewState(expressionTrayShown = false))
-        eventSubject.onNext(Event.ShowKeyboard)
     }
 
     fun hideKeyboard() = eventSubject.onNext(Event.HideKeyboard)

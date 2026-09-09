@@ -41,6 +41,8 @@ object FeatureFlags {
     fun setNitroSpoofEnabled(enabled: Boolean) = setEnabled(ClientSettings.nitroSpoof, enabled)
     fun silentTypingEnabled() = enabled(ClientSettings.silentTyping)
     fun setSilentTypingEnabled(enabled: Boolean) = setEnabled(ClientSettings.silentTyping, enabled)
+    fun smoothKeyboardEnabled() = enabled(ClientSettings.smoothKeyboard)
+    fun setSmoothKeyboardEnabled(enabled: Boolean) = setEnabled(ClientSettings.smoothKeyboard, enabled)
     fun cloudSettingsBackupEnabled() = enabled(ClientSettings.cloudSettingsBackup)
     fun setCloudSettingsBackupEnabled(enabled: Boolean) = setEnabled(ClientSettings.cloudSettingsBackup, enabled)
 
