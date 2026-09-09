@@ -147,7 +147,12 @@ class StoreMessageReplies @JvmOverloads constructor(
             changed = true
         }
 
-        if (!message.isEmbeddedMessageType()) return changed
+        // An optimistic message is still typed TYPE_SENDING (-1) — not yet the server's TYPE_REPLY
+        // (19) — but it already carries the reply's messageReference, and the replied-to message is
+        // necessarily already loaded (the user just tapped reply on it). Resolve it now instead of
+        // waiting for server confirmation, so the preview doesn't pop in only once that lands.
+        val isLocalReply = message.type == TYPE_SENDING && message.messageReference != null
+        if (!message.isEmbeddedMessageType() && !isLocalReply) return changed
         val reference = message.messageReference ?: return changed
         val referencedMessage = message.referencedMessage
         val referencedChannelId = reference.channelId
@@ -217,6 +222,9 @@ class StoreMessageReplies @JvmOverloads constructor(
 
         /** `Message.type` for an inline reply. */
         private const val MESSAGE_TYPE_REPLY = 19
+
+        /** `Message.type` for an optimistic message awaiting server confirmation. */
+        private const val TYPE_SENDING = -1
 
         private val NO_RESULTS: Map<Long, MessageState> = emptyMap()
     }

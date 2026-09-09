@@ -797,7 +797,10 @@ class WidgetChatListAdapterItemMessage(
 
         val replyData = entry.replyData
         val isInteraction = entry.message.isInteraction()
-        if (!isInteraction && (replyData == null || entry.message.type != TYPE_REPLY)) {
+        // An optimistic message keeps TYPE_LOCAL until the server confirms it as TYPE_REPLY; treat
+        // it as a reply already so the header doesn't pop in only once the real message lands.
+        val isLocalReply = entry.message.type == TYPE_LOCAL && entry.message.messageReference != null
+        if (!isInteraction && (replyData == null || (entry.message.type != TYPE_REPLY && !isLocalReply))) {
             replyHolder.visibility = View.GONE
             replyLinkItem.visibility = View.GONE
             return

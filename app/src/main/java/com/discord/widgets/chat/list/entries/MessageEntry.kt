@@ -103,11 +103,16 @@ data class MessageEntry(
 
         private fun rowType(message: Message): Int {
             val messageType = message.type
+            // An optimistic reply is still sent as TYPE_LOCAL; row-typing it as an ordinary MESSAGE
+            // and only flipping to REPLY once the server confirms it changes both the view type and
+            // the entry key (which embeds `type`), so the row gets torn down and rebuilt instead of
+            // updated — that's the visible flash. Row-type it as a reply from the start instead.
+            val isLocalReply = messageType == TYPE_LOCAL && message.messageReference != null
             if (message.hasSnapshot() ||
                 message.isInteraction() ||
                 messageType == null ||
                 messageType in PLAIN_USER_MESSAGE_TYPES ||
-                messageType == TYPE_LOCAL ||
+                (messageType == TYPE_LOCAL && !isLocalReply) ||
                 messageType == TYPE_LOCAL_SLOWMODE
             ) {
                 return ChatListEntry.MESSAGE
@@ -120,7 +125,7 @@ data class MessageEntry(
             return when (messageType) {
                 TYPE_CALL, TYPE_CHANNEL_FOLLOW_ADD -> ChatListEntry.CALL_MESSAGE
                 TYPE_LOCAL_FAILED, TYPE_LOCAL_INVALID -> ChatListEntry.MESSAGE_FAILED
-                TYPE_REPLY -> ChatListEntry.REPLY
+                TYPE_REPLY, TYPE_LOCAL -> ChatListEntry.REPLY
                 TYPE_GUILD_INVITE_REMINDER -> ChatListEntry.GUILD_INVITE_REMINDER
                 TYPE_LOCAL_AUTOMOD_BLOCKED -> ChatListEntry.AUTOMOD_BLOCKED
                 else -> ChatListEntry.SYSTEM_MESSAGE

@@ -2615,6 +2615,7 @@ class StoreStream private constructor(
                     messages.handleMessageUpdate(update.message.channelId, update.message.id) { update.message }
                 } else {
                     messages.handleLocalMessageCreate(update.message.channelId, update.requestId, update.message)
+                    messageReplies.handleMessageCreate(update.message)
                     scheduleBackgroundMessageSend(update.message.localAttachments.orEmpty().all { attachment ->
                         runCatching { android.net.Uri.parse(attachment.uriString) }.isSuccess
                     })
