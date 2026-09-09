@@ -2,11 +2,22 @@ package com.discord.widgets.chat.list.actions
 
 import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MessageActionsTest {
+    @Test
+    fun unboundActionRowsCannotFlashBeforeTheModelArrives() {
+        val document = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(File("src/main/res/layout/widget_chat_list_actions.xml"))
+        val container = document.getElementsByTagName("LinearLayout").item(0) as org.w3c.dom.Element
+        assertEquals("gone", container.getAttributeNS("http://schemas.android.com/apk/res/android", "visibility"))
+    }
+
     @Test
     fun moderationAndReactionRowsFollowContext() {
         val actions = MessageActions.evaluate(

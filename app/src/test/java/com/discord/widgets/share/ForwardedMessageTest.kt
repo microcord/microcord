@@ -86,7 +86,7 @@ class ForwardedMessageTest {
         assertTrue(ForwardingPolicy.canForward(message, source, Permission.READ_MESSAGE_HISTORY))
         assertFalse(ForwardingPolicy.canForward(message, null, Permission.ALL))
         assertFalse(ForwardingPolicy.canForward(message.copy(poll = gson.fromJson(POLL, com.discord.api.message.MessagePoll::class.java)), source, Permission.ALL))
-        assertFalse(ForwardingPolicy.canForward(message.copy(flags = MessageFlags.HAS_SNAPSHOT), source, Permission.ALL))
+        assertTrue(ForwardingPolicy.canForward(message.copy(flags = MessageFlags.HAS_SNAPSHOT), source, Permission.ALL))
         assertTrue(ForwardingPolicy.canForward(message, source.copy(guildId = 0, type = Channel.DM), null))
 
         assertEquals(
@@ -106,6 +106,41 @@ class ForwardedMessageTest {
                 Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES or Permission.ATTACH_FILES,
             ),
         )
+    }
+
+    @Test
+    fun botForwardingAllowsKnownFlagsButRejectsEphemeralLoadingAndUnknownFlags() {
+        val source = channel(2, 3, Channel.GUILD_TEXT)
+        val message = Message(gson.fromJson(
+            """{"id":"1","channel_id":"2","type":0,"author":{"id":"8","username":"bot","bot":true}}""",
+            ApiMessage::class.java,
+        ))
+        val allowedFlags = listOf(
+            MessageFlags.IS_COMPONENTS_V2, MessageFlags.HAS_SNAPSHOT, MessageFlags.SUPPRESS_EMBEDS,
+            MessageFlags.SUPPRESS_NOTIFICATIONS, MessageFlags.IS_VOICE_MESSAGE, MessageFlags.HAS_THREAD,
+            MessageFlags.IS_COMPONENTS_V2 or MessageFlags.SUPPRESS_NOTIFICATIONS,
+        )
+        for (type in listOf(0, 19, 20, 23, 35)) {
+            for (flags in allowedFlags) {
+                assertTrue("type=$type flags=$flags", ForwardingPolicy.canForward(
+                    message.copy(type = type, flags = flags), source, Permission.READ_MESSAGE_HISTORY,
+                ))
+            }
+        }
+        for (flags in listOf(MessageFlags.EPHEMERAL, MessageFlags.LOADING, 1L shl 40)) {
+            assertFalse(ForwardingPolicy.canForward(message.copy(flags = flags), source, Permission.ALL))
+            assertFalse(ForwardingPolicy.canForward(
+                message.copy(flags = flags or MessageFlags.IS_COMPONENTS_V2), source, Permission.ALL,
+            ))
+        }
+        assertFalse(ForwardingPolicy.canForward(message.copy(flags = MessageFlags.IS_COMPONENTS_V2), source, 0L))
+        assertFalse(ForwardingPolicy.canForward(message.copy(type = -2), source, Permission.ALL))
+        assertFalse(ForwardingPolicy.canForward(message.copy(
+            activityInstance = com.discord.api.message.activity.MessageActivityInstance("fixture"),
+        ), source, Permission.ALL))
+        assertFalse(ForwardingPolicy.canForward(message.copy(
+            sharedClientTheme = com.discord.api.message.SharedClientTheme(colors = listOf("#123456")),
+        ), source, Permission.ALL))
     }
 
     @Test

@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
+import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
@@ -89,6 +90,7 @@ class WidgetChatListActions : AppBottomSheet() {
             }
         }
         recycler.adapter = emojiAdapter
+        recycler.itemAnimator = null
         dialog?.setTitle(R.string.message_actions_menu_label)
     }
 
@@ -200,7 +202,6 @@ class WidgetChatListActions : AppBottomSheet() {
             WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)
             dismiss()
         }
-        binding.dialogChatActionsShare.setText(R.string.forward_message)
         bind(
             binding.dialogChatActionsShare,
             ForwardingPolicy.canForward(message, model.channel, model.permissions),
@@ -235,6 +236,8 @@ class WidgetChatListActions : AppBottomSheet() {
                 "Message",
             )
         }
+        // The XML stays hidden until all rows reflect this message and its permissions.
+        binding.dialogChatActionsContainer.isVisible = true
     }
 
     private fun configureQuickReactions(recent: List<Emoji>, isLocal: Boolean, canAdd: Boolean) {
@@ -244,18 +247,30 @@ class WidgetChatListActions : AppBottomSheet() {
             return
         }
         recycler.isVisible = true
-        recycler.post {
-            if (_binding?.dialogChatActionsAddReactionEmojisList !== recycler) return@post
-            val size = resources.getDimensionPixelSize(R.dimen.chat_input_emoji_size)
-            val gap = dpToPixels(8)
-            val available = recycler.width - recycler.paddingStart - recycler.paddingEnd
-            val count = minOf(recent.size + 1, maxOf(1, (available + gap) / (size + gap)))
-            itemDecorator?.let(recycler::removeItemDecoration)
-            val remaining = maxOf(available - ((count - 1) * gap + size * count), 0)
-            val decoration = SpacingDecoration(gap + if (count > 1) remaining / (count - 1) else 0)
-            recycler.addItemDecoration(decoration)
-            itemDecorator = decoration
-            emojiAdapter?.setData(recent, count)
+        // Give the wrap-content row a real item height before its first layout.
+        if (emojiAdapter?.itemCount == 0) {
+            recycler.alpha = 0f
+            recycler.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            emojiAdapter?.setData(recent, recent.size + 1)
+        }
+        recycler.doOnLayout {
+            // Adapter changes during layout can leave an auto-measured row at its empty height.
+            recycler.post {
+                if (_binding?.dialogChatActionsAddReactionEmojisList !== recycler ||
+                    currentModel?.recentEmojis != recent || !recycler.isVisible) return@post
+                val size = resources.getDimensionPixelSize(R.dimen.chat_input_emoji_size)
+                val gap = dpToPixels(8)
+                val available = recycler.width - recycler.paddingStart - recycler.paddingEnd
+                val count = minOf(recent.size + 1, maxOf(1, (available + gap) / (size + gap)))
+                itemDecorator?.let(recycler::removeItemDecoration)
+                val remaining = maxOf(available - ((count - 1) * gap + size * count), 0)
+                val decoration = SpacingDecoration(gap + if (count > 1) remaining / (count - 1) else 0)
+                recycler.addItemDecoration(decoration)
+                itemDecorator = decoration
+                emojiAdapter?.setData(recent, count)
+                recycler.alpha = 1f
+                recycler.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+            }
         }
     }
 

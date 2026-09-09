@@ -19,7 +19,8 @@ object ForwardingPolicy {
     enum class DestinationIssue { CHANNEL, SEND_MESSAGES, ATTACHMENTS, EMBEDS, STICKERS, VOICE }
 
     private val forwardableTypes = setOf(0, 19, 20, 23, 35)
-    private const val BLOCKED_FLAGS =
+    // RN checks removeFlag(message.flags, allowedFlags) == 0, not hasAnyFlag.
+    private const val ALLOWED_FLAGS =
         MessageFlags.CROSSPOSTED or
             MessageFlags.IS_CROSSPOST or
             MessageFlags.SUPPRESS_EMBEDS or
@@ -36,7 +37,8 @@ object ForwardingPolicy {
 
     fun canForward(message: Message, source: Channel?, sourcePermissions: Long?): Boolean =
         source != null && !message.isLocal() && message.type?.let(forwardableTypes::contains) == true && message.poll == null &&
-            message.activity == null && message.call == null && (message.flags.orZero() and BLOCKED_FLAGS) == 0L &&
+            message.sharedClientTheme == null && message.activity == null && message.call == null &&
+            message.activityInstance == null && (message.flags.orZero() and ALLOWED_FLAGS.inv()) == 0L &&
             (source.isPrivate() || PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, sourcePermissions))
 
     fun destinationIssue(

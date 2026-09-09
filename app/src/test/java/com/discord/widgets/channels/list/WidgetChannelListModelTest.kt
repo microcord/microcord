@@ -28,6 +28,7 @@ import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
@@ -39,6 +40,31 @@ import rx.schedulers.TestScheduler
  * ordering, the collapse/mute hide rules, and the thread spine.
  */
 class WidgetChannelListModelTest {
+
+    @Test
+    fun `cached thread connectors still match their singleton cases`() {
+        val spines = listOf(
+            WidgetChannelListModel.ThreadSpineType.Single,
+            WidgetChannelListModel.ThreadSpineType.Start,
+            WidgetChannelListModel.ThreadSpineType.Middle,
+            WidgetChannelListModel.ThreadSpineType.End,
+        )
+        val rows = spines.mapIndexed { index, spine ->
+            ChannelListItemThread(channel(100L + index, Channel.PUBLIC_THREAD),
+                false, 0, false, false, false, false, false).apply { spineType = spine }
+        }
+        val empty = WidgetChannelListModel(null, emptyList())
+        Persister("thread-spine-fixture", empty, preload = false)
+            .set(WidgetChannelListModel(null, rows), persist = true)
+        val restored = Persister("thread-spine-fixture", empty, preload = false).get()
+            .items.filterIsInstance<ChannelListItemThread>()
+        assertEquals(rows.size, restored.size)
+        rows.zip(restored).forEach { (original, decoded) ->
+            assertNotSame(original.spineType, decoded.spineType)
+            assertEquals(original.spineType, decoded.spineType)
+            assertEquals(original.key, decoded.key)
+        }
+    }
 
     @Test
     fun `emits categories ahead of their children and uncategorised channels first`() {

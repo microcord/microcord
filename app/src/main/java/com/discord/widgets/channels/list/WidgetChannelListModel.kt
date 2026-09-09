@@ -99,17 +99,18 @@ data class WidgetChannelListModel(
 
     /** Which segment of the vertical connector a thread row draws to its parent channel. */
     sealed class ThreadSpineType {
+        // Kryo recreates cached instances; data objects preserve equality with the singleton.
         /** The only thread under its parent: a single elbow. */
-        object Single : ThreadSpineType()
+        data object Single : ThreadSpineType()
 
         /** First of several: elbow plus a line continuing down. */
-        object Start : ThreadSpineType()
+        data object Start : ThreadSpineType()
 
         /** Neither first nor last: a straight line plus a tick. */
-        object Middle : ThreadSpineType()
+        data object Middle : ThreadSpineType()
 
         /** Last of several: the line terminates in an elbow. */
-        object End : ThreadSpineType()
+        data object End : ThreadSpineType()
     }
 
     /** Selection / unread state shared by text channels and threads. */
