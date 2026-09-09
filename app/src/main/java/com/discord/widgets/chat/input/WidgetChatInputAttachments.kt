@@ -258,6 +258,10 @@ class WidgetChatInputAttachments(
             if (position >= aggregator.size) return false
             val attachment = aggregator[position]
             fragment.hideKeyboard(child)
+            // fragment.hideKeyboard hides the real keyboard directly, the same way the attachment
+            // picker's own dialog does — see WidgetChatInput.forceKeyboardClosed for why the sheet
+            // opening right after needs that forced too.
+            (fragment as? WidgetChatInput)?.forceKeyboardClosed()
             AttachmentBottomSheet.show(
                 fragmentManager = flexInputFragment.childFragmentManager,
                 attachment = attachment,

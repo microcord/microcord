@@ -1187,6 +1187,27 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         container.postOnAnimation(tick)
     }
 
+    /**
+     * Called whenever something is about to hide the real keyboard directly (bypassing
+     * [flexInputViewModel]) and immediately open a dialog or bottom sheet over the composer — e.g.
+     * the attachment picker, or the attachment preview's long-press sheet.
+     *
+     * With smooth keyboard enabled, [widget_chat_bottom_space]'s height is driven purely by the IME
+     * WindowInsetsAnimation on this fragment's own window (see [SmoothKeyboardReactionHelper]) —
+     * there is no [WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE] to fall back on. Whatever's
+     * about to show opens in its own window, which steals focus before that animation reaches its
+     * settled frame, so the callback never fires again with the real closed height and the space is
+     * left stuck at whatever it last reported. The keyboard is known to be closing here, so force
+     * the space to its known final value instead of waiting on an animation that won't finish.
+     */
+    fun forceKeyboardClosed() {
+        if (!FeatureFlags.smoothKeyboardEnabled()) return
+        panelAnimator?.cancel()
+        panelSyncToken++
+        activePanelSwap = null
+        view?.rootView?.findViewById<View>(R.id.widget_chat_bottom_space)?.updateLayoutParams { height = 0 }
+    }
+
     private fun panelHeight(): Int {
         // Prefer the keyboard's own live space over the cached peak: falling back to a stale
         // remembered height when the real one is available is exactly what produces a mismatched

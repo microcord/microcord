@@ -44,6 +44,10 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
             // this app doesn't otherwise observe — routing it through the shared view model too
             // keeps the composer's own tray height in sync instead of leaving it stuck open.
             flexInputViewModel.hideExpressionTray()
+            // Same idea for the real keyboard: the library also hides it directly (bypassing our
+            // event pipeline), which the composer's smooth-keyboard tracking can't always follow
+            // through to its settled state once this dialog's own window steals focus.
+            (parentFragment as? WidgetChatInput)?.forceKeyboardClosed()
             view.post {
                 val tabs = view.findViewById<TabLayout>(com.lytefast.flexinput.R.id.content_tabs) ?: return@post
                 val pager = view.findViewById<ViewPager>(com.lytefast.flexinput.R.id.content_pager) ?: return@post
