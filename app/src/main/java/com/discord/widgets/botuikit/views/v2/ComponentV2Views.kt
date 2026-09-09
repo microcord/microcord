@@ -3,6 +3,7 @@ package com.discord.widgets.botuikit.views.v2
 import android.content.Context
 import android.graphics.Color
 import android.net.Uri
+import android.text.method.LinkMovementMethod
 import android.text.format.Formatter
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -10,10 +11,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import androidx.core.graphics.ColorUtils
 import com.discord.R
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.UnfurledMediaItem
 import com.discord.api.message.attachment.MessageAttachment
+import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.databinding.WidgetBotUiContainerComponentBinding
 import com.discord.databinding.WidgetBotUiFileComponentBinding
 import com.discord.databinding.WidgetBotUiMediaGalleryComponentBinding
@@ -43,6 +46,7 @@ import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.ComponentView
 import com.discord.widgets.media.MediaViewerContext
 import com.discord.widgets.media.WidgetMedia
+import com.discord.widgets.media.mediaVideoPreviewUrl
 import kotlin.math.ceil
 
 class TextDisplayComponentView @JvmOverloads constructor(
@@ -77,6 +81,7 @@ class TextDisplayComponentView @JvmOverloads constructor(
             },
         )
         binding.content.setDraweeSpanStringBuilder(rendered.text)
+        binding.content.movementMethod = LinkMovementMethod.getInstance()
     }
 
     companion object {
@@ -170,20 +175,32 @@ class ThumbnailComponentView @JvmOverloads constructor(
         val id = component.id ?: component.index
         val revealed = if (key == null) state?.visibleSpoilerEmbedMap?.containsKey(id) == true
         else key in state?.visibleSpoilerEmbedMap?.get(id).orEmpty()
-        binding.image.setImageURI(component.media.previewUrl())
-        binding.image.contentDescription = component.description
-        val hidden = component.spoiler && !revealed
+        val attachment = component.media.toAttachment(id.toLong())
+        val isVideo = attachment.type == MessageAttachmentType.VIDEO
+        binding.image.setImageURI(
+            if (isVideo) mediaVideoPreviewUrl(attachment.proxyUrl, attachment.width, attachment.height)
+            else attachment.proxyUrl,
+        )
+        binding.image.contentDescription = if (isVideo) {
+            listOfNotNull(context.getString(R.string.play_full_video), component.description).joinToString(". ")
+        } else component.description
+        var hidden = component.spoiler && !revealed
         binding.mediaSpoiler.visibility = if (hidden) View.VISIBLE else View.GONE
+        binding.play.visibility = if (isVideo && !hidden) View.VISIBLE else View.GONE
+        binding.image.importantForAccessibility = if (hidden) View.IMPORTANT_FOR_ACCESSIBILITY_NO else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
         binding.alt.visibility = if (!hidden && !component.description.isNullOrBlank()) View.VISIBLE else View.GONE
         binding.mediaSpoiler.setOnClickListener {
+            hidden = false
             binding.mediaSpoiler.visibility = View.GONE
+            binding.play.visibility = if (isVideo) View.VISIBLE else View.GONE
+            binding.image.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
             binding.alt.visibility = if (component.description.isNullOrBlank()) View.GONE else View.VISIBLE
             if (key == null) StoreStream.getMessageState().revealSpoilerEmbed(messageId, id)
             else StoreStream.getMessageState().revealSpoilerEmbedData(messageId, id, key)
         }
         val openMedia = View.OnClickListener {
-            val attachment = component.media.toAttachment(component.id?.toLong() ?: component.index.toLong())
-            if (viewerContext == null) WidgetMedia.launch(context, attachment)
+            if (hidden) binding.mediaSpoiler.performClick()
+            else if (viewerContext == null) WidgetMedia.launch(context, attachment)
             else WidgetMedia.launch(context, attachment, viewerContext)
         }
         binding.image.setOnClickListener(openMedia)
@@ -420,7 +437,7 @@ class ContainerComponentView @JvmOverloads constructor(
         val entry = componentActionListener.componentEntry ?: return
         val binding = WidgetBotUiContainerComponentBinding.bind(this)
         binding.accent.visibility = if (component.accentColor == null) View.GONE else View.VISIBLE
-        binding.accent.setBackgroundColor(component.accentColor ?: Color.TRANSPARENT)
+        binding.accent.setBackgroundColor(component.accentColor?.let { ColorUtils.setAlphaComponent(it, 255) } ?: Color.TRANSPARENT)
         binding.components.replaceViews(component.children.mapIndexedNotNull { index, child ->
             componentProvider.getConfiguredComponentView(componentActionListener, child, binding.components, index) as? View
         })
@@ -444,33 +461,18 @@ class ContainerComponentView @JvmOverloads constructor(
 
 private const val SPOILER_KEY_PREFIX = "comp:"
 
-private fun UnfurledMediaItem.isVideo(): Boolean =
-    contentType?.startsWith("video/") == true ||
-        url.substringBefore('?').lowercase().endsWithAny(".mp4", ".mov", ".webm", ".mkv")
-
-private fun UnfurledMediaItem.previewUrl(): String {
-    val preview = proxyUrl ?: url
-    if (!isVideo() || "format=" in preview) return preview
-    return Uri.parse(preview).buildUpon().appendQueryParameter("format", "webp").build().toString()
-}
-
 private fun UnfurledMediaItem.toAttachment(id: Long): MessageAttachment {
-    var filename = Uri.parse(url).lastPathSegment?.substringBefore('?').orEmpty().ifBlank { "media" }
-    if (isVideo() && !filename.lowercase().endsWithAny(".mp4", ".mov", ".webm", ".mkv")) {
-        filename += ".mp4"
-    }
     return MessageAttachment(
         url = url,
         size = 0,
         id = attachmentId ?: id,
-        proxyUrl = proxyUrl ?: url,
-        filename = filename,
+        proxyUrl = proxyUrl?.takeIf(String::isNotBlank) ?: url,
+        filename = Uri.parse(url).lastPathSegment.orEmpty().ifBlank { "media" },
         width = width,
         height = height,
+        contentType = contentType,
     )
 }
-
-private fun String.endsWithAny(vararg suffixes: String): Boolean = suffixes.any(::endsWith)
 
 private fun com.discord.widgets.chat.list.entries.BotUiComponentEntry.toMediaViewerContext() =
     MediaViewerContext(

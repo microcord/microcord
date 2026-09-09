@@ -25,7 +25,8 @@ class SubtextNode<T : BasicRenderContext> : Node<T>() {
             StyleSpan(Typeface.NORMAL),
             ForegroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.colorTextMuted)),
         )
-        spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        // Apply the block style before nested links/mentions, so their colors win.
+        spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or (1 shl Spanned.SPAN_PRIORITY_SHIFT)) }
 
         if (builder.length == start || builder[builder.length - 1] != '\n') builder.append('\n')
     }

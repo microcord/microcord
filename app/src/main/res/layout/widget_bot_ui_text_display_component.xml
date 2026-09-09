@@ -11,7 +11,5 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingTop="2dp"
-        android:paddingBottom="2dp"
-        android:lineSpacingMultiplier="1.2"
-        android:textSize="16sp" />
+        android:paddingBottom="2dp" />
 </com.discord.widgets.botuikit.views.v2.TextDisplayComponentView>

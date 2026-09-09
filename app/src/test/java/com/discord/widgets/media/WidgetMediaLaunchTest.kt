@@ -100,6 +100,19 @@ class WidgetMediaLaunchTest {
     }
 
     @Test
+    fun `content type identifies extensionless media and wins over URL text`() {
+        val media = attachment("https://example.com/stream?poster=cover.png")
+        for (mime in listOf("video/mp4", "VIDEO/WEBM", "video/x-matroska")) {
+            val args = launchArgs(media.copy(contentType = mime))
+            assertEquals(MediaType.VIDEO, args.mediaType)
+            assertEquals(media.proxyUrl, args.progressiveMediaUri)
+        }
+        val image = launchArgs(attachment("https://example.com/clip.mp4").copy(contentType = "image/webp"))
+        assertNull(image.mediaType)
+        assertNull(image.progressiveMediaUri)
+    }
+
+    @Test
     fun `video poster preserves the stream aspect ratio`() {
         assertEquals(
             "https://media.discordapp.net/proxied?format=webp&width=405&height=720",

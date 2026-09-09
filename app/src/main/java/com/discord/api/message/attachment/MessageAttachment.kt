@@ -27,6 +27,9 @@ data class MessageAttachment(
         get() {
             val path = url.lowercase(Locale.ROOT)
             return when {
+                // Unfurled component media can have an extensionless URL.
+                contentType?.startsWith("video/", ignoreCase = true) == true -> MessageAttachmentType.VIDEO
+                contentType?.startsWith("image/", ignoreCase = true) == true -> MessageAttachmentType.IMAGE
                 IMAGE_MIME_TYPES.any(path::contains) -> MessageAttachmentType.IMAGE
                 VIDEO_MIME_TYPES.any(path::contains) -> MessageAttachmentType.VIDEO
                 else -> MessageAttachmentType.FILE

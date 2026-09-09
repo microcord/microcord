@@ -12,6 +12,19 @@
         app:actualImageScaleType="centerCrop"
         app:roundedCornerRadius="8dp" />
 
+    <ImageView
+        android:id="@+id/play"
+        android:layout_width="@dimen/embed_play_button_width"
+        android:layout_height="@dimen/embed_play_button_width"
+        android:layout_gravity="center"
+        android:background="@drawable/drawable_circle_primary_900"
+        android:padding="8dp"
+        android:src="@drawable/ic_play_arrow_24dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:visibility="gone"
+        app:tint="@color/white" />
+
     <FrameLayout
         android:id="@+id/media_spoiler"
         android:layout_width="match_parent"

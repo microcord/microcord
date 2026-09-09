@@ -200,6 +200,16 @@ class DiscordMarkdownRulesTest {
         assertTrue(parse("text -# muted").none { it is SubtextNode<*> })
     }
 
+    @Test
+    fun componentStyleLinksRemainLinksInsideSubtextAndHeadings() {
+        for (prefix in listOf("-#", "##")) {
+            val block = parse("$prefix [@sample](https://example.com/profile) supporting text").first()
+            val children = block.getChildren().orEmpty()
+            assertEquals("https://example.com/profile", children.filterIsInstance<UrlNode<*>>().single().url)
+            assertTrue(plainText(children).contains("supporting text"))
+        }
+    }
+
     // endregion
 
     // region Links

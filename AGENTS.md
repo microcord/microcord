@@ -212,6 +212,14 @@ invalid decompiler constructs into the target.
 
 ## Build and Verification
 
+**Preserve the user's installed app and login (explicit user instruction, 2026-09-09).**
+- Never uninstall Manticord, clear its app data, or reset/logout the user's account for verification.
+- Do not run connected/instrumentation/Orchestrator tests on the user's daily-use phone
+  (A065, serial `188b1209`); their install/cleanup or fixtures can remove the app or session.
+  Use a dedicated test emulator/device for those tests. Default to builds and focused JVM tests.
+- Device updates must be in-place replacements that retain app data. If signing/version conflicts
+  prevent an update, stop and report the conflict; never fall back to uninstalling/reinstalling.
+
 **Always build through `scripts/build.sh`, never `gradlew` directly.** Several agents share this
 checkout, and concurrent Gradle invocations fight over the daemon and the build directory until one
 of them dies of heap exhaustion. The script takes the same arguments as the wrapper:
