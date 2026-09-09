@@ -757,8 +757,11 @@ internal class RtcControlSocket(
     companion object {
         private const val DAVE_LOG_TAG = "DaveWebSocket"
 
+        private val REDACTED_TRACE_OPCODES = setOf(Opcodes.IDENTIFY, Opcodes.RESUME, Opcodes.SELECT_PROTOCOL_ACK)
+
+        /** Called on every inbound/outbound voice-gateway frame, so the opcode set is hoisted. */
         internal fun traceText(opcode: Int, text: String): String =
-            if (opcode in setOf(Opcodes.IDENTIFY, Opcodes.RESUME, Opcodes.SELECT_PROTOCOL_ACK)) {
+            if (opcode in REDACTED_TRACE_OPCODES) {
                 "<redacted:${text.length} chars>"
             } else {
                 text

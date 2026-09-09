@@ -32,6 +32,22 @@ object TimeUtils {
 
     private const val DATE_FORMAT_DISCORD_API = UTCFormat.LONG
 
+    /**
+     * [DateFormat] isn't thread-safe, so instances are cached per-thread rather than shared — but
+     * this still spares every message-row bind on the UI thread from re-resolving the locale's
+     * formatting rules on every scroll frame.
+     */
+    private val readableTimeFormatsEN =
+        ThreadLocal.withInitial { HashMap<Locale, Pair<DateFormat, DateFormat>>() }
+
+    /** Same non-thread-safety rationale as [readableTimeFormatsEN], keyed by pattern string. */
+    private val utcDateFormats = ThreadLocal.withInitial { HashMap<String, SimpleDateFormat>() }
+
+    private fun utcDateFormat(pattern: String): SimpleDateFormat =
+        utcDateFormats.get().getOrPut(pattern) {
+            SimpleDateFormat(pattern, Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        }
+
 
     private const val MILLIS_PER_SECOND = 1_000L
     private const val MILLIS_PER_MINUTE = 60_000L
@@ -48,9 +64,7 @@ object TimeUtils {
     fun parseUTCDate(dateTime: String?): Long {
         if (dateTime == null) return 0L
         return try {
-            val format = SimpleDateFormat(DATE_FORMAT_DISCORD_API, Locale.ROOT)
-            format.timeZone = TimeZone.getTimeZone("UTC")
-            format.parse(dateTime)?.time ?: 0L
+            utcDateFormat(DATE_FORMAT_DISCORD_API).parse(dateTime)?.time ?: 0L
         } catch (e: ParseException) {
             0L
         } catch (e: NumberFormatException) {
@@ -62,11 +76,8 @@ object TimeUtils {
 
     @JvmStatic
     @JvmOverloads
-    fun toUTCDateTime(unixTimeMillis: Long?, format: String = DATE_FORMAT_DISCORD_API): String? {
-        val dateFormat = SimpleDateFormat(format, Locale.ROOT)
-        dateFormat.timeZone = TimeZone.getTimeZone("UTC")
-        return unixTimeMillis?.let { dateFormat.format(Date(it)) }
-    }
+    fun toUTCDateTime(unixTimeMillis: Long?, format: String = DATE_FORMAT_DISCORD_API): String? =
+        unixTimeMillis?.let { utcDateFormat(format).format(Date(it)) }
 
     @JvmStatic
     fun currentTimeUTCDateString(clock: Clock): String? = toUTCDateTime(clock.currentTimeMillis())
@@ -202,8 +213,10 @@ object TimeUtils {
     ): String {
         if (locale.language != "en") return ""
 
-        val timeFormat = DateFormat.getTimeInstance(DateFormat.SHORT, locale)
-        val dateTimeFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)
+        val (timeFormat, dateTimeFormat) = readableTimeFormatsEN.get().getOrPut(locale) {
+            DateFormat.getTimeInstance(DateFormat.SHORT, locale) to
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale)
+        }
 
         val boundary = toCalendar(clock.currentTimeMillis())
         boundary.set(Calendar.HOUR_OF_DAY, 0)

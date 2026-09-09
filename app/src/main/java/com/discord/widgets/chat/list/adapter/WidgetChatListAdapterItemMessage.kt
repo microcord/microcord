@@ -176,12 +176,64 @@ class WidgetChatListAdapterItemMessage(
         itemView.findViewById(R.id.chat_list_adapter_item_communication_disabled_icon)
     private val chatGuideline: Guideline? = itemView.findViewById(R.id.uikit_chat_guideline)
 
+    /**
+     * Allocated once per row rather than on every bind — nameView/tagView/timestampView never
+     * change for a given holder, and textView only ever alternates between two stable views
+     * (itemText / itemLoadingText), so it's simply reassigned per bind instead.
+     */
+    private val accessibilityDelegate by lazy(LazyThreadSafetyMode.NONE) {
+        MessageAccessibilityDelegate(itemText, itemName, itemTag, itemTimestamp)
+    }
+
+    /**
+     * The row's click listeners are installed once (below) rather than as a fresh lambda on every
+     * bind; they read the currently bound message through these fields instead.
+     */
+    private var boundMessage: Message? = null
+    private var boundIsThreadStarterMessage: Boolean = false
+
+    /**
+     * Forwards a long-press from inside a hosted accessory (attachment/embed/component) to the
+     * message row. Built once and reused across every accessory of every bind, rather than a fresh
+     * `OnLongClickListener` per accessory per bind — see [adoptAccessoryTouches].
+     */
+    private val accessoryLongClickForward = View.OnLongClickListener {
+        val message = boundMessage ?: return@OnLongClickListener false
+        val rendered = itemText.text
+        adapter.eventHandler.onMessageLongClicked(
+            message,
+            rendered.subSequence(0, max(rendered.length - 1, 0)),
+            boundIsThreadStarterMessage,
+        )
+        true
+    }
+
+    init {
+        itemView.setOnClickListener {
+            val message = boundMessage ?: return@setOnClickListener
+            adapter.eventHandler.onMessageClicked(message, boundIsThreadStarterMessage, itemView)
+        }
+        itemView.setOnLongClickListenerConsumeClick {
+            val message = boundMessage ?: return@setOnLongClickListenerConsumeClick
+            // The rendered text ends in a zero-width space the parser appends; the action sheet
+            // copies this string, so that character is trimmed back off here.
+            val rendered = itemText.text
+            adapter.eventHandler.onMessageLongClicked(
+                message,
+                rendered.subSequence(0, max(rendered.length - 1, 0)),
+                boundIsThreadStarterMessage,
+            )
+        }
+    }
+
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as MessageEntry
 
         val message = entry.message
         val isThreadStarterMessage = entry.isThreadStarterMessage
+        boundMessage = message
+        boundIsThreadStarterMessage = isThreadStarterMessage
 
         configureItemTag(message, entry.isGuildForumPostAuthor)
         itemGuildTag?.bind(message.author?.primaryGuild)
@@ -204,27 +256,11 @@ class WidgetChatListAdapterItemMessage(
             processMessageText(itemText, entry)
             itemText
         }
-        ViewCompat.setAccessibilityDelegate(
-            itemView,
-            MessageAccessibilityDelegate(spokenTextView, itemName, itemTag, itemTimestamp),
-        )
+        accessibilityDelegate.textView = spokenTextView
+        ViewCompat.setAccessibilityDelegate(itemView, accessibilityDelegate)
 
         threadStarterMessageHeader?.visibility =
             if (isThreadStarterMessage) View.VISIBLE else View.GONE
-
-        itemView.setOnClickListener {
-            adapter.eventHandler.onMessageClicked(message, isThreadStarterMessage, itemView)
-        }
-        itemView.setOnLongClickListenerConsumeClick {
-            // The rendered text ends in a zero-width space the parser appends; the action sheet
-            // copies this string, so that character is trimmed back off here.
-            val rendered = itemText.text
-            adapter.eventHandler.onMessageLongClicked(
-                message,
-                rendered.subSequence(0, max(rendered.length - 1, 0)),
-                isThreadStarterMessage,
-            )
-        }
 
         configureAccessories(entry)
         configureReplyPreview(entry)
@@ -698,7 +734,7 @@ class WidgetChatListAdapterItemMessage(
                     container.addView(created.itemView, index)
                 }
             holder.bind(index, accessory)
-            adoptAccessoryTouches(holder.itemView, entry)
+            adoptAccessoryTouches(holder.itemView)
             collapseLeadingGap(holder.itemView, isFirst = index == 0)
         }
     }
@@ -710,26 +746,17 @@ class WidgetChatListAdapterItemMessage(
      * otherwise swallow it. The wash matters most: it is translucent, so a hosted row drawing its
      * own over the message's would tint the accessory a darker shade than the rest of the message.
      */
-    private fun adoptAccessoryTouches(view: View, entry: MessageEntry) {
+    private fun adoptAccessoryTouches(view: View) {
         view.background = null
         view.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg)?.visibility = View.GONE
         view.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg)?.visibility = View.GONE
         view.setOnClickListener(null)
         view.isClickable = false
-        val forward = View.OnLongClickListener {
-            val rendered = itemText.text
-            adapter.eventHandler.onMessageLongClicked(
-                entry.message,
-                rendered.subSequence(0, max(rendered.length - 1, 0)),
-                entry.isThreadStarterMessage,
-            )
-            true
-        }
         view.isLongClickable = false
         // Only views that already swallow touches get the forwarder: making anything else
         // long-clickable would consume the gesture and stop the message row being pressed at all.
         fun apply(target: View) {
-            if (target !== view && target.isClickable) target.setOnLongClickListener(forward)
+            if (target !== view && target.isClickable) target.setOnLongClickListener(accessoryLongClickForward)
             if (target is ViewGroup) repeat(target.childCount) { apply(target.getChildAt(it)) }
         }
         apply(view)
@@ -1148,7 +1175,7 @@ class WidgetChatListAdapterItemMessage(
      * another wave; kept private here until that class lands.
      */
     private class MessageAccessibilityDelegate(
-        private val textView: TextView,
+        var textView: TextView,
         private val nameView: TextView?,
         private val tagView: TextView?,
         private val timestampView: TextView?,

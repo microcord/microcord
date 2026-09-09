@@ -10,22 +10,27 @@ import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.presence.ClientStatus
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.presence.statusIcon
 import com.discord.databinding.WidgetChannelMembersListItemUserBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
-import com.discord.views.AvatarDecorationView
-import com.discord.views.StatusView
 import com.discord.views.NameplateView
-import com.discord.views.UsernameView
-import com.discord.views.VitoImageView
 
 private const val ROW_EDGE_PADDING_DP = 16
 private const val NAME_END_MARGIN_DP = 4
 
 class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembersListItemUserBinding) :
     RecyclerView.ViewHolder(binding.root) {
+
+    /**
+     * Held per-holder (rather than the module-wide default `AlwaysUpdateChangeDetector`) so
+     * scrolling a row back into view doesn't re-issue an identical avatar request — this list
+     * stays open and gets scrolled constantly while chatting.
+     */
+    private val avatarChangeDetector = MGImages.DistinctChangeDetector()
 
     /**
      * Keeps the name and status clear of the artwork. Only the text moves: the crown and boost
@@ -38,12 +43,11 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
         } else {
             0
         }
-        setEndMargin(R.id.channel_members_list_item_name, (NAME_END_MARGIN_DP * density).toInt() + extra)
-        setEndMargin(R.id.channel_members_list_item_game, extra)
+        setEndMargin(binding.channelMembersListItemName, (NAME_END_MARGIN_DP * density).toInt() + extra)
+        setEndMargin(binding.channelMembersListItemGame, extra)
     }
 
-    private fun setEndMargin(viewId: Int, margin: Int) {
-        val view = binding.root.findViewById<View>(viewId)
+    private fun setEndMargin(view: View, margin: Int) {
         val params = view.layoutParams as ViewGroup.MarginLayoutParams
         if (params.marginEnd != margin) {
             params.marginEnd = margin
@@ -56,7 +60,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
         binding.root.setOnLongClickListener(onLongClicked?.let { callback ->
             View.OnLongClickListener { callback(); true }
         })
-        binding.root.findViewById<NameplateView>(R.id.channel_members_list_item_nameplate).apply {
+        binding.channelMembersListItemNameplate.apply {
             bind(data.nameplate, NameplateView.Placement.MEMBER_LIST, selected = false)
             binding.root.setOnHoverListener { _, event ->
                 setNameplateHovered(
@@ -66,10 +70,14 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             }
         }
         reserveArtGutter(data.nameplate != null)
-        binding.root.findViewById<VitoImageView>(R.id.channel_members_list_item_avatar).setImageURI(data.avatarUrl)
-        binding.root.findViewById<AvatarDecorationView>(R.id.channel_members_list_item_avatar_decoration)
-            .bind(data.avatarDecoration)
-        binding.root.findViewById<UsernameView>(R.id.channel_members_list_item_name).apply {
+        IconUtils.setIcon(
+            binding.channelMembersListItemAvatar,
+            data.avatarUrl,
+            R.dimen.avatar_size_standard,
+            changeDetector = avatarChangeDetector,
+        )
+        binding.channelMembersListItemAvatarDecoration.bind(data.avatarDecoration)
+        binding.channelMembersListItemName.apply {
             configureUsername(data.name)
             configureGuildTag(data.primaryGuild)
             configureTag(data.isBot, data.tagText ?: R.string.bot_tag_bot, data.tagVerified)
@@ -79,7 +87,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             // reference leaves it in place rather than overpainting it with the name style.
             setDisplayNameStyles(data.displayNameStyles, DisplayNameStyleRenderer.Mode.FONT)
         }
-        binding.root.findViewById<StatusView>(R.id.channel_members_list_item_presence).apply {
+        binding.channelMembersListItemPresence.apply {
             setPresence(data.presence)
             visibility = if (data.presence?.status == null ||
                 data.presence.status == ClientStatus.OFFLINE || data.presence.status == ClientStatus.INVISIBLE
@@ -88,9 +96,9 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
         val statusIcon = PresenceUtils.setStatusLine(
             data.presence,
             data.isApplicationStreaming,
-            binding.root.findViewById(R.id.channel_members_list_item_game),
+            binding.channelMembersListItemGame,
         )
-        binding.root.findViewById<ImageView>(R.id.channel_members_list_item_rich_presence_iv).apply {
+        binding.channelMembersListItemRichPresenceIv.apply {
             val icon = statusIcon
             if (icon == null) {
                 visibility = View.GONE
@@ -109,9 +117,9 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
                 visibility = View.VISIBLE
             }
         }
-        binding.root.findViewById<ImageView>(R.id.channel_members_list_item_group_owner_indicator).visibility =
+        binding.channelMembersListItemGroupOwnerIndicator.visibility =
             if (data.showOwnerIndicator) View.VISIBLE else View.GONE
-        binding.root.findViewById<ImageView>(R.id.channel_members_list_item_boosted_indicator).visibility =
+        binding.channelMembersListItemBoostedIndicator.visibility =
             if (data.premiumSince != null) View.VISIBLE else View.GONE
     }
 }

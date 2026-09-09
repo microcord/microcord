@@ -12,6 +12,8 @@ class EmojiViewHolder(adapter: WidgetChatListActionsEmojisAdapter) :
         R.layout.view_chat_list_actions_emoji_item,
         adapter,
     ) {
+    private val changeDetector = MGImages.DistinctChangeDetector()
+
     override fun onConfigure(position: Int, data: EmojiItem) {
         val item = data as EmojiItem.EmojiData
         val image = itemView as VitoImageView
@@ -20,6 +22,12 @@ class EmojiViewHolder(adapter: WidgetChatListActionsEmojisAdapter) :
         )
         itemView.contentDescription = item.emoji.firstName
         itemView.setOnClickListener { adapter.onClickEmoji(item.emoji) }
-        MGImages.setImage(image, item.emoji.getImageUri(true, imageSize, itemView.context))
+        MGImages.setImage(
+            image,
+            item.emoji.getImageUri(true, imageSize, itemView.context),
+            width = imageSize,
+            height = imageSize,
+            changeDetector = changeDetector,
+        )
     }
 }

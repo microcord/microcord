@@ -53,6 +53,7 @@ import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.feature.DmListCustomization
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
@@ -257,13 +258,22 @@ class WidgetChannelsListAdapter(
          * by scrolling does not replay the rotation.
          */
         private var isCollapsed: Boolean = false
+        private var boundItem: ChannelListItemCategory? = null
+
+        init {
+            root.setOnLongClickListenerConsumeClick { boundItem?.let { adapter.onSelectChannelOptions(it.channel) } }
+            root.setOnClickListener {
+                boundItem?.let { adapter.onCollapseCategory(it.channel, it.isCollapsed) }
+            }
+            add.setOnClickListener {
+                boundItem?.let { adapter.onCreateChannel(it.channel.guildId, Channel.GUILD_TEXT, it.channel.id) }
+            }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemCategory
-
-            root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(item.channel) }
-            root.setOnClickListener { adapter.onCollapseCategory(item.channel, item.isCollapsed) }
+            boundItem = item
 
             val categoryName = item.channel.getDisplayName()
             name.text = categoryName
@@ -310,9 +320,6 @@ class WidgetChannelsListAdapter(
 
             add.visibility = if (item.canManageChannels) View.VISIBLE else View.GONE
             add.imageTintList = ColorStateList.valueOf(color)
-            add.setOnClickListener {
-                adapter.onCreateChannel(item.channel.guildId, Channel.GUILD_TEXT, item.channel.id)
-            }
         }
 
         private companion object {
@@ -348,20 +355,26 @@ class WidgetChannelsListAdapter(
         private val mentions: TextView = itemView.findViewById(R.id.channels_item_channel_mentions)
         private val roleSubscriptionIcon: ImageView =
             itemView.findViewById(R.id.channels_item_channel_guild_role_subscription_icon)
+        private var boundItem: ChannelListItemTextChannel? = null
+
+        init {
+            root.setOnLongClickListenerConsumeClick { boundItem?.let { adapter.onSelectChannelOptions(it.channel) } }
+            root.setOnClickListener {
+                boundItem?.let { item ->
+                    if (item.isGuildRoleSubscriptionLockedChannel) {
+                        adapter.onSelectGuildRoleSubscriptionLockedChannel(item.channel)
+                    } else {
+                        adapter.onSelectChannel(item.channel)
+                    }
+                }
+            }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemTextChannel
+            boundItem = item
             val isAnnouncement = item.channel.type == Channel.GUILD_ANNOUNCEMENT
-
-            root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(item.channel) }
-            root.setOnClickListener {
-                if (item.isGuildRoleSubscriptionLockedChannel) {
-                    adapter.onSelectGuildRoleSubscriptionLockedChannel(item.channel)
-                } else {
-                    adapter.onSelectChannel(item.channel)
-                }
-            }
 
             root.setChannelBackground(item.selected, item.channel)
             root.contentDescription = contentDescription(item, isAnnouncement)
@@ -517,13 +530,17 @@ class WidgetChannelsListAdapter(
         private val mentions: TextView = itemView.findViewById(R.id.channels_item_thread_mentions)
         private val spine: ImageView = itemView.findViewById(R.id.channels_item_thread_spine)
         private val unread: ImageView = itemView.findViewById(R.id.channels_item_thread_unread)
+        private var boundItem: ChannelListItemThread? = null
+
+        init {
+            root.setOnLongClickListenerConsumeClick { boundItem?.let { adapter.onSelectChannelOptions(it.channel) } }
+            root.setOnClickListener { boundItem?.let { adapter.onSelectChannel(it.channel) } }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemThread
-
-            root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(item.channel) }
-            root.setOnClickListener { adapter.onSelectChannel(item.channel) }
+            boundItem = item
 
             // The background sits on the inner content view so the spine gutter stays untinted.
             content.setChannelBackground(item.selected, item.channel)
@@ -617,19 +634,33 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_item_voice_channel_speaker)
         private val userLimit: VoiceUserLimitView =
             itemView.findViewById(R.id.channels_item_voice_channel_user_limit)
+        private var boundItem: ChannelListItemVoiceChannel? = null
+
+        init {
+            root.setOnClickListener {
+                boundItem?.let { item ->
+                    if (item.isGuildRoleSubscriptionLockedChannel) {
+                        adapter.onSelectGuildRoleSubscriptionLockedChannel(item.channel)
+                    } else {
+                        adapter.onCallChannel(item.channel)
+                    }
+                }
+            }
+            // Not gated on MANAGE_CHANNELS: the sheet is mostly things any member can do — mute,
+            // mark as read, notification overrides, invite — and it hides the manage-only entries
+            // by itself. Requiring the permission left everyone else with a long press that ate
+            // the gesture and showed nothing.
+            root.setOnLongClickListenerConsumeClick {
+                boundItem?.let { adapter.onSelectChannelOptions(it.channel) }
+            }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemVoiceChannel
+            boundItem = item
             val canConnect = PermissionUtils.can(Permission.CONNECT, item.permission)
 
-            root.setOnClickListener {
-                if (item.isGuildRoleSubscriptionLockedChannel) {
-                    adapter.onSelectGuildRoleSubscriptionLockedChannel(item.channel)
-                } else {
-                    adapter.onCallChannel(item.channel)
-                }
-            }
             val selected = item.voiceSelected || item.textSelected
             root.isSelected = selected
             root.setChannelBackground(selected, item.channel)
@@ -667,14 +698,6 @@ class WidgetChannelsListAdapter(
             speaker.imageTintList = ColorStateList.valueOf(iconColor)
 
             configureUserLimit(item, canConnect)
-
-            // Not gated on MANAGE_CHANNELS: the sheet is mostly things any member can do — mute,
-            // mark as read, notification overrides, invite — and it hides the manage-only entries
-            // by itself. Requiring the permission left everyone else with a long press that ate
-            // the gesture and showed nothing.
-            root.setOnLongClickListenerConsumeClick {
-                adapter.onSelectChannelOptions(item.channel)
-            }
         }
 
         /**
@@ -776,19 +799,27 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.stage_channel_item_voice_channel_name)
         private val topic: TextView =
             itemView.findViewById(R.id.stage_channel_item_voice_channel_topic)
+        private var boundItem: ChannelListItemStageVoiceChannel? = null
+
+        init {
+            root.setOnClickListener {
+                boundItem?.let { item ->
+                    if (item.isGuildRoleSubscriptionLockedChannel) {
+                        adapter.onSelectGuildRoleSubscriptionLockedChannel(item.channel)
+                    } else {
+                        adapter.onCallChannel(item.channel)
+                    }
+                }
+            }
+            root.setOnLongClickListenerConsumeClick { boundItem?.let { adapter.onSelectChannelOptions(it.channel) } }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemStageVoiceChannel
+            boundItem = item
             val canConnect = PermissionUtils.can(Permission.CONNECT, item.permission)
 
-            root.setOnClickListener {
-                if (item.isGuildRoleSubscriptionLockedChannel) {
-                    adapter.onSelectGuildRoleSubscriptionLockedChannel(item.channel)
-                } else {
-                    adapter.onCallChannel(item.channel)
-                }
-            }
             root.isSelected = item.selected
             root.setChannelBackground(item.selected, item.channel)
 
@@ -825,7 +856,6 @@ class WidgetChannelsListAdapter(
             )
 
             root.contentDescription = contentDescription(item, item.channel.userLimit)
-            root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(item.channel) }
         }
 
         private fun contentDescription(
@@ -869,21 +899,28 @@ class WidgetChannelsListAdapter(
         private val microphone: ImageView =
             itemView.findViewById(R.id.channels_item_voice_user_microphone)
         private val name: TextView = itemView.findViewById(R.id.channels_item_voice_user_name)
+        private val avatarChangeDetector = MGImages.DistinctChangeDetector()
+        private var boundItem: ChannelListItemVoiceUser? = null
+
+        init {
+            root.setOnLongClickListenerConsumeClick {
+                boundItem?.let { adapter.onSelectUserOptions(it.user, it.channel) }
+            }
+            root.setOnClickListener { boundItem?.let { adapter.onCallChannel(it.channel) } }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemVoiceUser
+            boundItem = item
 
             IconUtils.setIcon(
                 imageView = avatar,
                 user = item.user,
                 sizeDimenRes = R.dimen.avatar_size_small,
                 guildMember = item.computed,
+                changeDetector = avatarChangeDetector,
             )
-            root.setOnLongClickListenerConsumeClick {
-                adapter.onSelectUserOptions(item.user, item.channel)
-            }
-            root.setOnClickListener { adapter.onCallChannel(item.channel) }
 
             name.text = GuildMember.getNickOrUsername(item.computed, item.user)
             DisplayNameStyleRenderer.apply(
@@ -930,15 +967,23 @@ class WidgetChannelsListAdapter(
         private val guildTag: GuildTagView = itemView.findViewById(R.id.channels_list_item_private_guild_tag)
         private val nameplate: NameplateView =
             itemView.findViewById(R.id.channels_list_item_private_nameplate)
+        private val avatarChangeDetector = MGImages.DistinctChangeDetector()
         private val avatarDecoration: AvatarDecorationView =
             itemView.findViewById(R.id.channels_list_item_private_avatar_decoration)
         private val content: View = itemView.findViewById(R.id.channels_list_item_private_content)
         private val pin: ImageView = itemView.findViewById(R.id.channels_list_item_private_pin)
+        private var boundChannel: Channel? = null
+
+        init {
+            root.setOnLongClickListenerConsumeClick { boundChannel?.let { adapter.onSelectChannelOptions(it) } }
+            root.setOnClickListener { boundChannel?.let { adapter.onSelectChannel(it) } }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemPrivate
             val channel = item.channel
+            boundChannel = channel
             // A one-to-one DM already carries the recipient's name; anything else may need the
             // "Unnamed"/"Direct Message" fallback that getDisplayNameOrDefault supplies.
             val channelName = if (channel.isDM()) {
@@ -947,8 +992,6 @@ class WidgetChannelsListAdapter(
                 item.displayName ?: channel.getDisplayNameOrDefault(name.context)
             }
 
-            root.setOnLongClickListenerConsumeClick { adapter.onSelectChannelOptions(channel) }
-            root.setOnClickListener { adapter.onSelectChannel(channel) }
             root.setOnHoverListener { _, event ->
                 nameplate.setNameplateHovered(
                     event.action == MotionEvent.ACTION_HOVER_ENTER || event.action == MotionEvent.ACTION_HOVER_MOVE,
@@ -979,7 +1022,7 @@ class WidgetChannelsListAdapter(
             }
             tag.visibility = if (channel.isSystemDM()) View.VISIBLE else View.GONE
 
-            IconUtils.setIcon(avatar, channel, R.dimen.avatar_size_standard)
+            IconUtils.setIcon(avatar, channel, R.dimen.avatar_size_standard, changeDetector = avatarChangeDetector)
             avatarDecoration.bind(item.avatarDecoration ?: channel.getDMRecipient()?.avatarDecoration)
 
             status.visibility = if (
@@ -1113,10 +1156,16 @@ class WidgetChannelsListAdapter(
         private val name: TextView = itemView.findViewById(R.id.directory_channel_name)
         private val unreadCount: TextView =
             itemView.findViewById(R.id.directory_channel_unread_count)
+        private var boundChannel: Channel? = null
+
+        init {
+            root.setOnClickListener { boundChannel?.let { adapter.onSelectChannel(it) } }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemDirectory
+            boundChannel = item.channel
             // Discord's own seeded directory keeps its real name and the hub glyph; every other
             // directory channel is presented as the generic "Join servers" entry point.
             val isHqDirectory = item.channel.isHQDirectoryChannel()
@@ -1132,7 +1181,6 @@ class WidgetChannelsListAdapter(
             unreadCount.setTextAndVisibilityBy(
                 if (item.unreadCount > 0) item.unreadCount.toString() else null,
             )
-            root.setOnClickListener { adapter.onSelectChannel(item.channel) }
             root.isSelected = item.selected
         }
     }
@@ -1146,12 +1194,15 @@ class WidgetChannelsListAdapter(
         private val icon: ImageView = itemView.findViewById(R.id.directory_channel_icon)
         private val name: TextView = itemView.findViewById(R.id.directory_channel_name)
 
+        init {
+            root.setOnClickListener { adapter.onAddServer() }
+        }
+
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             if (data !is ChannelListItemAddServer) return
             name.setText(R.string.hub_sidebar_add_servers)
             icon.setImageResource(R.drawable.ic_add_24dp)
-            root.setOnClickListener { adapter.onAddServer() }
         }
     }
 
@@ -1166,11 +1217,17 @@ class WidgetChannelsListAdapter(
         adapter: WidgetChannelsListAdapter,
     ) : Item(layoutResId, adapter) {
 
+        private var boundGuildId: Long? = null
+
+        init {
+            itemView.setOnClickListener { boundGuildId?.let { adapter.onShareGuildInvite(it) } }
+            itemView.setOnLongClickListenerConsumeClick { adapter.onSelectInvite(it) }
+        }
+
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             if (data !is ChannelListItemInvite) return
-            itemView.setOnClickListener { adapter.onShareGuildInvite(data.guildId) }
-            itemView.setOnLongClickListenerConsumeClick { adapter.onSelectInvite(it) }
+            boundGuildId = data.guildId
             if (data.isHub) {
                 itemView.findViewById<TextView>(R.id.directory_channel_name)
                     .setText(R.string.invite_a_friend)
@@ -1206,10 +1263,19 @@ class WidgetChannelsListAdapter(
 
         private val header: TextView = itemView.findViewById(R.id.channels_list_item_header)
         private val add: ImageView = itemView.findViewById(R.id.channels_list_new)
+        private var boundSelectedGuildId: Long = 0L
+        private var boundCreateType: Int? = null
+
+        init {
+            add.setOnClickListener {
+                boundCreateType?.let { createType -> adapter.onCreateChannel(boundSelectedGuildId, createType, null) }
+            }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemHeader
+            boundSelectedGuildId = item.selectedGuildId
 
             // The add button is kept INVISIBLE rather than GONE where it does not apply, so the
             // header text keeps the same width in every section.
@@ -1219,15 +1285,8 @@ class WidgetChannelsListAdapter(
                 item.textResId == R.string.voice_channels -> Channel.GUILD_VOICE
                 else -> null
             }
-            if (createType == null) {
-                add.visibility = View.INVISIBLE
-                add.setOnClickListener(null)
-            } else {
-                add.visibility = View.VISIBLE
-                add.setOnClickListener {
-                    adapter.onCreateChannel(item.selectedGuildId, createType, null)
-                }
-            }
+            boundCreateType = createType
+            add.visibility = if (createType == null) View.INVISIBLE else View.VISIBLE
             header.setText(item.textResId)
         }
     }
@@ -1271,6 +1330,10 @@ class WidgetChannelsListAdapter(
         private val root = itemView as LinearLayout
         private val name: TextView = itemView.findViewById(R.id.directory_channel_name)
 
+        init {
+            root.setOnClickListener { adapter.onViewGuildRoleSubscriptions() }
+        }
+
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             root.setBackgroundAndKeepPadding(
@@ -1280,7 +1343,6 @@ class WidgetChannelsListAdapter(
                 ),
             )
             name.setText(R.string.guild_role_subscriptions_channel_label)
-            root.setOnClickListener { adapter.onViewGuildRoleSubscriptions() }
         }
     }
 
@@ -1288,8 +1350,7 @@ class WidgetChannelsListAdapter(
         @LayoutRes layoutResId: Int,
         adapter: WidgetChannelsListAdapter,
     ) : Item(layoutResId, adapter) {
-        override fun onConfigure(position: Int, data: ChannelListItem) {
-            super.onConfigure(position, data)
+        init {
             itemView.setOnClickListener { adapter.onViewGuildOnboarding() }
         }
     }
@@ -1302,10 +1363,16 @@ class WidgetChannelsListAdapter(
         private val root = itemView as ConstraintLayout
         private val count: TextView =
             itemView.findViewById(R.id.channels_list_item_guild_scheduled_event_count)
+        private var boundItem: ChannelListItemGuildScheduledEvents? = null
+
+        init {
+            root.setOnClickListener { boundItem?.let { adapter.onViewGuildScheduledEvents(it.guild) } }
+        }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
             val item = data as ChannelListItemGuildScheduledEvents
+            boundItem = item
             count.visibility = if (item.data.isNotEmpty()) View.VISIBLE else View.GONE
             count.text = item.data.size.toString()
             root.setBackgroundAndKeepPadding(
@@ -1314,7 +1381,6 @@ class WidgetChannelsListAdapter(
                     root.context.getThemedDrawableRes(R.attr.drawable_overlay_channels),
                 ),
             )
-            root.setOnClickListener { adapter.onViewGuildScheduledEvents(item.guild) }
         }
     }
 

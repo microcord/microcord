@@ -35,6 +35,7 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.persister.Persister
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
@@ -131,6 +132,16 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
 
         ViewCompat.setAccessibilityHeading(header, true)
         ViewCompat.setAccessibilityHeading(directMessagesTitle, true)
+
+        // The real subscription below only delivers its first value after a scheduler hop (the
+        // model's combineLatest chain runs on the computation scheduler), so a freshly (re)created
+        // view would otherwise show an empty list for a frame or two even when the data was already
+        // computed during a previous visit — including one from before the app process was last
+        // killed, since the cache below survives a restart. Render that stale copy immediately; the
+        // subscription's first real emission — often for the same, unchanged state — replaces it
+        // moments later.
+        lastModelCache.get().takeIf { it.selectedGuild != null || it.items.isNotEmpty() }
+            ?.let(::configureUI)
     }
 
     override fun onViewBoundOrOnResume() {
@@ -354,6 +365,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
     }
 
     private fun configureUI(model: WidgetChannelListModel) {
+        lastModelCache.set(model)
         val guild = model.selectedGuild
         val hasBanner = guild?.banner != null
 
@@ -555,5 +567,18 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         private const val INTENT_EXTRA_OPEN_PANEL = "com.discord.intent.extra.EXTRA_OPEN_PANEL"
         private const val PANEL_CORNER_RADIUS_DP = 8f
         private const val BANNER_BOTTOM_GAP_DP = 8f
+
+        /**
+         * The last model rendered, disk-cached (same mechanism StoreGuilds/StoreChannels already
+         * use for Guild/Channel) so a freshly (re)created view — including after the app process
+         * itself was restarted — can paint immediately instead of sitting empty until the next
+         * async emission. `set()` only marks this dirty; the existing app-wide persistence
+         * schedule (PersisterConfig: on background, and every minute) flushes it to disk, so this
+         * never does file IO on the main thread itself.
+         */
+        private val lastModelCache = Persister(
+            "channels_list_last_model",
+            WidgetChannelListModel(selectedGuild = null, items = emptyList()),
+        )
     }
 }

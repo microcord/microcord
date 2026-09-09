@@ -33,6 +33,7 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
         private val image: VitoImageView = itemView.findViewById(R.id.gif_item_image)
         private val favorite: ImageView = itemView.findViewById(R.id.gif_item_favorite)
+        private val changeDetector = MGImages.DistinctChangeDetector()
 
         init {
             itemView.setOnTouchListener(ViewScalingOnTouchListener(PRESS_SCALE))
@@ -46,8 +47,15 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         ) {
             val gif = gifItem.gif
             val aspect = if (gif.width == 0) 1f else gif.height.toFloat() / gif.width
-            itemView.layoutParams.height = (columnWidthPx * aspect).toInt()
-            MGImages.setImage(image, listOf(gif.gifImageUrl))
+            val heightPx = (columnWidthPx * aspect).toInt()
+            itemView.layoutParams.height = heightPx
+            MGImages.setImage(
+                image,
+                listOf(gif.gifImageUrl),
+                width = columnWidthPx,
+                height = heightPx,
+                changeDetector = changeDetector,
+            )
             favorite.visibility = View.VISIBLE
             favorite.alpha = if (gifItem.isFavorite) 1f else 0.7f
             favorite.setColorFilter(

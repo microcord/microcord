@@ -244,14 +244,20 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
 
         fun snowflakeTimestamp(id: Long) = SnowflakeUtils.toTimestamp(id)
 
+        private val TRAILING_SUBMILLI_DIGITS = Regex("(\\.\\d{3})\\d+Z$")
+
+        // SimpleDateFormat isn't thread-safe; cached per-thread since this is re-parsed on every
+        // row bind while the (scrollable) thread browser list is open.
+        private val utcDateFormat = ThreadLocal.withInitial {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+        }
+
         fun parseUtcDate(value: String?): Long? {
             if (value == null) return null
-            val normalized = value.replace(Regex("(\\.\\d{3})\\d+Z$"), "$1Z")
-            return runCatching {
-                SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {
-                    timeZone = TimeZone.getTimeZone("UTC")
-                }.parse(normalized)?.time
-            }.getOrNull()
+            val normalized = value.replace(TRAILING_SUBMILLI_DIGITS, "$1Z")
+            return runCatching { utcDateFormat.get().parse(normalized)?.time }.getOrNull()
         }
     }
 }

@@ -71,17 +71,6 @@ data class WidgetChatListModel(
         ATTACHED;
 
         companion object {
-            fun get(channelId: Long): Observable<ChatListState> =
-                StoreStream.getMessages().observeIsDetached(channelId).switchMap { detached ->
-                    if (detached) {
-                        StoreStream.getMessagesLoader().getMessagesLoadedState(channelId)
-                            .map(::from)
-                            .distinctUntilChanged()
-                    } else {
-                        Observable.just(ATTACHED)
-                    }
-                }
-
             internal fun from(state: StoreMessagesLoader.ChannelLoadedState): ChatListState =
                 if (state.isTouchedSinceLastJump) DETACHED else DETACHED_UNTOUCHED
         }
@@ -118,7 +107,7 @@ data class WidgetChatListModel(
                 stores.getGuilds().observeComputed(channel.guildId),
                 stores.getGuilds().observeGuild(channel.guildId),
                 stores.getUserRelationships().observe(),
-                ChatListState.get(channel.id),
+                stores.getMessages().observeIsDetached(channel.id),
                 stores.getPendingReplies().observePendingReply(channel.id).map { it?.originalMessage?.id },
                 ::ChannelSecondary,
             )
@@ -327,7 +316,7 @@ data class WidgetChatListModel(
             val computedMembers: Map<Long, GuildMember>,
             val guild: Guild?,
             val relationships: Map<Long, Int>,
-            val chatListState: ChatListState,
+            val isDetached: Boolean,
             val pendingReplyMessageId: Long?,
         )
 
@@ -353,7 +342,11 @@ data class WidgetChatListModel(
             second.computedMembers,
             second.guild,
             second.relationships,
-            second.chatListState,
+            // Derived from data primary already fetched, rather than a second independent
+            // subscription to the same messages-loaded-state source (see ChatListState.get,
+            // now unused by this path — it duplicated primary's own loadingState subscription
+            // and caused every loaded-state change to recombine the model twice).
+            chatListState = if (second.isDetached) ChatListState.from(first.loadingState) else ChatListState.ATTACHED,
             pendingReplyMessageId = second.pendingReplyMessageId,
         )
     }

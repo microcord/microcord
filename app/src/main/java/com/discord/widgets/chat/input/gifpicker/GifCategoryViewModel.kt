@@ -78,13 +78,24 @@ class GifCategoryViewModel(
             gifCategoryItem: GifCategoryItem,
             storeGifPicker: GifPickerStore = GifPickerStores.gifPicker,
         ): Observable<StoreState> {
+            // The Favorites tab's own results are already the favorites list, so its star-icon keys
+            // come straight from those results instead of paying for a second subscription (and a
+            // second sort/allocation pass) against the exact same underlying data.
+            if (gifCategoryItem is GifCategoryItem.Favorite) {
+                return storeGifPicker.observeFavoriteGifs().map { results ->
+                    StoreState(
+                        results,
+                        results.mapTo(HashSet()) { StoreMediaFavorites.canonicalGifKey(it.tenorGifUrl) },
+                    )
+                }
+            }
             val gifs = when (gifCategoryItem) {
                 is GifCategoryItem.Standard ->
                     storeGifPicker.observeGifsForSearchQuery(gifCategoryItem.gifCategory.categoryName)
 
                 is GifCategoryItem.Trending -> storeGifPicker.observeTrendingCategoryGifs()
-                is GifCategoryItem.Favorite -> storeGifPicker.observeFavoriteGifs()
                 is GifCategoryItem.Frequent -> storeGifPicker.observeFrequentlyUsedGifs()
+                is GifCategoryItem.Favorite -> error("Favorite is handled above")
             }
             // Hold the loading grid until real results land, rather than flashing an empty one.
             return gifs

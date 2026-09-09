@@ -14,6 +14,7 @@ import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.user.User
 import com.discord.utilities.drawable.setCompoundDrawablesCompat
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.presence.PresenceUtils
@@ -88,6 +89,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
             itemView.findViewById(R.id.friends_list_item_call_button)
         private val chatButton: AppCompatImageView =
             itemView.findViewById(R.id.friends_list_item_chat_button)
+        private val avatarChangeDetector = MGImages.DistinctChangeDetector()
 
         override fun onConfigure(position: Int, data: FriendsListViewModel.Item) {
             super.onConfigure(position, data)
@@ -103,7 +105,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
                 activity,
                 showFallbackStatusText = true,
             )
-            IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard)
+            IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard, changeDetector = avatarChangeDetector)
             avatarDecoration.bind(item.user.avatarDecoration)
             callButton.setOnClickListener { adapter.onClickCall(item.user) }
             chatButton.setOnClickListener { adapter.onClickChat(item.user) }
@@ -124,6 +126,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
             itemView.findViewById(R.id.friends_list_item_accept_button)
         private val declineButton: AppCompatImageView =
             itemView.findViewById(R.id.friends_list_item_decline_button)
+        private val avatarChangeDetector = MGImages.DistinctChangeDetector()
 
         override fun onConfigure(position: Int, data: FriendsListViewModel.Item) {
             super.onConfigure(position, data)
@@ -151,7 +154,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
                 },
             )
 
-            IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard)
+            IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard, changeDetector = avatarChangeDetector)
             avatarDecoration.bind(item.user.avatarDecoration)
             acceptButton.setOnClickListener { adapter.onClickAcceptFriend(item.user) }
             declineButton.setOnClickListener {

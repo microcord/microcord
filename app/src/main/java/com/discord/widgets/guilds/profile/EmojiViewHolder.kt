@@ -6,11 +6,13 @@ import com.discord.utilities.images.MGImages
 import com.discord.views.VitoImageView
 
 class EmojiViewHolder(private val image: VitoImageView) : BaseEmojiViewHolder(image) {
+    private val changeDetector = MGImages.DistinctChangeDetector()
+
     override fun bind(data: EmojiItem) {
         val emoji = (data as EmojiItem.EmojiData).emoji
-        MGImages.setImage(image, emoji.imageUrl(image))
+        val size = IconUtils.getMediaProxySize(image.layoutParams.width)
+        MGImages.setImage(image, emoji.imageUrl(size), width = size, height = size, changeDetector = changeDetector)
     }
 
-    private fun Emoji.imageUrl(view: VitoImageView): String =
-        getImageUri(true, IconUtils.getMediaProxySize(view.layoutParams.width), view.context)
+    private fun Emoji.imageUrl(size: Int): String = getImageUri(true, size, image.context)
 }
