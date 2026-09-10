@@ -48,8 +48,10 @@ class WidgetChatListAdapterItemGift(
 
     private val imageBackground: VitoImageView =
         itemView.findViewById(R.id.item_gift_image_background)
+    private val imageBackgroundChangeDetector = MGImages.DistinctChangeDetector()
     private val header: TextView = itemView.findViewById(R.id.item_gift_header)
     private val image: VitoImageView = itemView.findViewById(R.id.item_gift_image)
+    private val imageChangeDetector = MGImages.DistinctChangeDetector()
     private val name: TextView = itemView.findViewById(R.id.item_gift_name)
     private val expires: TextView = itemView.findViewById(R.id.item_gift_expires)
     private val subtext: TextView = itemView.findViewById(R.id.item_gift_subtext)
@@ -202,7 +204,7 @@ class WidgetChatListAdapterItemGift(
         )
         if (splashUrl != null) {
             imageBackground.visibility = View.VISIBLE
-            MGImages.setImage(imageBackground, splashUrl)
+            MGImages.setImage(imageBackground, splashUrl, changeDetector = imageBackgroundChangeDetector)
         } else {
             imageBackground.visibility = View.GONE
         }
@@ -210,7 +212,7 @@ class WidgetChatListAdapterItemGift(
         val iconHash = sku?.application?.icon
         val iconUrl = iconHash?.let { IconUtils.getApplicationIcon(sku.applicationId, it) }
         if (iconUrl != null) {
-            MGImages.setImage(image, iconUrl)
+            MGImages.setImage(image, iconUrl, changeDetector = imageChangeDetector)
         } else {
             image.setActualImageResource(R.drawable.ic_file_unknown)
         }

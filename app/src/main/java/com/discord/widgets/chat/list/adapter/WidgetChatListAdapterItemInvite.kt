@@ -21,6 +21,7 @@ import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.SnowflakeUtils.toSnowflake
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
@@ -51,6 +52,7 @@ class WidgetChatListAdapterItemInvite(
 ) : WidgetChatListAdapterItemInviteBase(R.layout.widget_chat_list_adapter_item_invite, adapter) {
 
     private val splash: VitoImageView = itemView.findViewById(R.id.item_invite_splash)
+    private val splashChangeDetector = MGImages.DistinctChangeDetector()
     private val splashContainer: RoundedRelativeLayout =
         itemView.findViewById(R.id.item_invite_splash_container)
     private val header: TextView = itemView.findViewById(R.id.item_invite_header)
@@ -240,6 +242,7 @@ class WidgetChatListAdapterItemInvite(
         IconUtils.setIcon(
             splash,
             splashHash?.let { IconUtils.getGuildSplashUrl(guild.id, it, displayWidthPx()) },
+            changeDetector = splashChangeDetector,
         )
         splashContainer.visibility = if (splashHash != null) View.VISIBLE else View.GONE
 

@@ -9,6 +9,7 @@ import com.discord.i18n.I18nHooks
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.views.PileView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.views.AvatarDecorationView
@@ -31,6 +32,7 @@ class WidgetChatListAdapterItemPrivateChannelStart(
     private val mutualGuildsText: TextView = itemView.findViewById(R.id.mutual_guilds_text)
     private val channelImage: VitoImageView =
         itemView.findViewById(R.id.private_channel_start_image)
+    private val channelImageChangeDetector = MGImages.DistinctChangeDetector()
     private val channelText: TextView = itemView.findViewById(R.id.private_channel_start_text)
     private val channelImageDecoration: AvatarDecorationView =
         itemView.findViewById(R.id.private_channel_start_image_decoration)
@@ -47,6 +49,7 @@ class WidgetChatListAdapterItemPrivateChannelStart(
             channelImage,
             entry.channelIcon ?: DEFAULT_GROUP_ICON,
             R.dimen.avatar_size_xxlarge,
+            changeDetector = channelImageChangeDetector,
         )
         channelImageDecoration.bind(entry.avatarDecoration)
 

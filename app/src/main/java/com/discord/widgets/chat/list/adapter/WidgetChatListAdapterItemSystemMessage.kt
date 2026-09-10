@@ -20,6 +20,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.analytics.Traits
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.time.TimeUtils
 import com.discord.utilities.uri.UriHandler
@@ -54,6 +55,7 @@ class WidgetChatListAdapterItemSystemMessage(
         itemView.findViewById(R.id.role_subscription_purchase_welcome_card)
     private val roleSubscriptionAvatar: VitoImageView =
         itemView.findViewById(R.id.role_subscription_purchaser_avatar)
+    private val roleSubscriptionAvatarChangeDetector = MGImages.DistinctChangeDetector()
     private val roleSubscriptionUsername: TextView =
         itemView.findViewById(R.id.role_subscription_purchaser_username)
     private val systemIcon: ImageView = itemView.findViewById(R.id.system_icon)
@@ -147,6 +149,7 @@ class WidgetChatListAdapterItemSystemMessage(
             roleSubscriptionAvatar,
             CoreUser(author),
             R.dimen.avatar_size_large,
+            changeDetector = roleSubscriptionAvatarChangeDetector,
             guildMember = entry.author,
         )
         roleSubscriptionAvatar.setOnClickListener {

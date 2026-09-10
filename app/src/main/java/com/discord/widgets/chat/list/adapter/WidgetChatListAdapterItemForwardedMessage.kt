@@ -26,6 +26,7 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MarkupEligibility
@@ -56,6 +57,7 @@ class WidgetChatListAdapterItemForwardedMessage(
     private val mediaViews = ArrayList<InlineMediaView>()
     private val voiceMessageViews = ArrayList<VoiceMessageView>()
     private val audioPlayerViews = ArrayList<AudioAttachmentPlayerView>()
+    private val sourceGuildIconChangeDetector = MGImages.DistinctChangeDetector()
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -404,7 +406,7 @@ class WidgetChatListAdapterItemForwardedMessage(
         }
         binding.forwardedMessageSourceGuildIcon.apply {
             visibility = if (guild == null) View.GONE else View.VISIBLE
-            if (guild == null) setImageURI(null as String?) else IconUtils.setIcon(this, guild, R.dimen.avatar_size_small)
+            if (guild == null) setImageURI(null as String?) else IconUtils.setIcon(this, guild, R.dimen.avatar_size_small, changeDetector = sourceGuildIconChangeDetector)
         }
         binding.forwardedMessageSource.apply {
             text = source?.let { itemView.context.getString(R.string.forwarded_message_source, it, time) }

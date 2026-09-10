@@ -46,6 +46,7 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
     private val header: TextView = itemView.findViewById(R.id.item_listen_together_header)
     private val albumImage: VitoImageView =
         itemView.findViewById(R.id.item_listen_together_album_image)
+    private val albumImageChangeDetector = MGImages.DistinctChangeDetector()
     private val sessionEnded: TextView = itemView.findViewById(R.id.item_listen_together_session_ended)
     private val track: TextView = itemView.findViewById(R.id.item_listen_together_track)
     private val artist: TextView = itemView.findViewById(R.id.item_listen_together_artist)
@@ -99,7 +100,7 @@ class WidgetChatListAdapterItemSpotifyListenTogether(
 
         val assets = listeningActivity?.assets
         assets?.largeImage?.let { largeImage ->
-            MGImages.setImage(albumImage, IconUtils.getAssetImage(null, largeImage))
+            MGImages.setImage(albumImage, IconUtils.getAssetImage(null, largeImage), changeDetector = albumImageChangeDetector)
         }
         albumImage.contentDescription = assets?.largeText
 

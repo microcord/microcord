@@ -17,6 +17,7 @@ import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageTextRenderer
@@ -50,6 +51,7 @@ class WidgetChatListAdapterItemThreadEmbed(
     private val messageHeader: View = itemView.findViewById(R.id.thread_embed_most_recent_message_header)
     private val messageAvatar: VitoImageView =
         itemView.findViewById(R.id.thread_embed_most_recent_message_avatar)
+    private val messageAvatarChangeDetector = MGImages.DistinctChangeDetector()
     private val messageName: TextView = itemView.findViewById(R.id.thread_embed_most_recent_message_name)
     private val messageContent: SimpleDraweeSpanTextView =
         itemView.findViewById(R.id.thread_embed_most_recent_message_content)
@@ -204,6 +206,7 @@ class WidgetChatListAdapterItemThreadEmbed(
             messageAvatar,
             CoreUser(author),
             R.dimen.avatar_size_small,
+            changeDetector = messageAvatarChangeDetector,
             guildMember = authorGuildMember,
         )
     }

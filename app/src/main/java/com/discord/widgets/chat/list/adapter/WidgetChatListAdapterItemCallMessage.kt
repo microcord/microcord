@@ -17,6 +17,7 @@ import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
@@ -259,6 +260,7 @@ class WidgetChatListAdapterItemCallMessage(
 
     private class ParticipantViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val avatar: VitoImageView = itemView.findViewById(R.id.widget_collapsed_user_imageview)
+        private val avatarChangeDetector = MGImages.DistinctChangeDetector()
         private val count: TextView = itemView.findViewById(R.id.widget_collapsed_user_count)
 
         fun bind(item: CollapsedUser) {
@@ -269,7 +271,7 @@ class WidgetChatListAdapterItemCallMessage(
             } else {
                 avatar.visibility = View.VISIBLE
                 count.visibility = View.GONE
-                IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_medium)
+                IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_medium, changeDetector = avatarChangeDetector)
             }
         }
     }
