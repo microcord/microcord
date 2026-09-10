@@ -104,7 +104,7 @@ class WidgetGuildProfileSheetViewModel(
     private fun loadedPreview(preview: GuildPreview, me: MeUser) = ViewState.Loaded(
         guildId = preview.id,
         guildName = preview.name,
-        guildShortName = preview.name.replace(Regex("'s "), " ").replace(Regex("(\\w)(\\w*)"), "$1").replace(Regex("\\s"), ""),
+        guildShortName = Guild.toShortName(preview.name),
         guildIcon = preview.icon,
         guildDescription = preview.description,
         verifiedPartneredIconRes = badge(preview.features),

@@ -98,20 +98,21 @@ class ForumBrowserPostView @JvmOverloads constructor(
         var rendered = content
         post.firstMessage?.mentions.orEmpty().forEach { mention ->
             val member = post.guildMembers[mention.id]
-            rendered = rendered.replace(Regex("<@!?${mention.id}>"), "@${mention.getDisplayName(member?.nick)}")
+            val displayName = "@${mention.getDisplayName(member?.nick)}"
+            rendered = rendered.replace("<@${mention.id}>", displayName).replace("<@!${mention.id}>", displayName)
         }
         post.channelNames.forEach { (id, name) -> rendered = rendered.replace("<#$id>", "#$name") }
         post.guildRoles.forEach { (id, role) -> rendered = rendered.replace("<@&$id>", "@${role.name}") }
-        rendered = rendered.replace(Regex("<a?:([A-Za-z0-9_]+):\\d+>"), ":$1:")
+        rendered = rendered.replace(CUSTOM_EMOJI_PATTERN, ":$1:")
         return DraweeSpanStringBuilder(rendered).also(::applyInlineMarkdown)
     }
 
     private fun applyInlineMarkdown(text: DraweeSpanStringBuilder) {
-        applyMarkup(text, Regex("\\*\\*(.+?)\\*\\*")) { StyleSpan(Typeface.BOLD) }
-        applyMarkup(text, Regex("__(.+?)__")) { StyleSpan(Typeface.BOLD) }
-        applyMarkup(text, Regex("~~(.+?)~~")) { StrikethroughSpan() }
-        applyMarkup(text, Regex("`([^`]+)`")) { TypefaceSpan("monospace") }
-        applyMarkup(text, Regex("(?<!\\*)\\*([^*]+)\\*(?!\\*)")) { StyleSpan(Typeface.ITALIC) }
+        applyMarkup(text, BOLD_PATTERN) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, UNDERLINE_BOLD_PATTERN) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, STRIKETHROUGH_PATTERN) { StrikethroughSpan() }
+        applyMarkup(text, CODE_PATTERN) { TypefaceSpan("monospace") }
+        applyMarkup(text, ITALIC_PATTERN) { StyleSpan(Typeface.ITALIC) }
     }
 
     private fun applyMarkup(text: DraweeSpanStringBuilder, pattern: Regex, span: () -> Any) {
@@ -334,6 +335,14 @@ class ForumBrowserPostView @JvmOverloads constructor(
                 "java|graphml|idb|lua|o|gml|prl|sls|conf|cmake|make|sln|vbe|cxx|wbf|vbs|" +
                 "r|wml|php|bash|applescript|fcgi|yaml|ex|exs|sh|ml|actionscript)",
         )
+
+        // Compiled once instead of per row bind — this view is reused while scrolling.
+        private val CUSTOM_EMOJI_PATTERN = Regex("<a?:([A-Za-z0-9_]+):\\d+>")
+        private val BOLD_PATTERN = Regex("\\*\\*(.+?)\\*\\*")
+        private val UNDERLINE_BOLD_PATTERN = Regex("__(.+?)__")
+        private val STRIKETHROUGH_PATTERN = Regex("~~(.+?)~~")
+        private val CODE_PATTERN = Regex("`([^`]+)`")
+        private val ITALIC_PATTERN = Regex("(?<!\\*)\\*([^*]+)\\*(?!\\*)")
     }
     /** Chips are recycled rather than re-inflated: a row rebinds on every list diff. */
     private fun configureTags(post: PostData) {

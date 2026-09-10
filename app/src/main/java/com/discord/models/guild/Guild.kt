@@ -63,10 +63,14 @@ data class Guild(
     fun hasIcon() = !icon.isNullOrEmpty()
 
     companion object {
+        private val POSSESSIVE_S = Regex("'s ")
+        private val WORD_TAIL = Regex("(\\w)(\\w*)")
+        private val WHITESPACE = Regex("\\s")
+
         /** Initials shown in place of an icon, also used by rows that have no full guild record. */
-        fun toShortName(name: String): String = name.replace(Regex("'s "), " ")
-            .replace(Regex("(\\w)(\\w*)"), "$1")
-            .replace(Regex("\\s"), "")
+        fun toShortName(name: String): String = name.replace(POSSESSIVE_S, " ")
+            .replace(WORD_TAIL, "$1")
+            .replace(WHITESPACE, "")
 
         /**
          * A record built from a payload that is not a guild the user is in.

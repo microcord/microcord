@@ -48,6 +48,9 @@ object TimeUtils {
             SimpleDateFormat(pattern, Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }
         }
 
+    /** Same non-thread-safety rationale as [readableTimeFormatsEN], keyed by (style, locale). */
+    private val dateInstanceFormats = ThreadLocal.withInitial { HashMap<Pair<Int, Locale>, DateFormat>() }
+
 
     private const val MILLIS_PER_SECOND = 1_000L
     private const val MILLIS_PER_MINUTE = 60_000L
@@ -243,9 +246,13 @@ object TimeUtils {
         DateFormatSymbols(localeManager.getPrimaryLocale(context)).months[monthInt - 1]
 
     @JvmOverloads
-    fun renderUtcDate(unixTimeMillis: Long, context: Context, outputDateFormat: Int = DateFormat.MEDIUM): String =
-        DateFormat.getDateInstance(outputDateFormat, localeManager.getPrimaryLocale(context))
-            .format(unixTimeMillis)
+    fun renderUtcDate(unixTimeMillis: Long, context: Context, outputDateFormat: Int = DateFormat.MEDIUM): String {
+        val locale = localeManager.getPrimaryLocale(context)
+        val format = dateInstanceFormats.get().getOrPut(outputDateFormat to locale) {
+            DateFormat.getDateInstance(outputDateFormat, locale)
+        }
+        return format.format(unixTimeMillis)
+    }
 
     @JvmOverloads
     fun renderUtcDate(

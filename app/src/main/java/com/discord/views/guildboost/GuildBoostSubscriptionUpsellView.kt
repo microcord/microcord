@@ -83,8 +83,8 @@ class GuildBoostSubscriptionUpsellView @JvmOverloads constructor(
         val text = SpannableStringBuilder(
             source.replace("$[", "").replace("](originalPriceHook)", "").replace("!!", ""),
         )
-        applyMarkup(text, Regex("\\*\\*(.+?)\\*\\*")) { StyleSpan(Typeface.BOLD) }
-        applyMarkup(text, Regex("~~(.+?)~~")) {
+        applyMarkup(text, BOLD_PATTERN) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, STRIKETHROUGH_PATTERN) {
             arrayOf(StrikethroughSpan(), ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.colorHeaderSecondary)))
         }
         return text
@@ -111,5 +111,8 @@ class GuildBoostSubscriptionUpsellView @JvmOverloads constructor(
         const val BOOST_PRICE_CENTS = 499
         const val FREE_BOOST_COUNT = 2
         const val BOOST_DISCOUNT = 0.3
+
+        private val BOLD_PATTERN = Regex("\\*\\*(.+?)\\*\\*")
+        private val STRIKETHROUGH_PATTERN = Regex("~~(.+?)~~")
     }
 }

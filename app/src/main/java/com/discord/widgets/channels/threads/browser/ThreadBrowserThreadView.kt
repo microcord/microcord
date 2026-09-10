@@ -132,20 +132,20 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
         source.mentions.orEmpty().forEach { mention ->
             val user = CoreUser(mention)
             val displayName = GuildMember.getNickOrUsername(data.guildMembers[user.id], user)
-            rendered = rendered.replace(Regex("<@!?${user.id}>"), "@$displayName")
+            rendered = rendered.replace("<@${user.id}>", "@$displayName").replace("<@!${user.id}>", "@$displayName")
         }
         data.channelNames.forEach { (id, channelName) -> rendered = rendered.replace("<#$id>", "#$channelName") }
         data.guildRoles.forEach { (id, role) -> rendered = rendered.replace("<@&$id>", "@${role.name}") }
-        rendered = rendered.replace(Regex("<a?:([A-Za-z0-9_]+):\\d+>"), ":$1:")
+        rendered = rendered.replace(CUSTOM_EMOJI_PATTERN, ":$1:")
         return DraweeSpanStringBuilder(rendered).also(::applyInlineMarkdown)
     }
 
     private fun applyInlineMarkdown(text: DraweeSpanStringBuilder) {
-        applyMarkup(text, Regex("\\*\\*(.+?)\\*\\*")) { StyleSpan(Typeface.BOLD) }
-        applyMarkup(text, Regex("__(.+?)__")) { StyleSpan(Typeface.BOLD) }
-        applyMarkup(text, Regex("~~(.+?)~~")) { StrikethroughSpan() }
-        applyMarkup(text, Regex("`([^`]+)`")) { TypefaceSpan("monospace") }
-        applyMarkup(text, Regex("(?<!\\*)\\*([^*]+)\\*(?!\\*)")) { StyleSpan(Typeface.ITALIC) }
+        applyMarkup(text, BOLD_PATTERN) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, UNDERLINE_BOLD_PATTERN) { StyleSpan(Typeface.BOLD) }
+        applyMarkup(text, STRIKETHROUGH_PATTERN) { StrikethroughSpan() }
+        applyMarkup(text, CODE_PATTERN) { TypefaceSpan("monospace") }
+        applyMarkup(text, ITALIC_PATTERN) { StyleSpan(Typeface.ITALIC) }
     }
 
     private fun applyMarkup(
@@ -245,6 +245,14 @@ class ThreadBrowserThreadView @JvmOverloads constructor(
         fun snowflakeTimestamp(id: Long) = SnowflakeUtils.toTimestamp(id)
 
         private val TRAILING_SUBMILLI_DIGITS = Regex("(\\.\\d{3})\\d+Z$")
+
+        // Compiled once instead of per row bind — this view is reused while scrolling.
+        private val CUSTOM_EMOJI_PATTERN = Regex("<a?:([A-Za-z0-9_]+):\\d+>")
+        private val BOLD_PATTERN = Regex("\\*\\*(.+?)\\*\\*")
+        private val UNDERLINE_BOLD_PATTERN = Regex("__(.+?)__")
+        private val STRIKETHROUGH_PATTERN = Regex("~~(.+?)~~")
+        private val CODE_PATTERN = Regex("`([^`]+)`")
+        private val ITALIC_PATTERN = Regex("(?<!\\*)\\*([^*]+)\\*(?!\\*)")
 
         // SimpleDateFormat isn't thread-safe; cached per-thread since this is re-parsed on every
         // row bind while the (scrollable) thread browser list is open.

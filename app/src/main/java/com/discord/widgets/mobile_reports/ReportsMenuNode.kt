@@ -230,9 +230,7 @@ class ReportsMenuNode @JvmOverloads constructor(
 
     private fun visible(show: Boolean) = if (show) View.VISIBLE else View.GONE
 
-    private fun String.toShortName(): String = replace(Regex("'s "), " ")
-        .replace(Regex("(\\w)(\\w*)"), "$1")
-        .replace(Regex("\\s"), "")
+    private fun String.toShortName(): String = com.discord.models.guild.Guild.toShortName(this)
 
     private companion object {
         val MARKDOWN_LINK = Regex("\\[([^]]+)]\\(([^)]+)\\)")
