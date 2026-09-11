@@ -2,21 +2,31 @@
 <com.discord.widgets.botuikit.views.v2.SectionComponentView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="0dp"
-    android:layout_marginBottom="2dp"
-    android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="vertical">
 
     <LinearLayout
-        android:id="@+id/components"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <FrameLayout
-        android:id="@+id/accessory"
-        android:layout_width="80dp"
-        android:layout_height="80dp"
-        android:layout_marginStart="16dp" />
+        <LinearLayout
+            android:id="@+id/components"
+            android:divider="@drawable/bot_ui_component_v2_gap_drawable"
+            android:showDividers="middle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical" />
+
+        <FrameLayout
+            android:id="@+id/accessory"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginStart="16dp" />
+    </LinearLayout>
+
+    <include
+        android:id="@+id/error_row"
+        layout="@layout/view_interaction_failed_label" />
 </com.discord.widgets.botuikit.views.v2.SectionComponentView>

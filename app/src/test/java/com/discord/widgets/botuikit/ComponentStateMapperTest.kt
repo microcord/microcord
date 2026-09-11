@@ -121,7 +121,7 @@ class ComponentStateMapperTest {
         val section = container.children[1] as SectionMessageComponent
         assertEquals(listOf(0, 1, 2), listOf(container.index, container.children[0].index, section.index))
         assertEquals(3, section.components.single().index)
-        assertEquals(4, section.accessory?.index)
+        assertEquals(4, section.accessory.index)
         assertTrue(section.accessory is ButtonMessageComponent)
     }
 

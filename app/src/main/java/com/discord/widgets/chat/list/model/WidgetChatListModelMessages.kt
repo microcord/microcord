@@ -396,6 +396,10 @@ data class WidgetChatListModelMessages(
                         channel,
                         guildMembers,
                         guildRoles,
+                        // Acting on a component sends an interaction, so a channel the user cannot
+                        // post in shows the same components inert rather than pretending they work.
+                        // A link button is unaffected: following it sends nothing.
+                        disableInteractions = !PermissionUtils.hasAccessWrite(channel, permissionsForChannel),
                     )
                 } else {
                     emptyList()

@@ -81,7 +81,8 @@ data class SectionComponent(
     override val type: ComponentType,
     override val id: Int?,
     override val components: List<Component>,
-    val accessory: Component,
+    /** Required by the schema, but absent on the wire from applications that omit it. */
+    val accessory: Component?,
 ) : LayoutComponent()
 
 data class TextDisplayComponent(
@@ -109,8 +110,9 @@ data class FileComponent(
     override val id: Int?,
     val file: UnfurledMediaItem,
     val spoiler: Boolean?,
-    val name: String,
-    val size: Long,
+    /** Absent when the proxy has not resolved the upload yet; the row shows a placeholder name. */
+    val name: String?,
+    val size: Long?,
 ) : ContentComponent()
 
 data class SeparatorComponent(
@@ -118,7 +120,13 @@ data class SeparatorComponent(
     override val id: Int?,
     val divider: Boolean?,
     val spacing: Int?,
-) : ContentComponent()
+) : ContentComponent() {
+    companion object {
+        /** `spacing` is optional and defaults to the small step. */
+        const val SPACING_SMALL = 1
+        const val SPACING_LARGE = 2
+    }
+}
 
 data class ContainerComponent(
     override val type: ComponentType,
@@ -193,7 +201,42 @@ data class UnfurledMediaItem(
     val width: Int?,
     val contentType: String?,
     val attachmentId: Long?,
-) : Serializable
+    val loadingState: Int? = null,
+    val placeholder: String? = null,
+    val placeholderVersion: Int? = null,
+    val flags: Int? = null,
+) : Serializable {
+
+    /**
+     * What this item renders as.
+     *
+     * Only the declared content type decides between an image and a video, and only once the
+     * proxy has reported real dimensions — a media item is unfurled asynchronously, so a component
+     * routinely arrives before its size is known. Everything else is a [MediaItemType.PLACEHOLDER]:
+     * still-loading media, media that failed to unfurl, and media of a kind this build cannot
+     * display. Unlike an attachment, which is dropped when it has no usable dimensions, a
+     * placeholder still occupies its cell so the gallery a bot laid out keeps its shape.
+     */
+    val mediaType: MediaItemType
+        get() {
+            if ((width ?: 0) <= 0 || (height ?: 0) <= 0) return MediaItemType.PLACEHOLDER
+            return when {
+                contentType?.startsWith("image/", ignoreCase = true) == true -> MediaItemType.IMAGE
+                contentType?.startsWith("video/", ignoreCase = true) == true -> MediaItemType.VIDEO
+                else -> MediaItemType.PLACEHOLDER
+            }
+        }
+
+    /** Whether the source is an animation the proxy has to be told to keep every frame of. */
+    val isAnimated: Boolean get() = (flags ?: 0) and FLAG_IS_ANIMATED == FLAG_IS_ANIMATED
+
+    companion object {
+        const val FLAG_IS_ANIMATED = 1 shl 0
+    }
+}
+
+/** The three ways a piece of unfurled media can be drawn. */
+enum class MediaItemType { IMAGE, VIDEO, PLACEHOLDER }
 
 class UnknownComponent : Component, Serializable {
     override val type = ComponentType.UNKNOWN

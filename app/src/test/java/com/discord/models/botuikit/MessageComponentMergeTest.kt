@@ -11,6 +11,7 @@ import com.discord.models.commands.ActionComponentStoreState
 import com.discord.stores.StoreApplicationInteractions
 import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -79,13 +80,23 @@ class MessageComponentMergeTest {
         val children = listOf(
             button().mergeToMessageComponent(0, ActionInteractionComponentState.Enabled, ComponentStoreState()),
         )
-        val row = ActionRowComponent(ComponentType.ACTION_ROW, listOf(button()))
-            .mergeToMessageComponent(7, children)
+        val row = requireNotNull(
+            ActionRowComponent(ComponentType.ACTION_ROW, listOf(button()))
+                .mergeToMessageComponent(7, children),
+        )
 
         assertEquals(ComponentType.ACTION_ROW, row.type)
         assertEquals(7, row.index)
         assertEquals(children, row.components)
         assertEquals(children, row.children)
+    }
+
+    @Test
+    fun `action row merge drops a row with nothing left to show`() {
+        assertNull(
+            ActionRowComponent(ComponentType.ACTION_ROW, listOf(button()))
+                .mergeToMessageComponent(7, emptyList()),
+        )
     }
 
     @Test

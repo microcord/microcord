@@ -63,9 +63,9 @@ data class SectionMessageComponent(
     override val index: Int,
     val id: Int?,
     val components: List<MessageComponent>,
-    val accessory: MessageComponent?,
+    val accessory: MessageComponent,
 ) : LayoutMessageComponent() {
-    override val children: List<MessageComponent> get() = components + listOfNotNull(accessory)
+    override val children: List<MessageComponent> get() = components + accessory
 }
 
 data class TextDisplayMessageComponent(
@@ -96,8 +96,8 @@ data class FileMessageComponent(
     override val index: Int,
     val id: Int?,
     val file: UnfurledMediaItem,
-    val name: String,
-    val size: Long,
+    val name: String?,
+    val size: Long?,
     val spoiler: Boolean,
 ) : MessageComponent
 
@@ -126,7 +126,8 @@ data class ContainerMessageComponent(
 fun ActionRowComponent.mergeToMessageComponent(
     index: Int,
     children: List<MessageComponent>,
-): ActionRowMessageComponent = ActionRowMessageComponent(type, index, children)
+): ActionRowMessageComponent? =
+    if (children.isEmpty()) null else ActionRowMessageComponent(type, index, children)
 
 /**
  * Projects an API button onto its renderable form.
@@ -192,16 +193,21 @@ fun SelectComponent.mergeToMessageComponent(
 )
 }
 
+/**
+ * Projects an API section onto its renderable form, or drops it.
+ *
+ * A section is only meaningful as text beside an accessory, so it is dropped outright when either
+ * half is missing — including when the half was lost on the way in, because the application sent
+ * an accessory of a kind this build cannot render.
+ */
 fun SectionComponent.mergeToMessageComponent(
     index: Int,
-    children: List<MessageComponent>,
-): SectionMessageComponent = SectionMessageComponent(
-    type,
-    index,
-    id,
-    children.dropLast(1),
-    children.lastOrNull(),
-)
+    components: List<MessageComponent>,
+    accessory: MessageComponent?,
+): SectionMessageComponent? {
+    if (components.isEmpty() || accessory == null) return null
+    return SectionMessageComponent(type, index, id, components, accessory)
+}
 
 fun TextDisplayComponent.mergeToMessageComponent(index: Int) =
     TextDisplayMessageComponent(type, index, id, content)
@@ -209,14 +215,15 @@ fun TextDisplayComponent.mergeToMessageComponent(index: Int) =
 fun ThumbnailComponent.mergeToMessageComponent(index: Int) =
     ThumbnailMessageComponent(type, index, id, media, description, spoiler == true)
 
+/** A gallery with nothing left to show is dropped rather than left as an empty band. */
 fun MediaGalleryComponent.mergeToMessageComponent(index: Int) =
-    MediaGalleryMessageComponent(type, index, id, items)
+    if (items.isEmpty()) null else MediaGalleryMessageComponent(type, index, id, items)
 
 fun FileComponent.mergeToMessageComponent(index: Int) =
     FileMessageComponent(type, index, id, file, name, size, spoiler == true)
 
 fun SeparatorComponent.mergeToMessageComponent(index: Int) =
-    SeparatorMessageComponent(type, index, divider != false, spacing ?: 1)
+    SeparatorMessageComponent(type, index, divider != false, spacing ?: SeparatorComponent.SPACING_SMALL)
 
 fun ContainerComponent.mergeToMessageComponent(index: Int, children: List<MessageComponent>) =
     ContainerMessageComponent(type, index, id, children, accentColor, spoiler == true)
@@ -228,15 +235,22 @@ fun LayoutMessageComponent.childError(): ActionInteractionComponentState.Failed?
         .filterIsInstance<ActionInteractionComponentState.Failed>()
         .firstOrNull()
 
-fun MessageComponent.disabledForForward(): MessageComponent = when (this) {
+/**
+ * The same component tree with every interactive control inert.
+ *
+ * Used wherever the components are shown but acting on them cannot reach the application: a
+ * forwarded copy of the message, and a channel the viewer has no write access to. A link button
+ * survives because following it sends no interaction.
+ */
+fun MessageComponent.withInteractionsDisabled(): MessageComponent = when (this) {
     is ButtonMessageComponent -> copy(stateInteraction = ActionInteractionComponentState.Disabled)
     is SelectMessageComponent -> copy(stateInteraction = ActionInteractionComponentState.Disabled)
-    is ActionRowMessageComponent -> copy(components = components.map(MessageComponent::disabledForForward))
+    is ActionRowMessageComponent -> copy(components = components.map(MessageComponent::withInteractionsDisabled))
     is SectionMessageComponent -> copy(
-        components = components.map(MessageComponent::disabledForForward),
-        accessory = accessory?.disabledForForward(),
+        components = components.map(MessageComponent::withInteractionsDisabled),
+        accessory = accessory.withInteractionsDisabled(),
     )
-    is ContainerMessageComponent -> copy(children = children.map(MessageComponent::disabledForForward))
+    is ContainerMessageComponent -> copy(children = children.map(MessageComponent::withInteractionsDisabled))
     else -> this
 }
 

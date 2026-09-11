@@ -2,7 +2,9 @@
 <com.discord.widgets.botuikit.views.v2.ThumbnailComponentView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="80dp"
-    android:layout_height="80dp">
+    android:layout_height="80dp"
+    android:background="@drawable/bg_component_v2_media"
+    android:clipToOutline="true">
 
     <com.discord.views.VitoImageView
         android:id="@+id/image"
@@ -29,9 +31,16 @@
         android:id="@+id/media_spoiler"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="?attr/colorBackgroundSecondary"
         android:clickable="true"
         android:focusable="true">
+
+        <!-- Dims the media rather than replacing it, matching how an attachment spoiler covers
+             its preview elsewhere in the app. -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0.8"
+            android:background="?attr/primary_700" />
 
         <TextView
             style="@style/UiKit.TextView.Semibold"

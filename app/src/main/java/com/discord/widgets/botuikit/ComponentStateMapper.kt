@@ -41,11 +41,12 @@ object ComponentStateMapper {
         index: Int,
         children: List<MessageComponent>,
         experimentController: ComponentExperiments,
+        accessory: MessageComponent? = null,
     ): MessageComponent? {
         if (!experimentController.isEnabled(component.type)) return null
         return when (component) {
             is ActionRowComponent -> component.mergeToMessageComponent(index, children)
-            is SectionComponent -> component.mergeToMessageComponent(index, children)
+            is SectionComponent -> component.mergeToMessageComponent(index, children, accessory)
             is TextDisplayComponent -> component.mergeToMessageComponent(index)
             is ThumbnailComponent -> component.mergeToMessageComponent(index)
             is MediaGalleryComponent -> component.mergeToMessageComponent(index)
@@ -74,13 +75,19 @@ object ComponentStateMapper {
                     storeState,
                     componentExperiments,
                 )
+                // A section's accessory is numbered after its text, but is kept apart from it: a
+                // child that maps to nothing must not let the last text block slide into its place.
+                is SectionComponent -> toMessageLayoutComponent(
+                    component,
+                    index,
+                    map(component.components),
+                    componentExperiments,
+                    accessory = component.accessory?.let { map(listOf(it)).firstOrNull() },
+                )
                 is LayoutComponent -> toMessageLayoutComponent(
                     component,
                     index,
-                    map(
-                        if (component is SectionComponent) component.components + component.accessory
-                        else component.components,
-                    ),
+                    map(component.components),
                     componentExperiments,
                 )
                 else -> null

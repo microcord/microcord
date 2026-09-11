@@ -5,7 +5,7 @@ import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.MessageTypes
 import com.discord.api.role.GuildRole
 import com.discord.models.botuikit.MessageComponent
-import com.discord.models.botuikit.disabledForForward
+import com.discord.models.botuikit.withInteractionsDisabled
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
@@ -367,7 +367,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                     applicationId,
                     guildId,
                     if (disableInteractions) {
-                        messageComponents.map(MessageComponent::disabledForForward)
+                        messageComponents.map(MessageComponent::withInteractionsDisabled)
                     } else {
                         messageComponents
                     },

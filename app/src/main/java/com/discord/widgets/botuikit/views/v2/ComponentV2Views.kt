@@ -14,12 +14,12 @@ import android.widget.LinearLayout
 import androidx.core.graphics.ColorUtils
 import com.discord.R
 import com.discord.api.botuikit.ComponentType
+import com.discord.api.botuikit.MediaItemType
+import com.discord.api.botuikit.SeparatorComponent
 import com.discord.api.botuikit.UnfurledMediaItem
 import com.discord.api.message.attachment.MessageAttachment
-import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.databinding.WidgetBotUiContainerComponentBinding
 import com.discord.databinding.WidgetBotUiFileComponentBinding
-import com.discord.databinding.WidgetBotUiMediaGalleryComponentBinding
 import com.discord.databinding.WidgetBotUiSectionComponentBinding
 import com.discord.databinding.WidgetBotUiSeparatorComponentBinding
 import com.discord.databinding.WidgetBotUiTextDisplayComponentBinding
@@ -28,15 +28,16 @@ import com.discord.models.botuikit.ContainerMessageComponent
 import com.discord.models.botuikit.ButtonMessageComponent
 import com.discord.models.botuikit.FileMessageComponent
 import com.discord.models.botuikit.MediaGalleryMessageComponent
-import com.discord.models.botuikit.MessageComponent
 import com.discord.models.botuikit.SectionMessageComponent
 import com.discord.models.botuikit.SeparatorMessageComponent
 import com.discord.models.botuikit.TextDisplayMessageComponent
 import com.discord.models.botuikit.ThumbnailMessageComponent
+import com.discord.models.botuikit.childError
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MediaProxyUrl
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageTextRenderer
 import com.discord.utilities.uri.UriHandler
@@ -44,10 +45,10 @@ import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.botuikit.replaceViews
 import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.ComponentView
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.media.MediaViewerContext
 import com.discord.widgets.media.WidgetMedia
 import com.discord.widgets.media.mediaVideoPreviewUrl
-import kotlin.math.ceil
 
 class TextDisplayComponentView @JvmOverloads constructor(
     context: Context,
@@ -110,36 +111,40 @@ class SectionComponentView @JvmOverloads constructor(
             componentProvider.getConfiguredComponentView(componentActionListener, child, binding.components, index) as? View
         })
         binding.accessory.replaceViews(
-            listOfNotNull(component.accessory?.let {
-                componentProvider.getConfiguredComponentView(componentActionListener, it, binding.accessory, 0) as? View
-            }),
+            listOfNotNull(
+                componentProvider.getConfiguredComponentView(
+                    componentActionListener,
+                    component.accessory,
+                    binding.accessory,
+                    0,
+                ) as? View,
+            ),
         )
-        binding.accessory.visibility = if (component.accessory == null) View.GONE else View.VISIBLE
-        if (component.accessory is ButtonMessageComponent) {
-            orientation = LinearLayout.VERTICAL
-            binding.components.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+        // A thumbnail accessory is a fixed square; a button keeps its own width and sits centred
+        // against the text beside it, which is the only accessory kind that can be narrower.
+        binding.accessory.layoutParams = if (component.accessory is ButtonMessageComponent) {
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             )
-            binding.accessory.layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dpToPixels(4) }
         } else {
-            orientation = LinearLayout.HORIZONTAL
-            binding.components.layoutParams = LinearLayout.LayoutParams(
-                0,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f,
-            )
-            binding.accessory.layoutParams = LinearLayout.LayoutParams(
-                dpToPixels(80),
-                dpToPixels(80),
-            ).apply { marginStart = dpToPixels(16) }
+            LinearLayout.LayoutParams(dpToPixels(ACCESSORY_SIZE_DP), dpToPixels(ACCESSORY_SIZE_DP))
+        }.apply { marginStart = dpToPixels(ACCESSORY_GAP_DP) }
+
+        // A section carries the same failure banner an action row does: its accessory can be a
+        // button, and a failed interaction has to be reported under the row it was started from.
+        val error = component.childError()
+        binding.errorRow.root.visibility = if (error == null) View.GONE else View.VISIBLE
+        if (error != null) {
+            binding.errorRow.viewInteractionFailedLabelMessage.text =
+                error.errorMessage ?: resources.getString(R.string.application_command_failed)
         }
     }
 
     companion object {
+        private const val ACCESSORY_SIZE_DP = 80
+        private const val ACCESSORY_GAP_DP = 16
+
         fun inflate(context: Context, root: ViewGroup) = LayoutInflater.from(context).inflate(
             R.layout.widget_bot_ui_section_component,
             root,
@@ -164,6 +169,13 @@ class ThumbnailComponentView @JvmOverloads constructor(
         configureMedia(component, entry.message.id, entry.messageState, null, entry.toMediaViewerContext())
     }
 
+    /**
+     * Draws one piece of unfurled media, whether it came from a thumbnail or from a cell of a
+     * media gallery.
+     *
+     * [key] separates gallery cells that share the component's spoiler id; a thumbnail, which owns
+     * its id outright, passes null.
+     */
     internal fun configureMedia(
         component: ThumbnailMessageComponent,
         messageId: Long,
@@ -175,12 +187,22 @@ class ThumbnailComponentView @JvmOverloads constructor(
         val id = component.id ?: component.index
         val revealed = if (key == null) state?.visibleSpoilerEmbedMap?.containsKey(id) == true
         else key in state?.visibleSpoilerEmbedMap?.get(id).orEmpty()
+        val mediaType = component.media.mediaType
         val attachment = component.media.toAttachment(id.toLong())
-        val isVideo = attachment.type == MessageAttachmentType.VIDEO
-        binding.image.setImageURI(
-            if (isVideo) mediaVideoPreviewUrl(attachment.proxyUrl, attachment.width, attachment.height)
-            else attachment.proxyUrl,
-        )
+        val isVideo = mediaType == MediaItemType.VIDEO
+        // Media the unfurler has not resolved still holds its cell, so the shape a bot laid out
+        // survives the wait. There is nothing to load into it, so it stays an empty tile.
+        val isPlaceholder = mediaType == MediaItemType.PLACEHOLDER
+        binding.image.visibility = if (isPlaceholder) View.INVISIBLE else View.VISIBLE
+        if (!isPlaceholder) {
+            binding.image.setImageURI(
+                if (isVideo) mediaVideoPreviewUrl(attachment.proxyUrl, attachment.width, attachment.height)
+                // An unfurled item is served by the same proxy an attachment is, so it needs the
+                // same rewrites: AVIF transcoded to something older devices decode, and an animated
+                // WebP asked for explicitly instead of arriving as a single frame.
+                else MediaProxyUrl.forAttachment(attachment, attachment.proxyUrl),
+            )
+        }
         binding.image.contentDescription = if (isVideo) {
             listOfNotNull(context.getString(R.string.play_full_video), component.description).joinToString(". ")
         } else component.description
@@ -188,20 +210,26 @@ class ThumbnailComponentView @JvmOverloads constructor(
         binding.mediaSpoiler.visibility = if (hidden) View.VISIBLE else View.GONE
         binding.play.visibility = if (isVideo && !hidden) View.VISIBLE else View.GONE
         binding.image.importantForAccessibility = if (hidden) View.IMPORTANT_FOR_ACCESSIBILITY_NO else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-        binding.alt.visibility = if (!hidden && !component.description.isNullOrBlank()) View.VISIBLE else View.GONE
+        binding.alt.visibility =
+            if (!hidden && !isPlaceholder && !component.description.isNullOrBlank()) View.VISIBLE else View.GONE
         binding.mediaSpoiler.setOnClickListener {
             hidden = false
             binding.mediaSpoiler.visibility = View.GONE
             binding.play.visibility = if (isVideo) View.VISIBLE else View.GONE
             binding.image.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-            binding.alt.visibility = if (component.description.isNullOrBlank()) View.GONE else View.VISIBLE
+            binding.alt.visibility =
+                if (isPlaceholder || component.description.isNullOrBlank()) View.GONE else View.VISIBLE
             if (key == null) StoreStream.getMessageState().revealSpoilerEmbed(messageId, id)
             else StoreStream.getMessageState().revealSpoilerEmbedData(messageId, id, key)
         }
         val openMedia = View.OnClickListener {
-            if (hidden) binding.mediaSpoiler.performClick()
-            else if (viewerContext == null) WidgetMedia.launch(context, attachment)
-            else WidgetMedia.launch(context, attachment, viewerContext)
+            when {
+                hidden -> binding.mediaSpoiler.performClick()
+                // Nothing to open yet: the tile is holding a place for media that has not resolved.
+                isPlaceholder -> Unit
+                viewerContext == null -> WidgetMedia.launch(context, attachment)
+                else -> WidgetMedia.launch(context, attachment, viewerContext)
+            }
         }
         binding.image.setOnClickListener(openMedia)
         setOnClickListener(openMedia)
@@ -223,7 +251,7 @@ class MediaGalleryComponentView @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr), ComponentView<MediaGalleryMessageComponent> {
     override fun type() = ComponentType.MEDIA_GALLERY
     private var boundComponent: MediaGalleryMessageComponent? = null
-    private var boundEntry: com.discord.widgets.chat.list.entries.BotUiComponentEntry? = null
+    private var boundEntry: BotUiComponentEntry? = null
     private var laidOutWidth = 0
 
     override fun configure(
@@ -257,36 +285,29 @@ class MediaGalleryComponentView @JvmOverloads constructor(
         val entry = boundEntry ?: return
         if (availableWidth <= 0) return
         laidOutWidth = availableWidth
-        val contentWidth = (availableWidth - dpToPixels(8)).coerceAtLeast(dpToPixels(120))
-        val binding = WidgetBotUiMediaGalleryComponentBinding.bind(this)
-        val gap = dpToPixels(4)
-        val count = component.items.size
-        val totalHeight = when (count) {
-            0 -> 0
-            1 -> {
-                val media = component.items[0].media
-                val ratio = if ((media.width ?: 0) > 0 && (media.height ?: 0) > 0) {
-                    media.height!!.toFloat() / media.width!!
-                } else {
-                    0.6f
-                }
-                (contentWidth * ratio).toInt().coerceIn(dpToPixels(80), dpToPixels(300))
-            }
-            2 -> (contentWidth - gap) / 2
-            3 -> contentWidth * 2 / 3
-            4 -> contentWidth
-            else -> {
-                val cell = (contentWidth - gap * 2) / 3
-                ceil(count / 3f).toInt() * cell + (ceil(count / 3f).toInt() - 1) * gap
-            }
-        }
+        // A lone item keeps its own size, so its pixel dimensions are read as density-independent
+        // ones: an image smaller than the row renders small rather than being blown up to fill it.
+        val single = component.items.singleOrNull()?.media
+        val grid = MediaGalleryLayout.layout(
+            count = component.items.size,
+            width = availableWidth,
+            gap = dpToPixels(MediaGalleryLayout.GAP_DP),
+            singleMaxHeight = dpToPixels(MediaGalleryLayout.SINGLE_MAX_HEIGHT_DP),
+            sourceWidth = dpToPixels(single?.width ?: 0),
+            sourceHeight = dpToPixels(single?.height ?: 0),
+        )
         layoutParams = layoutParams.apply {
             width = availableWidth
-            height = totalHeight
+            height = grid.height
         }
-        val views = component.items.mapIndexed { index, item ->
-            val view = (getChildAt(index) as? ThumbnailComponentView) ?: ThumbnailComponentView.inflate(context, binding.root)
-            view.layoutParams = galleryLayoutParams(index, count, contentWidth, totalHeight, gap)
+        val views = grid.cells.mapIndexed { index, cell ->
+            val item = component.items[index]
+            val view = (getChildAt(index) as? ThumbnailComponentView)
+                ?: ThumbnailComponentView.inflate(context, this)
+            view.layoutParams = FrameLayout.LayoutParams(cell.width, cell.height).apply {
+                leftMargin = cell.left
+                topMargin = cell.top
+            }
             view.configureMedia(
                 ThumbnailMessageComponent(
                     ComponentType.THUMBNAIL,
@@ -298,49 +319,12 @@ class MediaGalleryComponentView @JvmOverloads constructor(
                 ),
                 entry.message.id,
                 entry.messageState,
-                "gallery:$index",
+                "$GALLERY_KEY_PREFIX$index",
                 entry.toMediaViewerContext(),
             )
             view
         }
         replaceViews(views)
-    }
-
-    private fun galleryLayoutParams(
-        index: Int,
-        count: Int,
-        width: Int,
-        height: Int,
-        gap: Int,
-    ): FrameLayout.LayoutParams {
-        if (count == 1) return FrameLayout.LayoutParams(width, height)
-        if (count == 2) {
-            val cell = (width - gap) / 2
-            return FrameLayout.LayoutParams(cell, height).apply {
-                if (index == 1) leftMargin = cell + gap
-            }
-        }
-        if (count == 3) {
-            val rightWidth = (width - gap) / 3
-            val leftWidth = width - gap - rightWidth
-            val rightHeight = (height - gap) / 2
-            return if (index == 0) {
-                FrameLayout.LayoutParams(leftWidth, height)
-            } else {
-                FrameLayout.LayoutParams(rightWidth, rightHeight).apply {
-                    leftMargin = leftWidth + gap
-                    if (index == 2) topMargin = rightHeight + gap
-                }
-            }
-        }
-        val columns = if (count == 4) 2 else 3
-        val cell = (width - gap * (columns - 1)) / columns
-        val row = index / columns
-        val column = index % columns
-        return FrameLayout.LayoutParams(cell, cell).apply {
-            leftMargin = column * (cell + gap)
-            topMargin = row * (cell + gap)
-        }
     }
 
     companion object {
@@ -369,14 +353,16 @@ class FileComponentView @JvmOverloads constructor(
         val id = component.id ?: component.index
         val revealed = entry.messageState?.visibleSpoilerEmbedMap?.containsKey(id) == true
         val hidden = component.spoiler && !revealed
-        binding.name.text = if (hidden) context.getString(R.string.spoiler) else component.name
-        binding.size.text = Formatter.formatShortFileSize(context, component.size)
-        binding.size.visibility = if (hidden) View.GONE else View.VISIBLE
+        // Both are absent until the upload behind the component resolves.
+        val name = component.name ?: context.getString(R.string.attachment_filename_unknown)
+        binding.name.text = if (hidden) context.getString(R.string.spoiler) else name
+        binding.size.text = Formatter.formatShortFileSize(context, component.size ?: 0L)
+        binding.size.visibility = if (hidden || component.size == null) View.GONE else View.VISIBLE
         binding.download.visibility = if (hidden) View.GONE else View.VISIBLE
         setOnClickListener {
             if (hidden) {
-                binding.name.text = component.name
-                binding.size.visibility = View.VISIBLE
+                binding.name.text = name
+                binding.size.visibility = if (component.size == null) View.GONE else View.VISIBLE
                 binding.download.visibility = View.VISIBLE
                 StoreStream.getMessageState().revealSpoilerEmbed(entry.message.id, id)
                 setOnClickListener { UriHandler.handleOrUntrusted(context, component.file.url) }
@@ -408,12 +394,19 @@ class SeparatorComponentView @JvmOverloads constructor(
         componentActionListener: ComponentActionListener,
     ) {
         val binding = WidgetBotUiSeparatorComponentBinding.bind(this)
-        val vertical = dpToPixels(if (component.spacing == 2) 12 else 6)
+        // `spacing` names the total gap the separator introduces. Stacked components already sit
+        // one small step apart, so only the difference is added here — and a separator with no
+        // divider becomes exactly that much blank space, which is what `divider: false` is for.
+        val gap = if (component.spacing == SeparatorComponent.SPACING_LARGE) LARGE_GAP_DP else SMALL_GAP_DP
+        val vertical = dpToPixels(gap - SMALL_GAP_DP) / 2
         setPadding(0, vertical, 0, vertical)
         binding.divider.visibility = if (component.divider) View.VISIBLE else View.GONE
     }
 
     companion object {
+        private const val SMALL_GAP_DP = 8
+        private const val LARGE_GAP_DP = 16
+
         fun inflate(context: Context, root: ViewGroup) = LayoutInflater.from(context).inflate(
             R.layout.widget_bot_ui_separator_component,
             root,
@@ -461,6 +454,10 @@ class ContainerComponentView @JvmOverloads constructor(
 
 private const val SPOILER_KEY_PREFIX = "comp:"
 
+/** Distinguishes the cells of one gallery, which all share the gallery component's spoiler id. */
+private const val GALLERY_KEY_PREFIX = "gallery:"
+
+/** Adapts an unfurled media item to the attachment the media viewer and image loader speak. */
 private fun UnfurledMediaItem.toAttachment(id: Long): MessageAttachment {
     return MessageAttachment(
         url = url,
@@ -470,11 +467,14 @@ private fun UnfurledMediaItem.toAttachment(id: Long): MessageAttachment {
         filename = Uri.parse(url).lastPathSegment.orEmpty().ifBlank { "media" },
         width = width,
         height = height,
+        // The two flag sets do not share bit positions, so the one flag that survives the trip is
+        // translated rather than copied.
+        flags = if (isAnimated) MessageAttachment.FLAG_IS_ANIMATED else null,
         contentType = contentType,
     )
 }
 
-private fun com.discord.widgets.chat.list.entries.BotUiComponentEntry.toMediaViewerContext() =
+private fun BotUiComponentEntry.toMediaViewerContext() =
     MediaViewerContext(
         authorName = message.author?.globalName ?: message.author?.username,
         avatarUrl = IconUtils.getForUser(

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The gap between stacked components, whether they sit at the top level of a message, inside a
+     container, or beside a section's accessory. Spacing lives on the host that stacks them, so one
+     component layout works in all three places and a separator can reason about a known base gap. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <size android:width="0dp" android:height="8dp" />
+    <solid android:color="@color/transparent" />
+</shape>
