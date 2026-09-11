@@ -9,6 +9,7 @@ import android.graphics.Rect
 import android.os.Build
 import android.view.Display
 import android.view.View
+import android.view.Window
 import android.view.WindowManager
 import androidx.core.view.OnApplyWindowInsetsListener
 
@@ -72,6 +73,29 @@ fun getScreenSize(context: Context): Rect = Rect(
 
 /** Refresh rate of the display this context is showing on, in Hz. */
 fun getScreenRefreshRate(context: Context): Float = context.getDisplayCompat().refreshRate
+
+/** An app-window preference; Android still applies user, power and thermal limits. */
+@Suppress("DEPRECATION")
+fun Window.setMaximumRefreshRate(enabled: Boolean) {
+    attributes = attributes.apply {
+        if (!enabled) {
+            preferredRefreshRate = 0f
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) preferredDisplayModeId = 0
+        } else {
+            val display = context.getDisplayCompat()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val current = display.mode
+                val fastest = display.supportedModes
+                    .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+                    .maxByOrNull { it.refreshRate } ?: current
+                preferredDisplayModeId = fastest.modeId
+                preferredRefreshRate = fastest.refreshRate
+            } else {
+                preferredRefreshRate = display.supportedRefreshRates.maxOrNull() ?: display.refreshRate
+            }
+        }
+    }
+}
 
 /** Height of the system status bar in pixels, or `0` when the platform does not declare one. */
 fun getStatusBarHeight(resources: Resources): Int =

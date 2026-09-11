@@ -44,6 +44,8 @@ import com.discord.utilities.intent.AppIntentContract
 import com.discord.utilities.intent.AppIntentParser
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.utilities.developer.DeveloperSettings
+import com.discord.utilities.display.setMaximumRefreshRate
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notifications.NotificationRenderer
@@ -281,6 +283,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
     override fun onResume() {
         super.onResume()
         if (fatalCrashShown) return
+        window.setMaximumRefreshRate(FeatureFlags.maximumRefreshRateEnabled())
         updateDeveloperShortcut()
         // An intent tagged as a settings restart must not immediately restart again.
         if (mostRecentIntent.getBooleanExtra(AppScreenRouter.EXTRA_RECREATE, false)) {

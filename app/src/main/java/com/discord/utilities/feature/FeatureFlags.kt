@@ -43,6 +43,8 @@ object FeatureFlags {
     fun setSilentTypingEnabled(enabled: Boolean) = setEnabled(ClientSettings.silentTyping, enabled)
     fun smoothKeyboardEnabled() = enabled(ClientSettings.smoothKeyboard)
     fun setSmoothKeyboardEnabled(enabled: Boolean) = setEnabled(ClientSettings.smoothKeyboard, enabled)
+    fun maximumRefreshRateEnabled() = enabled(ClientSettings.maximumRefreshRate)
+    fun setMaximumRefreshRateEnabled(enabled: Boolean) = setEnabled(ClientSettings.maximumRefreshRate, enabled)
     fun cloudSettingsBackupEnabled() = enabled(ClientSettings.cloudSettingsBackup)
     fun setCloudSettingsBackupEnabled(enabled: Boolean) = setEnabled(ClientSettings.cloudSettingsBackup, enabled)
 

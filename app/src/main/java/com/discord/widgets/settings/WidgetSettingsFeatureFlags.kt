@@ -12,6 +12,7 @@ import com.discord.app.AppToast
 import com.discord.app.ClientSettingsRestoreActivity
 import com.discord.databinding.WidgetSettingsFeatureFlagsBinding
 import com.discord.stores.StoreStream
+import com.discord.utilities.display.setMaximumRefreshRate
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.feature.ManticordSettingsBackup
 import com.discord.utilities.feature.ManticordSettingsBackupCodec
@@ -108,6 +109,13 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         binding.settingsFeatureSmoothKeyboard.apply {
             isChecked = FeatureFlags.smoothKeyboardEnabled()
             setOnCheckedListener(FeatureFlags::setSmoothKeyboardEnabled)
+        }
+        binding.settingsFeatureMaximumRefreshRate.apply {
+            isChecked = FeatureFlags.maximumRefreshRateEnabled()
+            setOnCheckedListener { enabled ->
+                FeatureFlags.setMaximumRefreshRateEnabled(enabled)
+                requireActivity().window.setMaximumRefreshRate(enabled)
+            }
         }
         binding.settingsFeatureChatboxCustomizations.apply {
             isChecked = FeatureFlags.chatboxCustomizationsEnabled()
