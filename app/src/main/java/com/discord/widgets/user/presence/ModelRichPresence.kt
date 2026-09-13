@@ -1,6 +1,7 @@
 package com.discord.widgets.user.presence
 
 import com.discord.api.activity.Activity
+import com.discord.api.activity.ActivityType
 import com.discord.api.application.Application
 import com.discord.models.presence.Presence
 import com.discord.stores.StoreStream
@@ -36,6 +37,16 @@ data class ModelRichPresence(
             return application.icon?.takeIf(String::isNotBlank)?.let { IconUtils.getApplicationIcon(application.id, it) }
         }
 
+    /** Artwork for the game shown on the profile, also used by compact voice-member rows. */
+    val playingIconUrl: String?
+        get() {
+            val activity = primaryActivity?.takeIf { it.type == ActivityType.PLAYING } ?: return null
+            val assets = activity.assets
+            return listOf(assets?.largeImage, assets?.smallImage).firstNotNullOfOrNull { hash ->
+                hash?.takeIf(String::isNotBlank)?.let { IconUtils.getAssetImage(activity.applicationId, it) }
+            } ?: applicationIconFallback
+        }
+
     companion object {
 
         /**
@@ -43,6 +54,7 @@ data class ModelRichPresence(
          * activity changes application. Emits `null` while the user has no presence at all.
          *
          * @param observeApplication resolves metadata through the shared application cache/fetcher.
+         * @param activityType restricts selection before resolving metadata, e.g. games in voice rows.
          */
         @JvmStatic
         @JvmOverloads
@@ -50,8 +62,13 @@ data class ModelRichPresence(
             userId: Long,
             storeUserPresence: StoreUserPresence = StoreStream.getPresences(),
             observeApplication: (Long) -> Observable<Application?> = { StoreStream.getApplication().observeApplication(it) },
+            activityType: ActivityType? = null,
         ): Observable<ModelRichPresence?> =
             storeUserPresence.observePresenceForUser(userId)
+                .map { presence ->
+                    if (activityType == null) presence
+                    else presence?.copy(activities = presence.activities?.filter { it.type == activityType })
+                }
                 .switchMap { presence ->
                     if (presence == null) return@switchMap Observable.just(null)
                     val applicationId = with(PresenceUtils) { presence.primaryActivity }?.applicationId

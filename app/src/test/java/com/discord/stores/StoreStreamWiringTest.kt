@@ -73,6 +73,58 @@ class StoreStreamWiringTest {
     }
 
     @Test
+    fun voiceGameSelectionIgnoresSpotifyAndResolvesTheGamesApplication() {
+        stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
+        val game = requireNotNull(com.discord.utilities.presence.createPlayingActivity("Game", 1L))
+            .copy(applicationId = 54321L)
+        val spotify = game.copy(name = "Spotify", type = ActivityType.LISTENING, applicationId = 999L,
+            assets = com.discord.api.activity.ActivityAssets("spotify:album", null, null, null))
+        fun publish(activities: List<com.discord.api.activity.Activity>) = stream.dispatcher.schedule {
+            StoreStream.getPresences().handlePresenceUpdate(
+                0L, 8L, com.discord.api.presence.ClientStatus.ONLINE, null, activities,
+            )
+        }
+        publish(listOf(spotify, game))
+        val requested = mutableListOf<Long>()
+        val application = gson.fromJson("""{"id":"54321","name":"Game","icon":"game-icon"}""",
+            com.discord.api.application.Application::class.java)
+        val metadata = rx.subjects.BehaviorSubject.create(null as com.discord.api.application.Application?)
+        val observed = mutableListOf<com.discord.widgets.user.presence.ModelRichPresence?>()
+        val subscription = com.discord.widgets.user.presence.ModelRichPresence.get(
+            8L,
+            observeApplication = { id -> requested += id; metadata },
+            activityType = ActivityType.PLAYING,
+        ).subscribe { observed += it }
+        try {
+            assertEquals(listOf(54321L), requested)
+            assertEquals("Game", observed.last()?.primaryActivity?.name)
+            assertEquals(null, observed.last()?.playingIconUrl)
+            metadata.onNext(application)
+            assertEquals("https://cdn.discordapp.com/app-icons/54321/game-icon.png?size=160",
+                observed.last()?.playingIconUrl)
+
+            publish(listOf(game.copy(assets = com.discord.api.activity.ActivityAssets("game-art", null, null, null)), spotify))
+            assertEquals(com.discord.utilities.icon.IconUtils.getAssetImage(54321L, "game-art"),
+                observed.last()?.playingIconUrl)
+            // Default profile selection still uses the normal priority order, which puts Spotify first.
+            val normal = com.discord.widgets.user.presence.ModelRichPresence(
+                StoreStream.getPresences().getPresences().getValue(8L),
+            )
+            assertEquals(ActivityType.LISTENING, normal.primaryActivity?.type)
+            assertTrue(requested.all { it == 54321L })
+
+            publish(listOf(spotify))
+            assertEquals(null, observed.last()?.primaryActivity)
+            assertEquals(null, observed.last()?.playingIconUrl)
+            assertFalse(metadata.hasObservers())
+            metadata.onNext(application.copy(icon = "late-icon"))
+            assertEquals(null, observed.last()?.playingIconUrl)
+        } finally {
+            subscription.unsubscribe()
+        }
+    }
+
+    @Test
     fun supplementalPrivateChannelsRestoreAndIncrementMentionBadges() {
         fun privateChannel(id: Long, type: Int) = gson.fromJson("""{"id":$id,"type":$type}""", Channel::class.java)
         val initialDm = privateChannel(20, Channel.DM)

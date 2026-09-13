@@ -34,12 +34,88 @@ import org.junit.BeforeClass
 import org.junit.Test
 import rx.Observable
 import rx.schedulers.TestScheduler
+import rx.subjects.BehaviorSubject
 
 /**
  * Covers the row-building rules that are easy to break and impossible to see without a device:
  * ordering, the collapse/mute hide rules, and the thread spine.
  */
 class WidgetChannelListModelTest {
+
+    @Test
+    fun `voice members load in batches before rows exist and stay subscribed until released`() {
+        val template = voiceUser(channel(10, Channel.GUILD_VOICE))
+        val initial = (1L..205L).associateWith { template.voiceState.copy(userId = it) }
+        val states = BehaviorSubject.create(initial)
+        val ready = BehaviorSubject.create(false)
+        val requests = mutableListOf<List<Long>>()
+        val changes = mutableListOf<Pair<Set<Long>, Set<Long>>>()
+        val observed = mutableListOf<Map<Long, VoiceState>>()
+        val subscription = WidgetChannelListModel.VoiceStates.observeWithMembers(
+            states, ready,
+            updateSubscriptions = { added, removed -> changes += added to removed },
+            requestMembers = { requests += it; true },
+        ).subscribe { observed += it }
+
+        assertEquals(initial, observed.last())
+        assertEquals(initial.keys to emptySet<Long>(), changes.single())
+        assertTrue(requests.isEmpty())
+        ready.onNext(true)
+        assertEquals(listOf(100, 100, 5), requests.map { it.size })
+        assertEquals(initial.keys, requests.flatten().toSet())
+
+        // Muting or another cache publication must not re-request every voice participant.
+        states.onNext(initial.mapValues { (_, state) -> state.copy(selfMute = true) })
+        assertEquals(3, requests.size)
+        assertEquals(1, changes.size)
+        val joined = initial + (206L to template.voiceState.copy(userId = 206L))
+        states.onNext(joined)
+        assertEquals(listOf(206L), requests.last())
+        assertEquals(setOf(206L) to emptySet<Long>(), changes.last())
+        states.onNext(joined - 1L)
+        assertEquals(emptySet<Long>() to setOf(1L), changes.last())
+
+        requests.clear()
+        ready.onNext(false)
+        assertTrue(requests.isEmpty())
+        ready.onNext(true)
+        assertEquals(listOf(100, 100, 5), requests.map { it.size })
+        assertEquals(joined.keys - 1L, requests.flatten().toSet())
+        subscription.unsubscribe()
+        assertEquals(emptySet<Long>() to (joined.keys - 1L), changes.last())
+        val count = requests.size
+        states.onNext(initial)
+        assertEquals(count, requests.size)
+    }
+
+    @Test
+    fun `rejected voice member requests retry and hydrated users produce rows`() {
+        val member = voiceUser(channel(10, Channel.GUILD_VOICE))
+        val states = BehaviorSubject.create(mapOf(1L to member.voiceState))
+        var accepted = false
+        var attempts = 0
+        var observed = emptyMap<Long, VoiceState>()
+        val subscription = WidgetChannelListModel.VoiceStates.observeWithMembers(
+            states, Observable.just(true),
+            updateSubscriptions = { _, _ -> },
+            requestMembers = { attempts++; accepted },
+        ).subscribe { observed = it }
+        assertEquals(1, attempts)
+        accepted = true
+        states.onNext(states.value)
+        assertEquals(2, attempts)
+        states.onNext(states.value)
+        assertEquals(2, attempts)
+        val channels = mapOf(10L to member.channel)
+        val permissions = mapOf(10L to (Permission.VIEW_CHANNEL or Permission.CONNECT))
+        assertTrue(WidgetChannelListModel.VoiceStates.createVoiceStates(
+            observed, emptyMap(), emptyMap(), channels, emptySet(), permissions,
+        ).isEmpty())
+        assertEquals(listOf(member), WidgetChannelListModel.VoiceStates.createVoiceStates(
+            observed, mapOf(1L to member.user), mapOf(1L to member.computed), channels, emptySet(), permissions,
+        )[10L])
+        subscription.unsubscribe()
+    }
 
     @Test
     fun `cached thread connectors still match their singleton cases`() {

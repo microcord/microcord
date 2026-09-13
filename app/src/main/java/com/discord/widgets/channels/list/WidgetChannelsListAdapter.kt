@@ -27,6 +27,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.activity.ActivityType
+import com.discord.databinding.WidgetChannelsListItemVoiceUserBinding
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
 import com.discord.api.channel.getDisplayName
@@ -58,6 +60,8 @@ import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.view.extensions.setBackgroundAndKeepPadding
@@ -92,11 +96,13 @@ import com.discord.widgets.channels.list.items.ChannelListItemThread
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceChannel
 import com.discord.widgets.channels.list.items.ChannelListItemVoiceUser
 import com.discord.widgets.channels.list.items.ChannelListVocalItem
+import com.discord.widgets.user.presence.ModelRichPresence
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
 import com.discord.views.VitoImageView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textview.MaterialTextView
 import com.discord.utilities.user.UserUtils.getDisplayName
+import rx.Subscription
 
 /**
  * The channels sidebar adapter: one view holder per [ChannelListItem] type.
@@ -889,24 +895,25 @@ class WidgetChannelsListAdapter(
         adapter: WidgetChannelsListAdapter,
     ) : Item(layoutResId, adapter) {
 
-        private val root = itemView as RelativeLayout
-        private val avatar: VitoImageView =
-            itemView.findViewById(R.id.channels_item_voice_user_avatar)
-        private val camera: ImageView = itemView.findViewById(R.id.channels_item_voice_user_camera)
-        private val headphones: ImageView =
-            itemView.findViewById(R.id.channels_item_voice_user_headphones)
-        private val live: TextView = itemView.findViewById(R.id.channels_item_voice_user_live)
-        private val microphone: ImageView =
-            itemView.findViewById(R.id.channels_item_voice_user_microphone)
-        private val name: TextView = itemView.findViewById(R.id.channels_item_voice_user_name)
+        private val binding = WidgetChannelsListItemVoiceUserBinding.bind(itemView)
         private val avatarChangeDetector = MGImages.DistinctChangeDetector()
+        private val activityChangeDetector = MGImages.DistinctChangeDetector()
         private var boundItem: ChannelListItemVoiceUser? = null
+        private var presenceSubscription: Subscription? = null
+        override val subscription: Subscription? get() = presenceSubscription
 
         init {
-            root.setOnLongClickListenerConsumeClick {
+            binding.root.setOnLongClickListenerConsumeClick {
                 boundItem?.let { adapter.onSelectUserOptions(it.user, it.channel) }
             }
-            root.setOnClickListener { boundItem?.let { adapter.onCallChannel(it.channel) } }
+            binding.root.setOnClickListener { boundItem?.let { adapter.onCallChannel(it.channel) } }
+            itemView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(view: View) = observeActivity()
+                override fun onViewDetachedFromWindow(view: View) {
+                    presenceSubscription?.let { adapter.cellSubscriptions.remove(it) }
+                    presenceSubscription = null
+                }
+            })
         }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
@@ -915,31 +922,61 @@ class WidgetChannelsListAdapter(
             boundItem = item
 
             IconUtils.setIcon(
-                imageView = avatar,
+                imageView = binding.channelsItemVoiceUserAvatar,
                 user = item.user,
                 sizeDimenRes = R.dimen.avatar_size_small,
                 guildMember = item.computed,
                 changeDetector = avatarChangeDetector,
             )
 
-            name.text = GuildMember.getNickOrUsername(item.computed, item.user)
+            binding.channelsItemVoiceUserName.text = GuildMember.getNickOrUsername(item.computed, item.user)
             DisplayNameStyleRenderer.apply(
-                name,
+                binding.channelsItemVoiceUserName,
                 DisplayNameStyleUtils.resolve(item.user, item.computed),
                 DisplayNameStyleRenderer.Mode.FONT,
             )
-            camera.visibility = if (item.voiceState.selfVideo) View.VISIBLE else View.GONE
-            microphone.visibility =
+            binding.channelsItemVoiceUserCamera.visibility = if (item.voiceState.selfVideo) View.VISIBLE else View.GONE
+            binding.channelsItemVoiceUserMicrophone.visibility =
                 if (item.voiceState.isMutedByAnySource()) View.VISIBLE else View.GONE
-            headphones.visibility =
+            binding.channelsItemVoiceUserHeadphones.visibility =
                 if (item.voiceState.selfDeaf || item.voiceState.deaf) View.VISIBLE else View.GONE
             // "LIVE" needs both a stream and the permission to watch it.
-            live.visibility =
+            binding.channelsItemVoiceUserLive.visibility =
                 if (item.isApplicationStreaming && item.hasChannelConnectPermission) {
                     View.VISIBLE
                 } else {
                     View.GONE
                 }
+
+            bindActivityIcon(null)
+            if (itemView.isAttachedToWindow) observeActivity()
+        }
+
+        private fun observeActivity() {
+            presenceSubscription?.let { adapter.cellSubscriptions.remove(it) }
+            val userId = boundItem?.user?.id ?: return
+            ModelRichPresence.get(userId, activityType = ActivityType.PLAYING)
+                .map { model -> model?.playingIconUrl?.let { it to model.primaryActivity?.name } }
+                .distinctUntilChanged()
+                .ui()
+                .appSubscribe(
+                    errorClass = ItemVoiceUser::class.java,
+                    subscriptionHandler = {
+                        presenceSubscription = it
+                        adapter.cellSubscriptions.add(it)
+                    },
+                ) { icon -> bindActivityIcon(icon?.first, icon?.second) }
+        }
+
+        private fun bindActivityIcon(url: String?, gameName: String? = null) {
+            MGImages.setImage(
+                binding.channelsItemVoiceUserActivity,
+                url,
+                useSmallCache = true,
+                changeDetector = activityChangeDetector,
+            )
+            binding.channelsItemVoiceUserActivity.contentDescription = gameName
+            binding.channelsItemVoiceUserActivity.visibility = if (url.isNullOrBlank()) View.GONE else View.VISIBLE
         }
     }
 

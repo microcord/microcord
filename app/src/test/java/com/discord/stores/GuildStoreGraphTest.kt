@@ -348,6 +348,28 @@ class GuildStoreGraphTest {
         assertEquals(setOf(20L), payloads.single().subscriptions.members)
     }
 
+    @Test fun bulkMemberSubscriptionsFlushOnceAndPreserveAnotherScreensReference() {
+        val payloads = mutableListOf<GuildSubscriptionPayload>()
+        val subscriptions = StoreGuildSubscriptions(
+            deck, dispatcher, onSubscription = payloads::add, unsubscribeDelayScheduler = scheduler,
+        )
+        register(subscriptions)
+        subscriptions.subscribeUser(1, 20)
+        scheduler.triggerActions()
+        payloads.clear()
+
+        subscriptions.updateUsers(1, setOf(20L, 21L, 22L), emptySet())
+        assertTrue(payloads.isEmpty())
+        scheduler.triggerActions()
+        assertEquals(setOf(20L, 21L, 22L), payloads.single().subscriptions.members)
+        payloads.clear()
+        subscriptions.updateUsers(1, emptySet(), setOf(20L, 21L, 22L))
+        scheduler.triggerActions()
+        assertTrue(payloads.isEmpty())
+        scheduler.advanceTimeBy(20, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(setOf(20L), payloads.single().subscriptions.members)
+    }
+
     // endregion
 
     // region StoreGuildSelected

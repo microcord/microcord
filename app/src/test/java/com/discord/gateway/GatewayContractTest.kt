@@ -13,6 +13,7 @@ import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelGuildMemberListUpdate
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.gateway.io.Identify
+import com.discord.gateway.io.GuildMembersRequest
 import com.discord.gateway.io.IdentifyClientState
 import com.discord.gateway.io.IncomingParser
 import com.discord.gateway.io.Outgoing
@@ -79,6 +80,20 @@ class GatewayContractTest {
         assertFalse(identify["client_state"].asJsonObject.has("useruser_guild_settings_version"))
         val nullableState = gson.toJsonTree(Identify("token", true, 351, emptyMap(), null)).asJsonObject
         assertTrue(nullableState["client_state"].isJsonNull)
+    }
+
+    @Test
+    fun bulkMemberRequestIncludesPresencesAndExplicitUserIds() {
+        val request = gson.toJsonTree(Outgoing(8, GuildMembersRequest(
+            listOf(10L), userIds = listOf(20L, 21L), limit = null,
+        ))).asJsonObject
+        assertEquals(8, request["op"].asInt)
+        val payload = request["d"].asJsonObject
+        assertEquals(listOf(10L), payload["guild_id"].asJsonArray.map { it.asLong })
+        assertEquals(listOf(20L, 21L), payload["user_ids"].asJsonArray.map { it.asLong })
+        assertTrue(payload["presences"].asBoolean)
+        assertTrue(payload["query"].isJsonNull)
+        assertTrue(payload["limit"].isJsonNull)
     }
 
     @Test

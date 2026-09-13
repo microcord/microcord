@@ -191,6 +191,17 @@ class StoreGuildSubscriptions(
 
     fun unsubscribeUser(guildId: Long, userId: Long) = schedule { handleUnsubscribeMember(guildId, userId) }
 
+    /** Applies a visible group in one dispatch, producing one batched member subscription. */
+    fun updateUsers(guildId: Long, added: Set<Long>, removed: Set<Long>) {
+        if (guildId <= 0L || (added.isEmpty() && removed.isEmpty())) return
+        val subscribe = added.filter { it > 0L }
+        val unsubscribe = removed.filter { it > 0L }
+        schedule {
+            subscribe.forEach { handleSubscribeMember(guildId, it) }
+            unsubscribe.forEach { handleUnsubscribeMember(guildId, it) }
+        }
+    }
+
     @StoreThread
     fun handleSubscribeMember(guildId: Long, userId: Long) {
         if (guildId <= 0L) return

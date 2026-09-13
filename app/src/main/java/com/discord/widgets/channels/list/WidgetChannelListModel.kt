@@ -280,12 +280,27 @@ data class WidgetChannelListModel(
          */
         @JvmStatic
         fun get(guildId: Long): Observable<Map<Long, List<ChannelListItemVoiceUser>>> {
+            val gateway = StoreStream.getGatewayConnection()
+            val subscriptions = StoreStream.getGuildSubscriptions()
+            val voiceStates = Observable.combineLatest(
+                StoreStream.getVoiceStates().observe(guildId)
+                    .leadingEdgeThrottle(VOICE_STATE_THROTTLE_MS, TimeUnit.MILLISECONDS),
+                StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
+            ) { states, permissions ->
+                states.filterValues { state ->
+                    state.channelId != null && PermissionUtils.can(Permission.VIEW_CHANNEL, permissions[state.channelId])
+                }
+            }
             // `StoreStream` publishes the voice *state* stores directly; `VoiceStoreAccess` only
             // carries the three RTC-transport stores it does not construct.
             return Observable.combineLatest(
                 StoreStream.getApplicationStreaming().observeStreamsForGuild(guildId),
-                StoreStream.getVoiceStates().observe(guildId)
-                    .leadingEdgeThrottle(VOICE_STATE_THROTTLE_MS, TimeUnit.MILLISECONDS),
+                observeWithMembers(
+                    voiceStates,
+                    gateway.getConnectionReady(),
+                    updateSubscriptions = { added, removed -> subscriptions.updateUsers(guildId, added, removed) },
+                    requestMembers = { ids -> gateway.requestGuildMembers(guildId, userIds = ids, limit = null) },
+                ),
                 StoreStream.getUsers().observeAllUsers(),
                 StoreStream.getGuilds().observeComputed(guildId),
                 StoreStream.getChannels().observeChannelsForGuild(guildId),
@@ -300,6 +315,45 @@ data class WidgetChannelListModel(
                     guildPermissions = guildPermissions,
                 )
             }.computationLatest().distinctUntilChanged()
+        }
+
+        /** Loads members before row filtering, and keeps their presences live for this sidebar. */
+        internal fun observeWithMembers(
+            voiceStates: Observable<Map<Long, VoiceState>>,
+            connectionReady: Observable<Boolean>,
+            updateSubscriptions: (added: Set<Long>, removed: Set<Long>) -> Unit,
+            requestMembers: (List<Long>) -> Boolean,
+        ): Observable<Map<Long, VoiceState>> = Observable.defer {
+            val lock = Any()
+            var subscribed = emptySet<Long>()
+            val requested = mutableSetOf<Long>()
+            var disposed = false
+            Observable.combineLatest(voiceStates, connectionReady.distinctUntilChanged()) { states, ready ->
+                states to ready
+            }.doOnNext { (states, ready) ->
+                // Unsubscribe may race a store emission on the computation thread.
+                synchronized(lock) {
+                    if (!disposed) {
+                        val ids = states.values.filter { it.channelId != null && it.userId > 0L }
+                            .mapTo(linkedSetOf()) { it.userId }
+                        val added = ids - subscribed
+                        val removed = subscribed - ids
+                        if (added.isNotEmpty() || removed.isNotEmpty()) updateSubscriptions(added, removed)
+                        subscribed = ids
+                        requested.retainAll(ids)
+                        if (!ready) requested.clear()
+                        else (ids - requested).chunked(100).forEach { batch ->
+                            if (requestMembers(batch)) requested.addAll(batch)
+                        }
+                    }
+                }
+            }.map { it.first }.doOnUnsubscribe {
+                synchronized(lock) {
+                    disposed = true
+                    if (subscribed.isNotEmpty()) updateSubscriptions(emptySet(), subscribed)
+                    subscribed = emptySet()
+                }
+            }
         }
 
         private const val VOICE_STATE_THROTTLE_MS = 200L
