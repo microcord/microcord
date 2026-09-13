@@ -66,11 +66,15 @@ rather than silently becoming a legacy feed.
 
 The Worker calls only the fixed repository's GitHub compare API using
 `from...manifest.commitSha?per_page=100&page=1`, never the mutable `target_commitish` or a
-previous release. Commit titles are exposed only for `status: ahead` with both `base_commit.sha`
-and `merge_base_commit.sha` equal to the installed SHA. Identical SHAs skip comparison entirely
-and return an empty list/zero total. Legacy releases still expose notes without fabricated SHAs.
+previous release. Commit titles are exposed for `status: ahead` or `diverged`, with
+`base_commit.sha` equal to the installed SHA and a valid common-ancestor SHA. Ahead comparisons
+require that ancestor to equal the installed SHA; diverged comparisons require a distinct ancestor.
+This supports rebases: the list contains commits reachable from the target but not the installed
+build. Patch-equivalent rebased commits may appear again because their SHAs changed; this is not
+patch-level deduplication. Identical SHAs skip comparison entirely and return an empty list/zero
+total. Legacy releases still expose notes without fabricated SHAs.
 
-Unknown/404 bases, behind/diverged history, malformed comparisons, throttling, server errors,
+Unknown/404 bases, behind history, malformed comparisons, throttling, server errors,
 timeouts and redirects yield `unavailable`, an empty list, null total and `commitsTruncated: false`.
 They do not block notes, `latest.json` or APK downloads. Compare responses have a 10-second timeout
 and a streamed 4 MiB limit before parsing; diff/file data is discarded. No compare redirect is
@@ -78,7 +82,7 @@ followed. Responses remain within the app's 128 KiB limit, trimming the commit l
 `commitsTruncated` if JSON escaping expands the bounded strings past that limit.
 
 Only sanitized comparison results are cached for 10 minutes, keyed by the full installed and
-immutable target SHAs on the request's own origin (internal cache schema `v1`); unavailable
+immutable target SHAs on the request's own origin (internal cache schema `v2`); unavailable
 results use 60 seconds. Release notes remain in the separate 60-second metadata cache so owner
 edits refresh independently. No KV, database or new dependency is used.
 

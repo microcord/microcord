@@ -390,7 +390,7 @@ test("changes compare the exact installed SHA to the validated published SHA and
   assert.equal(calls[2].options.headers.Authorization, `Bearer ${env.GITHUB_TOKEN}`);
   assert.equal(calls[2].options.headers.Accept, "application/vnd.github+json");
   assert.equal(calls[2].options.headers.Cookie, undefined);
-  const comparisonCache = cached.get(`${origin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`);
+  const comparisonCache = cached.get(`${origin}/_compare-cache/v2/${fromSha}/${manifest.commitSha}`);
   assert.equal(comparisonCache.headers.get("Cache-Control"), "public, max-age=600");
   const { commits, comparison, totalCommits, commitsTruncated } = expected;
   assert.deepEqual(await comparisonCache.clone().json(), { commits, comparison, totalCommits, commitsTruncated });
@@ -401,7 +401,7 @@ test("changes compare the exact installed SHA to the validated published SHA and
   assert.equal(await head.text(), "");
   assert.equal(calls.length, 3);
   assert.equal((await worker.fetch(new Request(`${origin}${changesPath}`), {})).status, 503);
-  assert.equal((await request(`/_compare-cache/v1/${fromSha}/${manifest.commitSha}`)).status, 404);
+  assert.equal((await request(`/_compare-cache/v2/${fromSha}/${manifest.commitSha}`)).status, 404);
   // Notes/compare failures cannot change the original feed or version-pinned APK path.
   responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)));
   const feed = await (await request()).json();
@@ -433,7 +433,7 @@ test("comparison cache separates both SHAs and origins but reuses immutable pair
   const otherOrigin = "https://other-updates.example.com";
   responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(ahead()));
   assert.equal((await worker.fetch(new Request(`${otherOrigin}${changesPath}`), env)).status, 200);
-  assert.ok(cached.has(`${otherOrigin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`));
+  assert.ok(cached.has(`${otherOrigin}/_compare-cache/v2/${fromSha}/${manifest.commitSha}`));
   assert.equal(calls.length, 12);
 
   // Metadata expiry refreshes owner-edited notes without refetching an immutable comparison.
@@ -503,11 +503,34 @@ test("titles use only the first line, normalize SHAs, and cap at 200 UTF-16 unit
   for (const entry of cached.values()) assert.doesNotMatch(await entry.clone().text(), /DO NOT EXPOSE/);
 });
 
-test("behind, diverged and malformed comparisons are unavailable with a short sanitized negative cache", async () => {
+test("rebased histories return target-only commits and bypass the old negative cache", async () => {
+  cached.set(`${origin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`, Response.json({
+    commits: [], comparison: "unavailable", totalCommits: null, commitsTruncated: false,
+  }));
+  const diverged = { ...ahead(), status: "diverged", merge_base_commit: { sha: "e".repeat(40) }, behind_by: 2 };
+  responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)), Response.json(diverged));
+  const changes = await (await request(changesPath)).json();
+  assert.equal(changes.comparison, "compared");
+  assert.equal(changes.totalCommits, 2);
+  assert.equal(changes.commitsTruncated, false);
+  assert.deepEqual(changes.commits, [
+    { sha: "d".repeat(40), title: "First title" },
+    { sha: manifest.commitSha, title: "Second title" },
+  ]);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(await (await request(changesPath)).json(), changes);
+  assert.equal(calls.length, 3);
+});
+
+test("behind and malformed comparisons are unavailable with a short sanitized negative cache", async () => {
   const invalid = [
     null, [], {},
     ...[
       { status: "behind" }, { status: "diverged" }, { status: "identical" }, { status: "unknown" },
+      { status: "diverged", merge_base_commit: { sha: manifest.commitSha } },
+      { status: "diverged", merge_base_commit: { sha: "0".repeat(40) } },
+      { status: "diverged", merge_base_commit: null },
+      { status: "diverged", merge_base_commit: { sha: "e".repeat(40) }, base_commit: { sha: manifest.commitSha } },
       { base_commit: { sha: manifest.commitSha } }, { merge_base_commit: { sha: manifest.commitSha } },
       { base_commit: null }, { merge_base_commit: { sha: `${fromSha}\n` } },
       ...[-1, 0, 1.5, "2", null, Number.MAX_SAFE_INTEGER + 1, 3].map(total_commits => ({ total_commits })),
@@ -530,7 +553,7 @@ test("behind, diverged and malformed comparisons are unavailable with a short sa
     assert.equal(changes.totalCommits, null);
     assert.equal(changes.commitsTruncated, false);
     assert.deepEqual(changes.commits, []);
-    const entry = cached.get(`${origin}/_compare-cache/v1/${fromSha}/${manifest.commitSha}`);
+    const entry = cached.get(`${origin}/_compare-cache/v2/${fromSha}/${manifest.commitSha}`);
     assert.equal(entry.headers.get("Cache-Control"), "public, max-age=60");
     assert.deepEqual(await entry.clone().json(), { commits: [], comparison: "unavailable", totalCommits: null, commitsTruncated: false });
     assert.equal((await request(changesPath)).status, 200);

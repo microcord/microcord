@@ -147,7 +147,7 @@ async function compareCommits(fromSha, toSha, token, origin) {
   let result = { commits: [], comparison: "unavailable", totalCommits: null, commitsTruncated: false };
   if (!toSha) return result;
   if (fromSha === toSha) return { ...result, comparison: "identical", totalCommits: 0 };
-  const cacheKey = new Request(`${origin}/_compare-cache/v1/${fromSha}/${toSha}`);
+  const cacheKey = new Request(`${origin}/_compare-cache/v2/${fromSha}/${toSha}`);
   try {
     const cached = await caches.default.match(cacheKey);
     if (cached) return await cached.json();
@@ -179,9 +179,11 @@ async function compareCommits(fromSha, toSha, token, origin) {
       reader.releaseLock();
     }
     const comparison = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, size)));
-    if (!comparison || comparison.status !== "ahead" ||
+    if (!comparison || !["ahead", "diverged"].includes(comparison.status) ||
         !isSha(comparison.base_commit?.sha) || comparison.base_commit.sha.toLowerCase() !== fromSha ||
-        !isSha(comparison.merge_base_commit?.sha) || comparison.merge_base_commit.sha.toLowerCase() !== fromSha ||
+        !isSha(comparison.merge_base_commit?.sha) || /^0{40}$/.test(comparison.merge_base_commit.sha) ||
+        (comparison.status === "ahead" && comparison.merge_base_commit.sha.toLowerCase() !== fromSha) ||
+        (comparison.status === "diverged" && [fromSha, toSha].includes(comparison.merge_base_commit.sha.toLowerCase())) ||
         !Number.isSafeInteger(comparison.total_commits) || comparison.total_commits <= 0 ||
         !Array.isArray(comparison.commits) || comparison.commits.length !== Math.min(comparison.total_commits, 100)) {
       throw new Error("Invalid comparison");
