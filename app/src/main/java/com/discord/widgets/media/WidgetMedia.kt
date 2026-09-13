@@ -100,7 +100,9 @@ import rx.Subscription
  */
 class WidgetMedia : AppFragment(R.layout.widget_media) {
 
-    private val viewModel: WidgetMediaViewModel by appViewModels { WidgetMediaViewModel() }
+    private val viewModel: WidgetMediaViewModel by appViewModels {
+        WidgetMediaViewModel(launchExtras.getLong(INTENT_INITIAL_POSITION_MS, 0L))
+    }
 
     private var binding: WidgetMediaBinding? = null
     private val bound get() = requireNotNull(binding)
@@ -199,7 +201,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         val extras = launchExtras
         gallery = galleryExtra(extras)
-        galleryIndex = extras.getInt(INTENT_GALLERY_INDEX, 0).coerceIn(0, (gallery.size - 1).coerceAtLeast(0))
+        galleryIndex = gallery.indexOfFirst { it.args.playbackKey == viewModel.currentMediaUri }
+            .takeIf { it >= 0 } ?: extras.getInt(INTENT_GALLERY_INDEX, 0).coerceIn(0, (gallery.size - 1).coerceAtLeast(0))
         val item = gallery.getOrNull(galleryIndex)
         if (item != null) {
             bound.mediaGallery.visibility = View.VISIBLE
@@ -214,19 +217,19 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     }
 
     private fun bindMedia(args: MediaLaunchArgs, viewerContext: MediaViewerContext?, galleryPage: Boolean = false) {
-        if (galleryPage && viewModel.currentMediaUri != args.uri) {
-            viewModel.currentMediaUri = args.uri
-            viewModel.isPlaying = true
-            viewModel.showCoverFrame = true
-            viewModel.currentPlayerPositionMs = 0L
+        player?.let {
+            viewModel.currentPlayerPositionMs = it.currentPosition.coerceAtLeast(0L)
+            playerPausedByFragmentLifecycle = true
+            it.release()
         }
-        player?.release()
         player = null
+        viewModel.selectMedia(args.playbackKey)
+        val showPreview = args.showPreviewAt(viewModel.currentPlayerPositionMs)
         stopPositionPolling()
         bound.mediaPlayerView.player = null
-        bound.mediaLoadingIndicator.visibility = if (galleryPage) View.GONE else View.VISIBLE
+        bound.mediaLoadingIndicator.visibility = if (galleryPage && showPreview) View.GONE else View.VISIBLE
         if (!galleryPage) {
-            bound.mediaImage.visibility = View.VISIBLE
+            bound.mediaImage.visibility = if (showPreview) View.VISIBLE else View.GONE
             MGImages.cancelImageRequests(bound.mediaImage)
             bound.mediaImage.getZoomableController().run {
                 setScale(getMinimumScale(), bound.mediaImage.width / 2f, bound.mediaImage.height / 2f, false)
@@ -266,10 +269,12 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         bound.mediaVolume.setOnClickListener { toggleMute(bound.mediaVolume) }
         bound.mediaBottomChrome.visibility = if (isVideo()) View.VISIBLE else View.GONE
 
-        if (!galleryPage) configureMediaImage()
+        if (!galleryPage && showPreview) configureMediaImage()
         val isVideo = mediaSource != null
         bound.mediaPlayerView.visibility = if (isVideo) View.VISIBLE else View.GONE
-        bound.mediaPlayerView.alpha = if (galleryPage && isVideo) 0f else 1f
+        // A poster from time zero would look like a seek flash during an inline handoff.
+        // Keep PlayerView's black shutter opaque until onRenderedFirstFrame at the seek position.
+        bound.mediaPlayerView.alpha = if (galleryPage && isVideo && showPreview) 0f else 1f
         showControls()
 
         playerPausedByFragmentLifecycle = false
@@ -280,6 +285,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         super.onPause()
         stopPositionPolling()
         val exoPlayer = player ?: return
+        viewModel.currentPlayerPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
         if (exoPlayer.playWhenReady) {
             // Flagged so the resulting pause callback is not mistaken for the user's own.
             playerPausedByFragmentLifecycle = true
@@ -430,10 +436,10 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         exoPlayer.repeatMode = if (loopMedia) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         exoPlayer.volume = if (loopMedia) 0f else 1f
         updateVolumeButton(bound.mediaVolume)
-        exoPlayer.setMediaItem(MediaItem.fromUri(source.progressiveMediaUri))
+        val playWhenReady = viewModel.isPlaying
+        exoPlayer.setMediaItem(MediaItem.fromUri(source.progressiveMediaUri), viewModel.currentPlayerPositionMs)
         exoPlayer.prepare()
-        exoPlayer.playWhenReady = viewModel.isPlaying
-        if (viewModel.currentPlayerPositionMs > 0L) exoPlayer.seekTo(viewModel.currentPlayerPositionMs)
+        exoPlayer.playWhenReady = playWhenReady
     }
 
     private fun attachPlayerListener(exoPlayer: ExoPlayer) {
@@ -751,7 +757,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
     private fun stopGalleryPlaybackForSwipe() {
         stopPositionPolling()
-        player?.release()
+        player?.let {
+            viewModel.currentPlayerPositionMs = it.currentPosition.coerceAtLeast(0L)
+            playerPausedByFragmentLifecycle = true
+            it.release()
+        }
         player = null
         bound.mediaPlayerView.player = null
         bound.mediaPlayerControlView.player = null
@@ -828,6 +838,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         private const val INTENT_WIDTH = "INTENT_MEDIA_WIDTH"
         private const val INTENT_HEIGHT = "INTENT_MEDIA_HEIGHT"
         private const val INTENT_MEDIA_SOURCE = "INTENT_MEDIA_SOURCE"
+        private const val INTENT_INITIAL_POSITION_MS = "INTENT_INITIAL_POSITION_MS"
         private const val INTENT_VIEWER_CONTEXT = "INTENT_VIEWER_CONTEXT"
         private const val INTENT_GALLERY = "INTENT_GALLERY"
         private const val INTENT_GALLERY_INDEX = "INTENT_GALLERY_INDEX"
@@ -854,7 +865,9 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         /** Opens [attachment] fullscreen. Only images and videos belong here. */
         @JvmStatic
-        fun launch(context: Context, attachment: MessageAttachment) = launch(context, launchArgs(attachment), null)
+        @JvmOverloads
+        fun launch(context: Context, attachment: MessageAttachment, initialPositionMs: Long = 0L) =
+            launch(context, launchArgs(attachment), null, initialPositionMs)
 
         @JvmStatic
         fun launch(context: Context, attachment: MessageAttachment, viewerContext: MediaViewerContext) =
@@ -866,7 +879,9 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         /** Opens [embed]'s media fullscreen. */
         @JvmStatic
-        fun launch(context: Context, embed: MessageEmbed) = launch(context, launchArgs(embed), null)
+        @JvmOverloads
+        fun launch(context: Context, embed: MessageEmbed, initialPositionMs: Long = 0L) =
+            launch(context, launchArgs(embed), null, initialPositionMs)
 
         /** Opens ordered embed images as stills, sharing the embed's source page. */
         @JvmStatic
@@ -882,20 +897,21 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             attachments: List<MessageAttachment>,
             selectedIndex: Int,
             viewerContexts: List<MediaViewerContext?> = emptyList(),
+            initialPositionMs: Long = 0L,
         ) {
             val items = attachments.mapIndexed { index, attachment ->
                 MediaGalleryItem(launchArgs(attachment), viewerContexts.getOrNull(index))
             }
-            launchGalleryItems(context, items, selectedIndex)
+            launchGalleryItems(context, items, selectedIndex, initialPositionMs)
         }
 
-        private fun launchGalleryItems(context: Context, items: List<MediaGalleryItem>, selectedIndex: Int) {
+        private fun launchGalleryItems(context: Context, items: List<MediaGalleryItem>, selectedIndex: Int, initialPositionMs: Long = 0L) {
             val selected = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
             items.getOrNull(selected)?.let { item ->
                 presentScreen(
                     context,
                     WidgetMedia::class.java,
-                    intentFor(item.args)
+                    intentFor(item.args, initialPositionMs)
                         .putExtra(INTENT_VIEWER_CONTEXT, item.viewerContext)
                         .putExtra(INTENT_GALLERY, ArrayList(items))
                         .putExtra(INTENT_GALLERY_INDEX, selected),
@@ -904,7 +920,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         }
 
         /** Builds the launch intent. Its extras are the screen's whole argument contract. */
-        private fun intentFor(args: MediaLaunchArgs): Intent {
+        private fun intentFor(args: MediaLaunchArgs, initialPositionMs: Long = 0L): Intent {
             // Playback needs both a stream and a kind; without either this is a still image.
             val mediaSource = if (args.progressiveMediaUri != null && args.mediaType != null) {
                 MediaSource.create(args.mediaType, args.progressiveMediaUri, FEATURE_TAG)
@@ -920,13 +936,14 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 .putExtra(INTENT_WIDTH, args.width)
                 .putExtra(INTENT_HEIGHT, args.height)
                 .putExtra(INTENT_MEDIA_SOURCE, mediaSource)
+                .putExtra(INTENT_INITIAL_POSITION_MS, if (mediaSource == null) 0L else initialPositionMs.coerceAtLeast(0L))
         }
 
-        private fun launch(context: Context, args: MediaLaunchArgs, viewerContext: MediaViewerContext?) =
+        private fun launch(context: Context, args: MediaLaunchArgs, viewerContext: MediaViewerContext?, initialPositionMs: Long = 0L) =
             presentScreen(
                 context,
                 WidgetMedia::class.java,
-                intentFor(args).putExtra(INTENT_VIEWER_CONTEXT, viewerContext),
+                intentFor(args, initialPositionMs).putExtra(INTENT_VIEWER_CONTEXT, viewerContext),
             )
     }
 }
@@ -965,6 +982,11 @@ internal data class MediaLaunchArgs(
     val height: Int?,
     val mediaType: MediaType?,
 ) : Serializable
+
+private val MediaLaunchArgs.playbackKey: String? get() = progressiveMediaUri ?: uri ?: previewImageUri
+
+internal fun MediaLaunchArgs.showPreviewAt(positionMs: Long): Boolean =
+    progressiveMediaUri == null || mediaType == null || positionMs <= 0L
 
 internal fun launchArgs(imageUrl: String, title: String?): MediaLaunchArgs {
     val source = profileImageUrl(imageUrl)

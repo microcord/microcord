@@ -242,7 +242,9 @@ class WidgetChatListAdapterItemEmbed(
         }
         // An inline embed is nothing but its media, so tapping it opens the fullscreen viewer —
         // unlike the carded embed's picture below, which follows the embed's own link.
-        binding.embedInlineMedia.setOnClickListener { view -> WidgetMedia.launch(view.context, embed) }
+        binding.embedInlineMedia.setOnClickListener { view ->
+            WidgetMedia.launch(view.context, embed, binding.embedInlineMedia.currentPositionMs)
+        }
     }
 
     private fun configureGifFavorite(embed: MessageEmbed, button: ImageView) {

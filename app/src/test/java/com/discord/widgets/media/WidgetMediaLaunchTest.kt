@@ -9,7 +9,9 @@ import com.discord.api.message.embed.MessageEmbed
 import com.discord.player.MediaType
 import com.discord.utilities.icon.IconUtils
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -19,6 +21,40 @@ import org.junit.Test
  * silently opens nothing at all.
  */
 class WidgetMediaLaunchTest {
+
+    @Test
+    fun `resuming video omits the opening poster but fresh video and stills keep it`() {
+        val video = launchArgs(attachment("https://example.com/clip.mp4"))
+        assertFalse(video.showPreviewAt(42_345L))
+        assertTrue(video.showPreviewAt(0L))
+        assertTrue(video.showPreviewAt(-1L))
+        assertTrue(launchArgs(attachment("https://example.com/image.png")).showPreviewAt(42_345L))
+        assertTrue(video.copy(progressiveMediaUri = null).showPreviewAt(42_345L))
+    }
+
+    @Test
+    fun `inline position applies once and never leaks to another gallery video`() {
+        val state = WidgetMediaViewModel(42_345L)
+        state.selectMedia("https://example.com/first.mp4")
+        assertEquals(42_345L, state.currentPlayerPositionMs)
+        assertTrue(state.isPlaying)
+
+        state.currentPlayerPositionMs = 58_901L
+        state.isPlaying = false
+        state.showCoverFrame = false
+        state.selectMedia("https://example.com/first.mp4")
+        assertEquals(58_901L, state.currentPlayerPositionMs)
+        assertFalse(state.isPlaying)
+        assertFalse(state.showCoverFrame)
+
+        state.selectMedia("https://example.com/second.mp4")
+        assertEquals(0L, state.currentPlayerPositionMs)
+        assertTrue(state.isPlaying)
+        state.selectMedia("https://example.com/first.mp4")
+        assertEquals(0L, state.currentPlayerPositionMs)
+        assertEquals(0L, WidgetMediaViewModel(-1L).currentPlayerPositionMs)
+        assertEquals(0L, WidgetMediaViewModel().currentPlayerPositionMs)
+    }
 
     @Test
     fun `profile image opens as the original fullscreen still`() {

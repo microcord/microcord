@@ -4,9 +4,6 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewStub
-import android.widget.ImageView
-import android.widget.ProgressBar
 import androidx.cardview.widget.CardView
 import com.discord.R
 import com.discord.api.message.attachment.MessageAttachment
@@ -14,6 +11,7 @@ import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.app.AppComponent
+import com.discord.databinding.InlineMediaViewBinding
 import com.discord.embed.RenderableEmbedMedia
 import com.discord.player.AppMediaPlayer
 import com.discord.player.MediaSource
@@ -22,7 +20,6 @@ import com.discord.utilities.embed.EmbedResourceUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
-import com.discord.views.VitoImageView
 import com.google.android.exoplayer2.PlaybackException
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ui.PlayerView
@@ -57,13 +54,8 @@ class InlineMediaView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
 ) : CardView(context, attrs, defStyleAttr), View.OnAttachStateChangeListener, AppComponent {
-    private val playerStub: ViewStub
+    private val binding = InlineMediaViewBinding.inflate(LayoutInflater.from(context), this)
     private var playerView: PlayerView? = null
-    private val imagePreview: VitoImageView
-    private val gifIndicator: ImageView
-    private val playButton: ImageView
-    private val loadingIndicator: ProgressBar
-    private val volumeToggle: ImageView
     override val unsubscribeSignal: Subject<Void, Void> = PublishSubject.create()
     private var appMediaPlayer: AppMediaPlayer? = null
     private var subscriptions = CompositeSubscription()
@@ -71,15 +63,12 @@ class InlineMediaView @JvmOverloads constructor(
     private var viewParams: ViewParams? = null
 
     init {
-        LayoutInflater.from(context).inflate(R.layout.inline_media_view, this, true)
-        playerStub = requireNotNull(findViewById(R.id.inline_media_player_stub))
-        imagePreview = requireNotNull(findViewById(R.id.inline_media_image_preview))
-        gifIndicator = requireNotNull(findViewById(R.id.inline_media_gif_indicator))
-        playButton = requireNotNull(findViewById(R.id.inline_media_play_button))
-        loadingIndicator = requireNotNull(findViewById(R.id.inline_media_loading_indicator))
-        volumeToggle = requireNotNull(findViewById(R.id.inline_media_volume_toggle))
         addOnAttachStateChangeListener(this)
     }
+
+    /** Read at the tap, before the fullscreen activity pauses/releases this surface. */
+    val currentPositionMs: Long
+        get() = playerView?.player?.currentPosition?.coerceAtLeast(0L) ?: 0L
 
     @JvmOverloads
     fun updateUIWithAttachment(
@@ -171,7 +160,7 @@ class InlineMediaView @JvmOverloads constructor(
                 }
                 params.previewImage?.url?.let { url ->
                     MGImages.setImage(
-                        imagePreview,
+                        binding.inlineMediaImagePreview,
                         EmbedResourceUtils.getPreviewUrls(url, width, height, shouldAutoPlay(params)),
                     )
                 }
@@ -189,14 +178,14 @@ class InlineMediaView @JvmOverloads constructor(
             player.play(mediaSource, getPlayerView(), autoPlayWhenReady = shouldAutoPlay(params), loopMedia = true)
             player.setVolume(0f)
         }
-        playButton.setOnClickListener {
+        binding.inlineMediaPlayButton.setOnClickListener {
             val player = createPlayer(params)
             val view = getPlayerView()
             view.visibility = View.VISIBLE
             player.setVolume(1f)
             player.play(mediaSource, view)
-            playButton.visibility = View.GONE
-            loadingIndicator.visibility = View.VISIBLE
+            binding.inlineMediaPlayButton.visibility = View.GONE
+            binding.inlineMediaLoadingIndicator.visibility = View.VISIBLE
         }
     }
 
@@ -219,19 +208,19 @@ class InlineMediaView @JvmOverloads constructor(
         }
     }
 
-    private fun getPlayerView(): PlayerView = playerView ?: (playerStub.inflate() as PlayerView).also {
+    private fun getPlayerView(): PlayerView = playerView ?: (binding.inlineMediaPlayerStub.inflate() as PlayerView).also {
         playerView = it
     }
 
     private fun handlePlayerEvent(event: AppMediaPlayer.Event, params: ViewParams) {
         when (event) {
             AppMediaPlayer.Event.Ready -> {
-                imagePreview.visibility = if (shouldAutoPlay(params)) View.GONE else View.VISIBLE
-                loadingIndicator.visibility = View.GONE
+                binding.inlineMediaImagePreview.visibility = if (shouldAutoPlay(params)) View.GONE else View.VISIBLE
+                binding.inlineMediaLoadingIndicator.visibility = View.GONE
             }
-            AppMediaPlayer.Event.Buffering -> loadingIndicator.visibility = View.VISIBLE
+            AppMediaPlayer.Event.Buffering -> binding.inlineMediaLoadingIndicator.visibility = View.VISIBLE
             AppMediaPlayer.Event.Playing -> {
-                volumeToggle.visibility =
+                binding.inlineMediaVolumeToggle.visibility =
                     if (params.embedType == null || params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
             }
             AppMediaPlayer.Event.Ended -> resetCurrentEmbed()
@@ -241,20 +230,20 @@ class InlineMediaView @JvmOverloads constructor(
     }
 
     private fun configureVolume(player: AppMediaPlayer, audible: Boolean) {
-        volumeToggle.setImageResource(
+        binding.inlineMediaVolumeToggle.setImageResource(
             if (audible) R.drawable.ic_volume_up_white_24dp else R.drawable.ic_volume_off_24dp,
         )
-        volumeToggle.contentDescription = context.getString(if (audible) R.string.mute else R.string.unmute)
-        volumeToggle.setOnClickListener { player.setVolume(if (audible) 0f else 1f) }
+        binding.inlineMediaVolumeToggle.contentDescription = context.getString(if (audible) R.string.mute else R.string.unmute)
+        binding.inlineMediaVolumeToggle.setOnClickListener { player.setVolume(if (audible) 0f else 1f) }
     }
 
     private fun resetViews(params: ViewParams) {
-        imagePreview.visibility = View.VISIBLE
+        binding.inlineMediaImagePreview.visibility = View.VISIBLE
         playerView?.visibility = if (params.progressiveMediaUri != null && shouldAutoPlay(params)) View.VISIBLE else View.GONE
-        volumeToggle.visibility = View.GONE
-        loadingIndicator.visibility = View.GONE
-        playButton.visibility = if (params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
-        gifIndicator.visibility = if (isAnimated(params) && !shouldAutoPlay(params)) View.VISIBLE else View.GONE
+        binding.inlineMediaVolumeToggle.visibility = View.GONE
+        binding.inlineMediaLoadingIndicator.visibility = View.GONE
+        binding.inlineMediaPlayButton.visibility = if (params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
+        binding.inlineMediaGifIndicator.visibility = if (isAnimated(params) && !shouldAutoPlay(params)) View.VISIBLE else View.GONE
     }
 
     private fun clearPlayer() {

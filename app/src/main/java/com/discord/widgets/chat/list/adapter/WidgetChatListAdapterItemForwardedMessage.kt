@@ -205,7 +205,7 @@ class WidgetChatListAdapterItemForwardedMessage(
             addMedia(scaledWidth, scaledHeight) { media ->
                 media.contentDescription = attachment.filename
                 media.updateUIWithAttachment(attachment, scaledWidth, scaledHeight, entry.autoPlayGifs)
-                media.setOnClickListener { WidgetMedia.launch(itemView.context, attachment) }
+                media.setOnClickListener { WidgetMedia.launch(itemView.context, attachment, media.currentPositionMs) }
             }
             return
         }
@@ -264,7 +264,11 @@ class WidgetChatListAdapterItemForwardedMessage(
             val media = createMedia(scaledWidth, scaledHeight).apply {
                 contentDescription = listOfNotNull(embed.title, embed.description).joinToString(". ")
                 updateUIWithEmbed(embed, scaledWidth, scaledHeight, entry.autoPlayGifs)
-                embed.url?.let { url -> setOnClickListener { UriHandler.handleOrUntrusted(context, url) } }
+                if (with(EmbedResourceUtils) { embed.isPlayable() }) {
+                    setOnClickListener { WidgetMedia.launch(context, embed, currentPositionMs) }
+                } else {
+                    embed.url?.let { url -> setOnClickListener { UriHandler.handleOrUntrusted(context, url) } }
+                }
             }
             container.addView(media)
         }

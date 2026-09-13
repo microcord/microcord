@@ -13,7 +13,7 @@ import com.discord.app.AppViewModel
  * publishes one, so nothing observes it. The fields are plain mutable properties read directly by
  * the fragment.
  */
-class WidgetMediaViewModel : AppViewModel<Unit>() {
+class WidgetMediaViewModel(initialPositionMs: Long = 0L) : AppViewModel<Unit>() {
 
     /** Whether playback should resume automatically; starts `true` so a video autoplays on entry. */
     var isPlaying: Boolean = true
@@ -27,8 +27,19 @@ class WidgetMediaViewModel : AppViewModel<Unit>() {
     var showCoverFrame: Boolean = true
 
     /** Where playback had reached, so a resume seeks back instead of restarting. */
-    var currentPlayerPositionMs: Long = 0L
+    var currentPlayerPositionMs: Long = initialPositionMs.coerceAtLeast(0L)
 
     /** Identifies the gallery page those playback fields belong to. */
     var currentMediaUri: String? = null
+
+    fun selectMedia(uri: String?) {
+        if (currentMediaUri == uri) return
+        // The first item inherits the inline position; later gallery pages start normally.
+        if (currentMediaUri != null) {
+            isPlaying = true
+            showCoverFrame = true
+            currentPlayerPositionMs = 0L
+        }
+        currentMediaUri = uri
+    }
 }
