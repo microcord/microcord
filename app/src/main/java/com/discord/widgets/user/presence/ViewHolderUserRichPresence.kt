@@ -189,6 +189,10 @@ open class ViewHolderUserRichPresence(
         // labels at once.
         richPresenceTextContainer.isSelected = true
         configureAssetUi(activity, streamContext)
+        richPresence?.applicationIconFallback?.let { iconUrl ->
+            richPresenceImageLarge.visibility = View.VISIBLE
+            MGImages.setImage(richPresenceImageLarge, iconUrl)
+        }
         configureCustomButtonsUi(user, activity, applicationContext)
     }
 

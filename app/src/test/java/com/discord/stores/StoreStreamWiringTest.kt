@@ -49,6 +49,30 @@ class StoreStreamWiringTest {
     }
 
     @Test
+    fun richPresenceReceivesApplicationIconsFromTheSharedStore() {
+        stream.handleConnectionOpen(gson.fromJson(READY_JSON, ModelPayload::class.java))
+        val presence = gson.fromJson(
+            """{"user":{"id":"8"},"status":"online","activities":[
+                {"name":"Game","type":0,"application_id":"54321"}]}""",
+            com.discord.api.presence.Presence::class.java,
+        )
+        stream.dispatcher.schedule { StoreStream.getPresences().handlePresenceUpdate(0L, presence) }
+        val observed = mutableListOf<com.discord.widgets.user.presence.ModelRichPresence?>()
+        val subscription = com.discord.widgets.user.presence.ModelRichPresence.get(8L).subscribe { observed.add(it) }
+        try {
+            assertEquals(null, observed.last()?.primaryApplication)
+            val application = gson.fromJson("""{"id":"54321","name":"Game","icon":"game-icon"}""",
+                com.discord.api.application.Application::class.java)
+            stream.dispatcher.schedule { StoreStream.getApplication().handleFetchSuccess(application.id, listOf(application)) }
+            assertEquals(application, observed.last()?.primaryApplication)
+            assertEquals("https://cdn.discordapp.com/app-icons/54321/game-icon.png?size=160",
+                observed.last()?.applicationIconFallback)
+        } finally {
+            subscription.unsubscribe()
+        }
+    }
+
+    @Test
     fun supplementalPrivateChannelsRestoreAndIncrementMentionBadges() {
         fun privateChannel(id: Long, type: Int) = gson.fromJson("""{"id":$id,"type":$type}""", Channel::class.java)
         val initialDm = privateChannel(20, Channel.DM)

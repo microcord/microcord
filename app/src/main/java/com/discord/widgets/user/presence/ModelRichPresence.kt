@@ -5,6 +5,7 @@ import com.discord.api.application.Application
 import com.discord.models.presence.Presence
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserPresence
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.presence.PresenceUtils
 import rx.Observable
 
@@ -23,23 +24,32 @@ data class ModelRichPresence(
     val primaryActivity: Activity?
         get() = with(PresenceUtils) { presence.primaryActivity }
 
+    /** A placeholder's visibility does not tell us whether the activity supplied artwork. */
+    val applicationIconFallback: String?
+        get() {
+            val activity = primaryActivity ?: return null
+            val assets = activity.assets
+            if (listOfNotNull(assets?.largeImage, assets?.smallImage).any {
+                    it.isNotBlank() && IconUtils.getAssetImage(activity.applicationId, it) != null
+                }) return null
+            val application = primaryApplication ?: return null
+            return application.icon?.takeIf(String::isNotBlank)?.let { IconUtils.getApplicationIcon(application.id, it) }
+        }
+
     companion object {
 
         /**
          * Observes [userId]'s rich presence, re-resolving the application whenever the primary
          * activity changes application. Emits `null` while the user has no presence at all.
          *
-         * @param observeApplication resolves an application id to its metadata. The reference calls
-         *   `StoreStream.getApplication().observeApplication(id)`; `StoreApplication` has not been
-         *   reconstructed, so the default resolves to `null` and cards fall back to the activity's
-         *   own assets. Pass the real store once it exists.
+         * @param observeApplication resolves metadata through the shared application cache/fetcher.
          */
         @JvmStatic
         @JvmOverloads
         fun get(
             userId: Long,
             storeUserPresence: StoreUserPresence = StoreStream.getPresences(),
-            observeApplication: (Long) -> Observable<Application?> = { Observable.just(null) },
+            observeApplication: (Long) -> Observable<Application?> = { StoreStream.getApplication().observeApplication(it) },
         ): Observable<ModelRichPresence?> =
             storeUserPresence.observePresenceForUser(userId)
                 .switchMap { presence ->

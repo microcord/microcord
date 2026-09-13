@@ -134,7 +134,7 @@ object WidgetUserSheetViewModelStoreState {
                     storeMediaSettings?.getVoiceConfig()
                         ?.map<StoreMediaSettings.VoiceConfiguration?> { it }
                         ?: Observable.just(null)
-                val richPresence = ModelRichPresence.get(user.id, storeUserPresence)
+                val richPresence = ModelRichPresence.get(user.id, storeUserPresence, storeApplication::observeApplication)
                 // A stage the *caller* is in; the stage actions section is about my membership of
                 // it, not the target's.
                 val stageChannel = bootstrap.selectedVoiceChannel

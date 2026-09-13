@@ -13,7 +13,6 @@ import com.discord.i18n.i18nFormat
 import com.discord.models.user.User
 import com.discord.stores.StoreUserConnections
 import com.discord.utilities.drawable.getThemedDrawableRes
-import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.platform.Platform
 import com.discord.utilities.presence.PresenceUtils
@@ -134,9 +133,7 @@ class ViewHolderPlatformRichPresence(
             richPresenceImageSmall?.setImageDrawable(glyph)
         }
 
-        if (richPresenceImageLarge.visibility != View.VISIBLE) {
-            val application = richPresence?.primaryApplication
-            val iconUrl = application?.let { IconUtils.getApplicationIcon(it.id, it.icon.orEmpty()) }
+        richPresence?.applicationIconFallback?.let { iconUrl ->
             richPresenceImageLarge.visibility = View.VISIBLE
             MGImages.setImage(richPresenceImageLarge, iconUrl)
         }
