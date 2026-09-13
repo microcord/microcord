@@ -1,19 +1,38 @@
+# Gradle, Android and generated build outputs
 *.iml
-.gradle
-.kotlin
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.gradle/
+.kotlin/
+build/
 local.properties
-/.buildlock
-/*/build
-/dev-env
+.externalNativeBuild/
+.cxx/
+/captures/
+/.buildlock/
+/dev-env/
+
+# Local IDE state; retain the shared formatting rules
+/.idea/*
+!/.idea/codeStyles/
+.DS_Store
+Thumbs.db
+
+# Local agent/index state and temporary tooling
+/.claude/
+/.codegraph/
+node_modules/
+__pycache__/
+*.pyc
+*.log
+*.hprof
+*.perfetto-trace
+
+# Local service credentials and signing overrides
+.env
+.env.*
+!.env.example
+!.env.sample
+.dev.vars
+.dev.vars.*
+*.jks
+*.keystore
+!/app/manticord-dev.keystore

@@ -5,15 +5,11 @@
 Read `PLAN.md` before inspecting or changing code. It is the source of truth
 for architecture, fixed decisions, phase status, risks, and handoffs.
 
-Then read `docs/parity-audit/README.md` and the report covering your area. It is
-the measured gap list between this project and the reference, produced 2026-07-26,
-with `file:line` citations. Two rules come from it:
-
-- Every report lists the regions where JADX output is broken and the behavior is
-  therefore **unverified**. Never close one of those by guessing — inspect
-  DEX/smali or the call sites.
-- Coverage figures in `PLAN.md` are measured, not estimated. Do not mark a phase
-  `DONE` while its audit report still lists open blockers.
+Historical parity audits are available in Git history; current status and open
+work live in `PLAN.md`. Inspect the reference and current callers for your area.
+Broken JADX output is **unverified** until checked against stronger evidence.
+Coverage figures are measured, not estimated; do not mark a phase `DONE` while
+its behavioral or runtime blockers remain open.
 
 When more than one agent is active, follow the concurrency protocol in the
 `PLAN.md` "Reconstruction Campaign" section: exclusive file ownership per agent,
@@ -56,8 +52,8 @@ runtime evidence makes one impossible. Record any approved change in the
 4. Implement the smallest complete vertical slice.
 5. Add the smallest meaningful automated check for non-trivial behavior.
 6. Run relevant Gradle checks.
-7. Update phase status, parity evidence, risks, decisions, and progress journal.
-8. Return a handoff using the template in `PLAN.md`.
+7. Update the relevant status, evidence, risk or decision in `PLAN.md`; do not append session logs.
+8. Return a concise handoff with changed paths, checks and remaining work.
 
 For unresolved Gateway or HTTP behavior, enable the existing sanitized traffic
 logging and inspect live inbound/outbound Gateway payloads or HTTP requests and
@@ -322,6 +318,13 @@ to avoid and expensive to diagnose, because none of them looks wrong when you re
 
 ## Documentation Discipline
 
+- Do not log routine agent activity. Do not append session journals, tool transcripts,
+  repeated build/install reports, or narration of individual edits to project files.
+- Keep `PLAN.md` concise: update existing status, decisions and actionable blockers
+  only when they materially change. Put the short task result in the response.
+- Do not add runtime debug logs by default. Reuse existing opt-in, sanitized
+  diagnostics for a concrete investigation; remove temporary logging afterward.
+
 Update `PLAN.md` when any of these change:
 
 - Phase or feature status.
@@ -329,7 +332,6 @@ Update `PLAN.md` when any of these change:
 - Architecture, dependency, or compatibility decision.
 - Newly discovered blocker or risk.
 - Native/runtime compatibility result.
-- Meaningful completed work session.
 
 Do not create competing roadmap or status documents. Add specialized technical
 documentation only when implementation produces details too large for the plan,

@@ -5,8 +5,8 @@
 This document records the agreed architecture for bundled and externally installed Manticord
 plugins. The `:plugin-api` manifest/lifecycle contract, global loading policy, dependency resolver,
 priority ordering, blocking-chain promotion, external APK loader, lifecycle execution, header,
-composer, bottom-tab, and profile-popout hosts, schema/custom settings, settings cards, signer approval, namespaced storage, and
-sample plugin are implemented. `PLAN.md` remains the project roadmap and links here for the detailed
+composer, bottom-tab, and profile-popout hosts, schema/custom settings, settings cards, signer approval, and
+namespaced storage are implemented. `PLAN.md` remains the project roadmap and links here for the detailed
 design.
 
 ## Goals
@@ -501,13 +501,6 @@ scope.dialogs.alert("Example Plugin", "Hello from a plugin")
 
 The host posts to the main thread, resolves the current `AppActivity`, and renders
 `WidgetNoticeDialog` with normal Discord theming and lifecycle behavior.
-
-## Example Plugin
-
-The buildable installed-APK example is in the sibling project
-`C:\Users\manti\Desktop\projeler\manticord-plugin-template`. It ships its own XML icon button, adds
-that button to the chat header, exposes an editable alert message through the settings schema, and
-calls `scope.dialogs.alert(...)` when the header button or settings action is selected.
 
 ## Storage
 
