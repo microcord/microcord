@@ -82,6 +82,37 @@ test("missing manifest preserves the legacy feed without inventing commit metada
   assert.doesNotMatch(await cached.values().next().value.clone().text(), /DO NOT EXPOSE|local-test-only/);
 });
 
+test("latest APK redirects without caching the selected version and follows newly published releases", async () => {
+  responses.push(Response.json(release));
+  const response = await request("/latest.apk");
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), `${origin}/releases/build-42.apk`);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.equal(calls[0].url, `${api}/releases/latest`);
+  const head = await request("/latest.apk", { method: "HEAD" });
+  assert.equal(head.status, 302);
+  assert.equal(await head.text(), "");
+  assert.equal(head.headers.get("Location"), response.headers.get("Location"));
+  assert.equal(calls.length, 1);
+  cached.clear(); // The existing latest-release metadata cache expires after 60 seconds.
+  responses.push(Response.json({ ...release, tag_name: "build-43" }));
+  assert.equal((await request("/latest.apk")).headers.get("Location"), `${origin}/releases/build-43.apk`);
+  for (const path of ["/latest.apk?tag=build-42", "/latest.apk?from=bad"]) {
+    assert.equal((await request(path)).status, 404);
+  }
+  assert.equal((await request("/latest.apk", { method: "POST" })).status, 405);
+  assert.equal(calls.length, 2);
+});
+
+test("latest APK does not redirect to missing or unpublished releases", async () => {
+  responses.push(new Response(null, { status: 404 }), Response.json({ ...release, draft: true }));
+  for (let i = 0; i < 2; i++) {
+    const response = await request("/latest.apk");
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("Location"), null);
+  }
+});
+
 test("valid manifest exposes full build identity and caches only slim validated fields", async () => {
   const body = JSON.stringify({ ...manifest, commitSha: manifest.commitSha.toUpperCase(), sha256: manifest.sha256.toUpperCase(), private: "DO NOT EXPOSE" });
   responses.push(Response.json(withManifest(body)), new Response(body));

@@ -2,6 +2,7 @@ package com.discord.utilities.updates
 
 import com.discord.utilities.feature.ClientPreferenceSnapshotTest.MemoryPreferences
 import com.discord.utilities.feature.ClientSettings
+import com.discord.BuildConfig
 import com.google.gson.Gson
 import org.junit.Assert.*
 import org.junit.Rule
@@ -25,6 +26,17 @@ class AppUpdateTest {
         assertFalse(setting.get(prefs))
         assertSame(setting, ClientSettings.resolve("default", setting.key))
         assertEquals(ClientSettings.Type.BOOLEAN, ClientSettings.backupType("default", setting.key))
+    }
+
+    @Test fun `automatic cooldown applies only to the build that performed the check`() {
+        val prefs = MemoryPreferences()
+        prefs.edit().putLong("next_check", 10_000L).apply()
+        assertTrue(AppUpdater.automaticCheckDue(prefs, 1_000L))
+        prefs.edit().putString("last_check_build", BuildConfig.UPDATE_COMMIT_SHA).apply()
+        assertFalse(AppUpdater.automaticCheckDue(prefs, 9_999L))
+        assertTrue(AppUpdater.automaticCheckDue(prefs, 10_000L))
+        prefs.edit().putString("last_check_build", "previous-installed-build").apply()
+        assertTrue(AppUpdater.automaticCheckDue(prefs, 1_000L))
     }
 
     @Test fun `only a different newer source with a nondecreasing APK version is offered`() {

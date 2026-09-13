@@ -2,6 +2,7 @@ package com.discord.utilities.updates
 
 import android.app.DownloadManager
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -55,7 +56,10 @@ object AppUpdater {
 
     fun setAutomaticChecks(enabled: Boolean) {
         ClientSettings.automaticUpdateChecks.set(SharedPreferencesProvider.get(), enabled)
-        if (!enabled) queuedNoticeSha?.let { StoreStream.getNotices().markSeen(noticeName(it)) }
+        if (!enabled) {
+            queuedNoticeSha?.let { StoreStream.getNotices().markSeen(noticeName(it)) }
+            queuedNoticeSha = null
+        }
     }
 
     fun onForeground(context: Context) {
@@ -68,22 +72,24 @@ object AppUpdater {
         restorePending(app)
         if (state.phase in setOf(Phase.CHECKING, Phase.DOWNLOADING, Phase.VERIFYING, Phase.READY)) return
         val now = System.currentTimeMillis()
-        if (automatic && (!automaticChecksEnabled() || now < preferences(app).getLong("next_check", 0))) return
-        preferences(app).edit().putLong("next_check", now + RETRY_DELAY).apply()
+        if (automatic && (!automaticChecksEnabled() || !automaticCheckDue(preferences(app), now))) return
+        if (automatic) preferences(app).edit()
+            .putString("last_check_build", BuildConfig.UPDATE_COMMIT_SHA)
+            .putLong("next_check", now + RETRY_DELAY).apply()
         states.onNext(State(Phase.CHECKING, state.update))
         Observable.fromCallable {
             http.newCall(Request.Builder().url(UPDATE_FEED_URL).build()).execute().use { response ->
                 readJson(response, AppUpdate::class.java, 16_384).validate()
             }
         }.subscribeOn(Schedulers.io()).ui().subscribe({ update ->
-            preferences(app).edit().putLong("next_check", System.currentTimeMillis() + SIX_HOURS).apply()
+            if (automatic) preferences(app).edit().putLong("next_check", System.currentTimeMillis() + SIX_HOURS).apply()
             val phase = when {
                 !update.hasBuildMetadata -> Phase.LEGACY
                 isNewer(update) -> Phase.AVAILABLE
                 else -> Phase.CURRENT
             }
             states.onNext(State(phase, update))
-            if (automatic && phase == Phase.AVAILABLE && automaticChecksEnabled()) notifyUpdate(app, update)
+            if (phase == Phase.AVAILABLE && automaticChecksEnabled()) notifyUpdate(app, update)
         }, {
             states.onNext(State(Phase.ERROR, state.update, error = R.string.updater_check_failed))
         })
@@ -261,7 +267,12 @@ object AppUpdater {
 
     private fun isNewer(update: AppUpdate) = update.isNewerThan(BuildConfig.UPDATE_COMMIT_SHA,
         BuildConfig.UPDATE_COMMIT_TIMESTAMP, BuildConfig.VERSION_CODE.toLong())
-    private fun noticeName(sha: String) = "InAppNotif-Update-$sha"
+    internal fun automaticCheckDue(preferences: SharedPreferences, now: Long): Boolean =
+        preferences.getString("last_check_build", null) != BuildConfig.UPDATE_COMMIT_SHA ||
+            now >= preferences.getLong("next_check", 0)
+
+    // App update notices must survive navigation's dismissal of message notifications.
+    internal fun noticeName(sha: String) = "UpdateAvailable-$sha"
     private fun preferences(context: Context) = context.getSharedPreferences("manticord_updater_runtime", Context.MODE_PRIVATE)
     private fun downloads(context: Context) = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
 }

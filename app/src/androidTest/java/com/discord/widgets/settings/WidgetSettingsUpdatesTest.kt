@@ -69,6 +69,7 @@ class WidgetSettingsUpdatesTest {
         val originalAutomatic = if (preferences.contains(setting.key)) preferences.getBoolean(setting.key, true) else null
         val runtime = instrumentation.targetContext.getSharedPreferences("manticord_updater_runtime", Context.MODE_PRIVATE)
         val originalNextCheck = if (runtime.contains("next_check")) runtime.getLong("next_check", 0) else null
+        val originalCheckBuild = runtime.getString("last_check_build", null)
         val versionCode = maxOf(
             BuildConfig.VERSION_CODE.toLong() + 1,
             BuildConfig.UPDATE_COMMIT_TIMESTAMP + 86_400 - 1_577_836_800L,
@@ -149,7 +150,8 @@ class WidgetSettingsUpdatesTest {
 
         try {
             onMain {
-                assertTrue(runtime.edit().putLong("next_check", Long.MAX_VALUE).commit())
+                assertTrue(runtime.edit().putLong("next_check", Long.MAX_VALUE)
+                    .putString("last_check_build", BuildConfig.UPDATE_COMMIT_SHA).commit())
                 // Leave real download_id/download_release untouched and bypass their restoration.
                 restoredField.setBoolean(AppUpdater, true)
                 states.onNext(available)
@@ -253,6 +255,7 @@ class WidgetSettingsUpdatesTest {
                     }.commit()
                     val restoredRuntime = runtime.edit().apply {
                         if (originalNextCheck == null) remove("next_check") else putLong("next_check", originalNextCheck)
+                        if (originalCheckBuild == null) remove("last_check_build") else putString("last_check_build", originalCheckBuild)
                     }.commit()
                     assertTrue("Restore updater preferences, including absent keys", restoredSetting && restoredRuntime)
                 }

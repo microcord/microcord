@@ -211,10 +211,11 @@ async function compareCommits(fromSha, toSha, token, origin) {
 async function handle(request, env) {
   const url = new URL(request.url);
   const latest = url.pathname === "/latest.json";
+  const latestApk = url.pathname === "/latest.apk";
   const download = /^\/releases\/(build-[1-9]\d{0,9})\.apk$/.exec(url.pathname);
   const changes = /^\/releases\/(build-[1-9]\d{0,9})\/changes\.json$/.exec(url.pathname);
   const from = url.searchParams.get("from");
-  if ((!latest && !download && !changes) ||
+  if ((!latest && !latestApk && !download && !changes) ||
       (changes ? !isSha(from) || [...url.searchParams].length !== 1 : url.search)) return error(404, "Not found");
   if (request.method !== "GET" && request.method !== "HEAD") {
     const response = error(405, "Only GET and HEAD are supported");
@@ -228,6 +229,11 @@ async function handle(request, env) {
   }
   const release = await releaseMetadata(download?.[1] ?? changes?.[1], env.GITHUB_TOKEN, url.origin);
   if (!release) return error(404, "No published APK available");
+
+  if (latestApk) return new Response(null, { status: 302, headers: {
+    Location: `${url.origin}/releases/${release.release}.apk`,
+    "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+  } });
 
   if (changes) {
     const fromSha = from.toLowerCase();

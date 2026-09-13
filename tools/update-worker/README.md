@@ -29,6 +29,9 @@ or the Android app. Local `.env*` and `.dev.vars*` files are ignored. The Worker
 
 - `GET /latest.json`: `release`, `publishedAt`, `apkUrl`, `sha256`, `size`, plus `commitSha`,
   `commitTimestamp`, `versionCode`, `versionName`, `packageName` when a valid manifest is attached.
+- `GET /latest.apk`: redirects to the latest published release's version-pinned APK URL.
+  The redirect is not cached; release selection uses the same 60-second metadata cache as
+  `latest.json`. Share https://microcord.mantikafasi.dev/latest.apk as the stable download link.
 - `GET /releases/build-163.apk`: that exact published release's APK, not whichever is latest.
 - `GET /releases/build-166/changes.json?from=<installed SHA>`: notes and commit titles for that
   exact published APK. Requires exactly one `from` parameter containing a full 40-hex installed

@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import com.discord.utilities.persister.Persister
 import com.discord.utilities.time.Clock
+import com.discord.utilities.updates.AppUpdater
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import org.junit.After
@@ -55,6 +56,20 @@ class NoticeStoresTest {
         notices.markSeen("MODAL")
 
         // If it had been queued twice, the second copy would still be publishable.
+        notices.processNextNotice()
+        assertNull(latestNotice(notices))
+    }
+
+    @Test fun openingAnotherNoticeDoesNotDiscardTheUpdateBanner() {
+        val notices = newNoticeStore()
+        val updateName = AppUpdater.noticeName("a".repeat(40))
+        notices.requestToShow(notice("InAppNotif#message"))
+        notices.requestToShow(notice(updateName))
+        notices.markInAppSeen()
+        now += DAY_MS
+        notices.processNextNotice()
+        assertEquals(updateName, latestNotice(notices)?.name)
+        notices.markSeen(updateName)
         notices.processNextNotice()
         assertNull(latestNotice(notices))
     }
