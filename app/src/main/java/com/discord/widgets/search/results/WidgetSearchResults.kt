@@ -1,10 +1,10 @@
 package com.discord.widgets.search.results
 
 import android.view.View
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetSearchResultsBinding
 import com.discord.models.message.Message
 import com.discord.stores.StoreChat
 import com.discord.stores.StoreStream
@@ -32,7 +32,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        val recycler = view.findViewById<RecyclerView>(R.id.search_results_list)
+        val recycler = WidgetSearchResultsBinding.bind(view).searchResultsList
         adapter = MGRecyclerAdapter.configure<ChatListEntry, WidgetChatListAdapter>(
             WidgetChatListAdapter(
                 recycler,
@@ -42,6 +42,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
                     searchStore = SearchStoreProvider.get(),
                     closeSearch = { activity?.finish() },
                 ),
+                stickToBottom = false,
             ),
         ).apply {
             // Every result would otherwise be highlighted, since a search commonly filters on the
@@ -52,21 +53,31 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        adapter?.setHandlers()
+        adapter?.onResume()
         viewModel.observeViewState().ui(this).subscribe { state -> adapter?.data = state }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onPause() {
+        super.onPause()
+        adapter?.onPause()
+        adapter?.disposeHandlers()
+    }
+
+    override fun onDestroyView() {
+        adapter?.disposeHandlers()
         adapter?.dispose()
+        adapter = null
+        super.onDestroyView()
     }
 
     /**
      * Turns any row interaction into a jump.
      *
      * [onInteractionStateUpdated] is also how pagination happens: the chat adapter reports when the
-     * list is scrolled to the top, and that asks the store for the page before the oldest hit.
+     * list reaches the bottom, and that asks the store for the next page of search hits.
      */
-    private class SearchResultAdapterEventHandler(
+    internal class SearchResultAdapterEventHandler(
         private val searchStore: SearchStore,
         private val closeSearch: () -> Unit,
     ) : WidgetChatListAdapter.EventHandler {
@@ -83,7 +94,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
         }
 
         override fun onInteractionStateUpdated(interactionState: StoreChat.InteractionState) {
-            if (interactionState.isAtTop && oldestMessageId != Long.MAX_VALUE) {
+            if (interactionState.isAtBottom && oldestMessageId > 0L && oldestMessageId != Long.MAX_VALUE) {
                 searchStore.loadMore(oldestMessageId)
             }
         }
