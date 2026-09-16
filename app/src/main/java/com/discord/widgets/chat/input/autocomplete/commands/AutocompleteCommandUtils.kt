@@ -238,12 +238,15 @@ object AutocompleteCommandUtils {
             it.equals("true", ignoreCase = true) || it.equals("false", ignoreCase = true)
         }?.toBoolean()?.let(::BooleanOptionValue)
         ApplicationCommandType.USER -> (match as? UserAutocompletable)?.let { UserOptionValue(it.user) }
+            ?: USER_MENTION.matchEntire(value)?.groupValues?.get(1)?.toLongOrNull()?.let(::SnowflakeOptionValue)
         ApplicationCommandType.CHANNEL -> (match as? ChannelAutocompletable)?.let { ChannelOptionValue(it.channel) }
+            ?: CHANNEL_MENTION.matchEntire(value)?.groupValues?.get(1)?.toLongOrNull()?.let(::SnowflakeOptionValue)
         ApplicationCommandType.ROLE -> (match as? RoleAutocompletable)?.let { RoleOptionValue(it.role) }
+            ?: ROLE_MENTION.matchEntire(value)?.groupValues?.get(1)?.toLongOrNull()?.let(::SnowflakeOptionValue)
         ApplicationCommandType.MENTIONABLE -> when (match) {
             is UserAutocompletable -> UserOptionValue(match.user)
             is RoleAutocompletable -> RoleOptionValue(match.role)
-            else -> null
+            else -> MENTIONABLE.matchEntire(value)?.groupValues?.get(1)?.toLongOrNull()?.let(::SnowflakeOptionValue)
         }
         ApplicationCommandType.NUMBER -> parseNumber(value)?.takeIf(::isSafeNumber)?.let(::NumberOptionValue)
         ApplicationCommandType.ATTACHMENT -> attachment?.uri?.toString()?.let(::AttachmentOptionValue)
@@ -259,4 +262,9 @@ object AutocompleteCommandUtils {
 
     private fun isSafeNumber(value: Number): Boolean =
         value.toDouble() in -MAX_SAFE_INTEGER.toDouble()..MAX_SAFE_INTEGER.toDouble()
+
+    private val USER_MENTION = Regex("^<@!?(\\d+)>$")
+    private val ROLE_MENTION = Regex("^<@&(\\d+)>$")
+    private val CHANNEL_MENTION = Regex("^<#(\\d+)>$")
+    private val MENTIONABLE = Regex("^<@(?:!?|&)(\\d+)>$")
 }

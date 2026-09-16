@@ -111,6 +111,7 @@ internal fun compactComponentText(text: DraweeSpanStringBuilder): DraweeSpanStri
         if (start in blockStarts) {
             val end = getSpanEnd(span)
             val flags = getSpanFlags(span)
+            removeSpan(span)
             setSpan(VerticalPaddingSpan(0, span.paddingBottom), start, end, flags)
         }
     }

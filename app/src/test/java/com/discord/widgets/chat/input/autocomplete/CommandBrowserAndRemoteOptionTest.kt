@@ -323,6 +323,52 @@ class CommandBrowserAndRemoteOptionTest {
         assertEquals(" (flip)", command.execute?.invoke(emptyMap()))
     }
 
+    @Test
+    fun selectedOptionalUserTokenIsValidWithoutTheTransientMentionMap() {
+        val user = option("user", type = ApplicationCommandType.USER, required = false)
+        val note = option("note", required = false)
+        val viewModel = AutocompleteViewModel(
+            channelId = 7L,
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
+            commandIndexRequest = {},
+        )
+        viewModel.selectAutocompleteItem(ApplicationCommandAutocompletable(
+            Application(10L, "Tools", commandCount = 1), command("inspect", listOf(user, note)), true, true,
+        ))
+
+        val data = requireNotNull(viewModel.buildSelectedCommandData("/inspect user:<@123456789012345678>", emptyList()))
+        assertTrue(data.validInputs)
+        assertEquals(1, data.values.size)
+        assertEquals("user", data.values.single().name)
+        assertEquals("123456789012345678", data.values.single().value)
+    }
+
+    @Test
+    fun completedUserRoleAndChannelTokensValidateOnlyForMatchingOptionTypes() {
+        val options = listOf(
+            option("user", ApplicationCommandType.USER, required = false),
+            option("role", ApplicationCommandType.ROLE, required = false),
+            option("channel", ApplicationCommandType.CHANNEL, required = false),
+            option("mentionable", ApplicationCommandType.MENTIONABLE, required = false),
+        )
+        fun data(input: String) = AutocompleteViewModel(
+            channelId = 7L,
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
+            commandIndexRequest = {},
+        ).run {
+            selectAutocompleteItem(ApplicationCommandAutocompletable(
+                Application(10L, "Tools", commandCount = 1), command("inspect", options), true, true,
+            ))
+            requireNotNull(buildSelectedCommandData(input, emptyList()))
+        }
+        val valid = data("/inspect user:<@1> role:<@&2> channel:<#3> mentionable:<@!4>")
+        assertTrue(valid.validInputs)
+        assertEquals(listOf("1", "2", "3", "4"), valid.values.map { it.value })
+        assertFalse(data("/inspect user:<@&2>").validInputs)
+    }
+
     private fun option(
         name: String,
         type: ApplicationCommandType = ApplicationCommandType.STRING,
