@@ -7,12 +7,12 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
+        android:gravity="top"
         android:orientation="horizontal">
 
         <LinearLayout
             android:id="@+id/components"
-            android:divider="@drawable/bot_ui_component_v2_gap_drawable"
+            android:divider="@drawable/bot_ui_section_text_gap_drawable"
             android:showDividers="middle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -23,7 +23,7 @@
             android:id="@+id/accessory"
             android:layout_width="80dp"
             android:layout_height="80dp"
-            android:layout_marginStart="16dp" />
+            android:layout_marginStart="12dp" />
     </LinearLayout>
 
     <include

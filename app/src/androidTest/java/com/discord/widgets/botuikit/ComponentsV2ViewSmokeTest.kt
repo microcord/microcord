@@ -2,6 +2,13 @@ package com.discord.widgets.botuikit
 
 import android.content.Intent
 import android.text.TextPaint
+import android.graphics.Paint
+import android.graphics.Canvas
+import android.graphics.RectF
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.StaticLayout
+import android.text.Layout
 import android.text.style.CharacterStyle
 import android.text.style.ClickableSpan
 import android.view.ContextThemeWrapper
@@ -28,6 +35,9 @@ import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
+import com.discord.utilities.textprocessing.spans.VerticalPaddingSpan
+import com.discord.utilities.textprocessing.spans.QuoteSpan
+import com.discord.widgets.botuikit.views.v2.compactComponentText
 import com.discord.widgets.botuikit.views.v2.ThumbnailComponentView
 import com.discord.widgets.media.WidgetMedia
 import org.junit.Assert.assertEquals
@@ -39,6 +49,63 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ComponentsV2ViewSmokeTest {
+    @Test
+    fun compactTextRemovesOnlyOuterBlockSpacingAndPreservesLinksAndParagraphs() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context = ContextThemeWrapper(InstrumentationRegistry.getInstrumentation().targetContext, R.style.AppTheme_Dark)
+            var openedUrl: String? = null
+            val renderContext = MessageRenderContext(context, 0, false,
+                onClickUrl = { _, url, _ -> openedUrl = url })
+            fun render(source: String) = compactComponentText(DiscordParser.parseChannelMessage(
+                context, source, renderContext, MessagePreprocessor(myUserId = 0, messageState = null),
+            ))
+            val heading = render("### [Title](https://example.com/title)")
+            assertEquals("Title\u200B", heading.toString())
+            val padding = heading.getSpans(0, heading.length, VerticalPaddingSpan::class.java).single()
+            val metrics = Paint.FontMetricsInt().apply { top = -20; ascent = -18; descent = 4; bottom = 5 }
+            padding.chooseHeight(heading, 0, heading.getSpanEnd(padding), 0, 25, metrics)
+            assertEquals(-18, metrics.ascent)
+            assertEquals(4 + padding.paddingBottom, metrics.descent)
+            heading.getSpans(0, heading.length, ClickableSpan::class.java).single().onClick(TextView(context))
+            assertEquals("https://example.com/title", openedUrl)
+
+            val quote = render("> [Quoted](https://example.com/quote)")
+            assertEquals("Quoted\u200B", quote.toString())
+            quote.getSpans(0, quote.length, ClickableSpan::class.java).single().onClick(TextView(context))
+            assertEquals("https://example.com/quote", openedUrl)
+            assertEquals("first\n\nsecond\u200B", render("first\n\nsecond").toString())
+            assertEquals("\u200B", render("").toString())
+            val mixed = render("### Title\n\n>not a quote\n\n> ### Quoted heading\n> Body\n> \n> Last")
+            val quotedBlock = mixed.getSpans(0, mixed.length, QuoteSpan::class.java).single()
+            val quotedHeading = mixed.getSpans(0, mixed.length, VerticalPaddingSpan::class.java)
+                .single { mixed.getSpanStart(it) == mixed.getSpanStart(quotedBlock) }
+            val quoteMetrics = Paint.FontMetricsInt().apply { top = -20; ascent = -18; descent = 4; bottom = 5 }
+            quotedHeading.chooseHeight(mixed, mixed.getSpanStart(quotedHeading), mixed.getSpanEnd(quotedHeading), 0, 25, quoteMetrics)
+            assertEquals(-18, quoteMetrics.ascent)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun quoteBarDrawsWhenTheLastLineIncludesATrailingSentinelAndInRtl() {
+        val text = SpannableString("Quoted\u200B")
+        val span = QuoteSpan(android.graphics.Color.RED, 3, 8)
+        text.setSpan(span, 0, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val paint = TextPaint().apply { textSize = 14f }
+        val layout = StaticLayout(text, paint, 300, Layout.Alignment.ALIGN_NORMAL, 1f, 0f, false)
+        var drawn: RectF? = null
+        val canvas = object : Canvas() {
+            override fun drawRoundRect(rect: RectF, rx: Float, ry: Float, paint: Paint) { drawn = RectF(rect) }
+        }
+        for (direction in listOf(1, -1)) {
+            drawn = null
+            span.drawLeadingMargin(canvas, paint, 20, direction, 0, 14, 18, text, 0, text.length, true, layout)
+            assertNotNull(drawn)
+            assertEquals(3f, drawn!!.width(), 0f)
+            assertEquals(18f, drawn!!.bottom, 0f)
+        }
+    }
+
     @Test
     fun currentModalAndMessageComponentsInflateAndMeasure() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {

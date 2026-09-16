@@ -18,8 +18,33 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Element
 
 class BotUiKitContractsTest {
+    @Test
+    fun compactSectionSpacingDoesNotChangeContainerGaps() {
+        val android = "http://schemas.android.com/apk/res/android"
+        fun elements(file: String): List<Element> {
+            val nodes = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+                .newDocumentBuilder().parse(File("src/main/res/$file")).getElementsByTagName("*")
+            return (0 until nodes.length).map { nodes.item(it) as Element }
+        }
+        val section = elements("layout/widget_bot_ui_section_component.xml")
+        val components = section.single { it.getAttributeNS(android, "id") == "@+id/components" }
+        assertEquals("@drawable/bot_ui_section_text_gap_drawable", components.getAttributeNS(android, "divider"))
+        assertEquals("top", (components.parentNode as Element).getAttributeNS(android, "gravity"))
+        val text = elements("layout/widget_bot_ui_text_display_component.xml").last()
+        assertEquals("false", text.getAttributeNS(android, "includeFontPadding"))
+        assertFalse(text.hasAttributeNS(android, "paddingTop"))
+        assertFalse(text.hasAttributeNS(android, "paddingBottom"))
+        assertEquals("4dp", elements("drawable/bot_ui_section_text_gap_drawable.xml")
+            .single { it.tagName == "size" }.getAttributeNS(android, "height"))
+        assertEquals("8dp", elements("drawable/bot_ui_component_v2_gap_drawable.xml")
+            .single { it.tagName == "size" }.getAttributeNS(android, "height"))
+    }
+
     @Test
     fun componentChatStateCombinesEveryMessageId() {
         val selection = SelectItem("One", "1", null, null, true)

@@ -2,13 +2,18 @@ package com.discord.widgets.chat.list.model
 
 import com.discord.api.channel.Channel
 import com.discord.api.message.MessageReference
+import com.discord.api.message.MessageFlags
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.message.Message
 import com.discord.models.user.CoreUser
 import com.discord.stores.StoreMessageReplies
+import com.discord.stores.StoreStream
+import com.discord.stores.storeTestScheduler
+import com.discord.utilities.feature.ClientPreferenceSnapshotTest.MemoryPreferences
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
 import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.discord.widgets.chat.list.entries.TimestampEntry
@@ -18,8 +23,29 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
 import org.junit.Test
+import org.junit.Before
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 
 class WidgetChatListModelMessagesTest {
+    @get:Rule val temporary = TemporaryFolder()
+
+    @Before fun setUp() {
+        val preferences = MemoryPreferences()
+        StoreStream.initializeForTesting(temporary.newFolder(), preferences, preferences,
+            storeTestScheduler("chat-list-model-test"))
+    }
+
+    @Test fun forwardedContentIsHostedBelowTheAuthorInsteadOfAfterTheAvatarRow() {
+        val forwarded = message(3L, 3_000L).copy(content = "", flags = MessageFlags.HAS_SNAPSHOT,
+            messageReference = MessageReference(2L, 20L, 1L, type = 1))
+        val model = WidgetChatListModelMessages.build(channel(), metadata(listOf(forwarded)),
+            inviteResolver = InviteEmbedResolver.UNRESOLVED)
+        assertTrue(model.items.none { it is ForwardedMessageEntry })
+        val row = model.items.filterIsInstance<MessageEntry>().single()
+        assertEquals(forwarded.id, row.accessories.filterIsInstance<ForwardedMessageEntry>().single().parentMessage.id)
+    }
+
     @Test fun missingReplyStateBecomesUnloadedAndCoreIsFoundAfterReordering() {
         val reply = Message(
             id = 2L,

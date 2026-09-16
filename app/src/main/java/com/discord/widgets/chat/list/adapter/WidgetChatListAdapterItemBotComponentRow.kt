@@ -37,6 +37,7 @@ class WidgetChatListAdapterItemBotComponentRow(
         itemView.findViewById(R.id.chat_list_adapter_item_component_root)
 
     private lateinit var entry: BotUiComponentEntry
+    private var renderKey: Any? = null
     override val componentEntry: BotUiComponentEntry get() = entry
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
@@ -44,6 +45,9 @@ class WidgetChatListAdapterItemBotComponentRow(
         val botEntry = data as BotUiComponentEntry
         entry = botEntry
         configureCellHighlight(botEntry.message, highlightedBackground, gutterBackground, botEntry.isPendingReply)
+        val nextRenderKey = listOf(botEntry.message.id, botEntry.messageComponents, botEntry.messageState)
+        if (renderKey == nextRenderKey) return
+        renderKey = nextRenderKey
 
         val views = botEntry.messageComponents.mapIndexedNotNull { index, component ->
             adapter.botUiComponentProvider

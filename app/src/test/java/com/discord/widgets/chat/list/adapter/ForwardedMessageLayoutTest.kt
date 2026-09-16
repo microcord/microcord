@@ -36,12 +36,22 @@ class ForwardedMessageLayoutTest {
             it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_source_guild_icon"
         }
         val source = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_source" }
+        val card = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_card" }
+        val label = elements.single { it.getAttributeNS(ANDROID_NS, "id") == "@+id/forwarded_message_label" }
+        // Forwarding metadata belongs above the card, not in a second padded card header.
+        assertEquals(card.parentNode, label.parentNode.parentNode)
+        assertEquals("italic", label.getAttributeNS(ANDROID_NS, "textStyle"))
+        assertEquals("true", label.getAttributeNS(ANDROID_NS, "singleLine"))
+        assertTrue(ids.contains("@+id/forwarded_message_rail"))
+        assertTrue(ids.indexOf("@+id/forwarded_message_label") < ids.indexOf("@+id/forwarded_message_card"))
         assertEquals("@string/loading", loading.getAttributeNS(ANDROID_NS, "contentDescription"))
         assertEquals("@drawable/ic_forward_16dp", icon.getAttributeNS(ANDROID_NS, "src"))
         assertTrue(ids.indexOf("@+id/forwarded_message_source_guild_icon") < ids.indexOf("@+id/forwarded_message_source"))
         assertEquals("14dp", guildIcon.getAttributeNS(ANDROID_NS, "layout_width"))
         assertFalse(source.hasAttributeNS(ANDROID_NS, "clickable"))
         assertFalse(source.hasAttributeNS(ANDROID_NS, "focusable"))
+        assertEquals("true", source.getAttributeNS(ANDROID_NS, "singleLine"))
+        assertEquals("end", source.getAttributeNS(ANDROID_NS, "ellipsize"))
 
         val binder = File(
             "src/main/java/com/discord/widgets/chat/list/adapter/WidgetChatListAdapterItemForwardedMessage.kt",

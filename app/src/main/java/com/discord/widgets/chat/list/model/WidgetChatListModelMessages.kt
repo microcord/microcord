@@ -404,19 +404,8 @@ data class WidgetChatListModelMessages(
                 } else {
                     emptyList()
                 }
-            val hostedAccessories = embedRows.filter { it is AttachmentEntry || it is EmbedEntry } + componentRows
-            val customize = MessageCustomization.enabled
-            val inRow = if (customize) emptyList() else hostedAccessories
-            rows += MessageEntry(
-                message, messageState, author, firstMention, roles, names, shouldConcat,
-                blockedChunkExpanded, animateEmojis, autoPlayGifs, inRow, replyData, interactionAuthor,
-                isThreadStarterMessage, isForumPostFirstMessage, isForumPostAuthor,
-                parseCtaData(message, meUserId, guildMembers, channel, permissionsForChannel),
-                permissionsForChannel,
-            )
-            if (customize) rows += hostedAccessories
-            if (message.hasSnapshot()) {
-                rows += ChatListRows.forwardedRows(
+            val forwardedRows = if (message.hasSnapshot()) {
+                ChatListRows.forwardedRows(
                     ChatListRows.State(
                         channel = channel,
                         guildMembers = guildMembers,
@@ -430,7 +419,18 @@ data class WidgetChatListModelMessages(
                     ),
                     message,
                 )
-            }
+            } else emptyList()
+            val hostedAccessories = forwardedRows + embedRows.filter { it is AttachmentEntry || it is EmbedEntry } + componentRows
+            val customize = MessageCustomization.enabled
+            val inRow = if (customize) emptyList() else hostedAccessories
+            rows += MessageEntry(
+                message, messageState, author, firstMention, roles, names, shouldConcat,
+                blockedChunkExpanded, animateEmojis, autoPlayGifs, inRow, replyData, interactionAuthor,
+                isThreadStarterMessage, isForumPostFirstMessage, isForumPostAuthor,
+                parseCtaData(message, meUserId, guildMembers, channel, permissionsForChannel),
+                permissionsForChannel,
+            )
+            if (customize) rows += hostedAccessories
             val threadSpineStart = rows.size
             rows += embedRows.filterNot { it is AttachmentEntry || it is EmbedEntry }
             rows += ChatListEntry.createStickerEntries(message)

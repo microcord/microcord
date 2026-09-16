@@ -96,7 +96,7 @@ import kotlin.math.max
 class WidgetChatListAdapterItemMessage(
     layout: Int,
     adapter: WidgetChatListAdapter,
-) : WidgetChatListItem(layout, adapter) {
+) : WidgetChatListItem(layout, adapter), FragmentLifecycleListener {
 
     private data class PluginContainers(
         val header: ViewGroup?,
@@ -736,6 +736,18 @@ class WidgetChatListAdapterItemMessage(
             holder.bind(index, accessory)
             adoptAccessoryTouches(holder.itemView)
             collapseLeadingGap(holder.itemView, isFirst = index == 0)
+        }
+    }
+
+    override fun onPause() = forEachAccessoryLifecycleListener { it.onPause() }
+
+    override fun onResume() = forEachAccessoryLifecycleListener { it.onResume() }
+
+    private fun forEachAccessoryLifecycleListener(action: (FragmentLifecycleListener) -> Unit) {
+        val container = itemAttachments ?: return
+        repeat(container.childCount) { index ->
+            (container.getChildAt(index).getTag(R.id.chat_list_adapter_item_attachments) as? FragmentLifecycleListener)
+                ?.let(action)
         }
     }
 

@@ -16,11 +16,15 @@ import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.EmbedImage
 import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.user.User
+import com.discord.api.botuikit.ComponentType
 import com.discord.app.AppPermissionsRequests
 import com.discord.databinding.WidgetChatListAdapterItemEmbedBinding
 import com.discord.databinding.WidgetChatListAdapterItemForwardedMessageBinding
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.models.message.Message
+import com.discord.models.botuikit.ContainerMessageComponent
+import com.discord.models.botuikit.TextDisplayMessageComponent
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
@@ -187,6 +191,40 @@ class ForwardedMessageBindTest {
             assertEquals(null, findText(root, "must-not-render"))
             assertEquals(null, root.findViewById<View>(R.id.chat_list_adapter_item_text_avatar))
             assertEquals(null, root.findViewById<View>(R.id.chat_list_adapter_item_text_name))
+
+            val component = ContainerMessageComponent(ComponentType.CONTAINER, 0, 1, listOf(
+                TextDisplayMessageComponent(ComponentType.TEXT_DISPLAY, 1, 2, "### Compact title"),
+            ), null, false)
+            val cv2 = snapshot.copy(content = "", embeds = emptyList())
+            adapter.data = data(forwarded.copy(message = cv2, rows = listOf(
+                BotUiComponentEntry(cv2, 1L, null, listOf(component)),
+            )))
+            holder.onBindViewHolder(0)
+            assertEquals(View.GONE, binding.forwardedMessageContent.visibility)
+            assertEquals(0, binding.forwardedMessageBody.paddingTop)
+            assertEquals(android.graphics.Color.TRANSPARENT, binding.forwardedMessageCard.cardBackgroundColor.defaultColor)
+            assertEquals(binding.forwardedMessageCard.parent, binding.forwardedMessageLabel.parent.parent)
+            val componentView = binding.forwardedMessageRows.getChildAt(0)
+            holder.onBindViewHolder(0)
+            assertSame(componentView, binding.forwardedMessageRows.getChildAt(0))
+
+            adapter.data = data(forwarded)
+            holder.onBindViewHolder(0)
+            assertEquals(View.VISIBLE, binding.forwardedMessageContent.visibility)
+            assertTrue(binding.forwardedMessageBody.paddingTop > 0)
+            assertTrue(binding.forwardedMessageCard.cardBackgroundColor.defaultColor != android.graphics.Color.TRANSPARENT)
+
+            val componentEntry = BotUiComponentEntry(cv2, 1L, null, listOf(component))
+            adapter.data = data(componentEntry)
+            val componentHolder = adapter.onCreateViewHolder(recycler, ChatListEntry.BOT_UI_COMPONENT)
+            componentHolder.onBindViewHolder(0)
+            val componentRoot = componentHolder.itemView.findViewById<ViewGroup>(R.id.chat_list_adapter_item_component_root)
+            val firstRender = componentRoot.getChildAt(0)
+            // Startup model emissions can replace unrelated snapshots; identical component state
+            // must keep the configured tree and its image/markdown work intact.
+            adapter.data = data(componentEntry.copy(guildId = 5L))
+            componentHolder.onBindViewHolder(0)
+            assertSame(firstRender, componentRoot.getChildAt(0))
         }
     }
 

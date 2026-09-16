@@ -7,6 +7,7 @@ import android.text.method.LinkMovementMethod
 import android.text.format.Formatter
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -40,6 +41,10 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MediaProxyUrl
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageTextRenderer
+import com.discord.utilities.textprocessing.node.ZeroSpaceWidthNode
+import com.discord.utilities.textprocessing.spans.VerticalPaddingSpan
+import com.discord.utilities.textprocessing.spans.QuoteSpan
+import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.botuikit.replaceViews
@@ -81,7 +86,7 @@ class TextDisplayComponentView @JvmOverloads constructor(
                 )
             },
         )
-        binding.content.setDraweeSpanStringBuilder(rendered.text)
+        binding.content.setDraweeSpanStringBuilder(compactComponentText(rendered.text))
         binding.content.movementMethod = LinkMovementMethod.getInstance()
     }
 
@@ -92,6 +97,24 @@ class TextDisplayComponentView @JvmOverloads constructor(
             false,
         ) as TextDisplayComponentView
     }
+}
+
+/** The component host owns outer spacing; retain paragraph spacing inside the text. */
+internal fun compactComponentText(text: DraweeSpanStringBuilder): DraweeSpanStringBuilder = text.apply {
+    val hasTouchSentinel = endsWith(ZeroSpaceWidthNode.ZERO_WIDTH_SPACE)
+    if (hasTouchSentinel) delete(length - 1, length)
+    while (isNotEmpty() && last() == '\n') delete(length - 1, length)
+    while (isNotEmpty() && first() == '\n') delete(0, 1)
+    val blockStarts = getSpans(0, length, QuoteSpan::class.java).map { getSpanStart(it) }.toSet() + 0
+    getSpans(0, length, VerticalPaddingSpan::class.java).forEach { span ->
+        val start = getSpanStart(span)
+        if (start in blockStarts) {
+            val end = getSpanEnd(span)
+            val flags = getSpanFlags(span)
+            setSpan(VerticalPaddingSpan(0, span.paddingBottom), start, end, flags)
+        }
+    }
+    if (hasTouchSentinel) append(ZeroSpaceWidthNode.ZERO_WIDTH_SPACE)
 }
 
 class SectionComponentView @JvmOverloads constructor(
@@ -120,8 +143,7 @@ class SectionComponentView @JvmOverloads constructor(
                 ) as? View,
             ),
         )
-        // A thumbnail accessory is a fixed square; a button keeps its own width and sits centred
-        // against the text beside it, which is the only accessory kind that can be narrower.
+        // Thumbnails align with the first text line; buttons remain vertically centered.
         binding.accessory.layoutParams = if (component.accessory is ButtonMessageComponent) {
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -129,7 +151,10 @@ class SectionComponentView @JvmOverloads constructor(
             )
         } else {
             LinearLayout.LayoutParams(dpToPixels(ACCESSORY_SIZE_DP), dpToPixels(ACCESSORY_SIZE_DP))
-        }.apply { marginStart = dpToPixels(ACCESSORY_GAP_DP) }
+        }.apply {
+            marginStart = dpToPixels(ACCESSORY_GAP_DP)
+            gravity = if (component.accessory is ButtonMessageComponent) Gravity.CENTER_VERTICAL else Gravity.TOP
+        }
 
         // A section carries the same failure banner an action row does: its accessory can be a
         // button, and a failed interaction has to be reported under the row it was started from.
@@ -143,7 +168,7 @@ class SectionComponentView @JvmOverloads constructor(
 
     companion object {
         private const val ACCESSORY_SIZE_DP = 80
-        private const val ACCESSORY_GAP_DP = 16
+        private const val ACCESSORY_GAP_DP = 12
 
         fun inflate(context: Context, root: ViewGroup) = LayoutInflater.from(context).inflate(
             R.layout.widget_bot_ui_section_component,

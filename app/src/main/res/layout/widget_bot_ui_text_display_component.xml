@@ -8,6 +8,5 @@
         style="@style/UiKit.Chat.Text"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingTop="2dp"
-        android:paddingBottom="2dp" />
+        android:includeFontPadding="false" />
 </com.discord.widgets.botuikit.views.v2.TextDisplayComponentView>

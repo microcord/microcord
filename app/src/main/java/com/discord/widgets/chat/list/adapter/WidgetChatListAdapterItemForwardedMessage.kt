@@ -58,6 +58,7 @@ class WidgetChatListAdapterItemForwardedMessage(
     private val voiceMessageViews = ArrayList<VoiceMessageView>()
     private val audioPlayerViews = ArrayList<AudioAttachmentPlayerView>()
     private val sourceGuildIconChangeDetector = MGImages.DistinctChangeDetector()
+    private var rowsRenderKey: Any? = null
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
@@ -69,6 +70,15 @@ class WidgetChatListAdapterItemForwardedMessage(
             entry.isPendingReply,
         )
         val content = entry.state == ForwardedMessageEntry.State.CONTENT
+        val hasComponentCard = content && entry.rows.filterIsInstance<BotUiComponentEntry>().any { row ->
+            row.messageComponents.any { it is ContainerMessageComponent }
+        }
+        binding.forwardedMessageCard.setCardBackgroundColor(
+            if (hasComponentCard) Color.TRANSPARENT
+            else ColorCompat.getThemedColor(itemView.context, R.attr.colorBackgroundSecondary),
+        )
+        val bodyPadding = if (hasComponentCard) 0 else dp(8)
+        binding.forwardedMessageBody.setPadding(0, bodyPadding, 0, bodyPadding)
         binding.forwardedMessageLoading.visibility = if (entry.state == ForwardedMessageEntry.State.LOADING) {
             View.VISIBLE
         } else {
@@ -111,7 +121,7 @@ class WidgetChatListAdapterItemForwardedMessage(
 
     private fun bindContent(entry: ForwardedMessageEntry) {
         val message = entry.message
-        if (entry.state != ForwardedMessageEntry.State.CONTENT || message == null) {
+        if (entry.state != ForwardedMessageEntry.State.CONTENT || message == null || message.content.isNullOrBlank()) {
             binding.forwardedMessageContent.visibility = View.GONE
             binding.forwardedMessageContent.text = null
             return
@@ -162,6 +172,11 @@ class WidgetChatListAdapterItemForwardedMessage(
     }
 
     private fun bindRows(entry: ForwardedMessageEntry) {
+        val renderKey = listOf(entry.state, entry.rows.map { row ->
+            if (row is BotUiComponentEntry) listOf(row.message.id, row.messageComponents, row.messageState) else row
+        })
+        if (rowsRenderKey == renderKey) return
+        rowsRenderKey = renderKey
         mediaViews.forEach(InlineMediaView::onPause)
         mediaViews.clear()
         voiceMessageViews.forEach(VoiceMessageView::releasePlayer)

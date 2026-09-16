@@ -4,36 +4,32 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="58dp"
         android:layout_marginTop="4dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="4dp"
-        android:orientation="vertical">
+        android:layout_marginBottom="4dp">
 
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardBackgroundColor="?attr/colorBackgroundSecondary"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="0dp">
+        <View
+            android:id="@+id/forwarded_message_rail"
+            android:layout_width="3dp"
+            android:layout_height="match_parent"
+            android:background="?attr/colorBackgroundAccent"
+            android:importantForAccessibility="no" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp">
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
             android:paddingBottom="4dp">
 
             <ImageView
@@ -47,13 +43,37 @@
 
             <TextView
                 android:id="@+id/forwarded_message_label"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:singleLine="true"
                 android:text="@string/forwarded_message"
                 android:textColor="?attr/colorTextMuted"
                 android:textSize="12sp"
-                style="@style/UiKit.TextView.Bold" />
+                android:textStyle="italic"
+                style="@style/UiKit.TextView" />
         </LinearLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/forwarded_message_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="?attr/colorBackgroundSecondary"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="0dp"
+            app:cardPreventCornerOverlap="false"
+            app:strokeWidth="0dp">
+
+        <LinearLayout
+            android:id="@+id/forwarded_message_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp">
 
         <ProgressBar
             android:id="@+id/forwarded_message_loading"
@@ -123,8 +143,12 @@
 
             <TextView
                 android:id="@+id/forwarded_message_source"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:singleLine="true"
                 android:textColor="?attr/colorTextMuted"
                 android:textSize="12sp"
                 style="@style/UiKit.TextView" />
@@ -132,6 +156,7 @@
         </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
+    </FrameLayout>
     <View android:id="@+id/chat_list_adapter_item_highlighted_bg" android:visibility="gone" android:layout_width="match_parent" android:layout_height="match_parent"/>
     <View android:id="@+id/chat_list_adapter_item_gutter_bg" android:background="?attr/color_brand" android:visibility="gone" android:layout_width="2dp" android:layout_height="match_parent" android:layout_gravity="start"/>
 </FrameLayout>
