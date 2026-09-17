@@ -7,10 +7,11 @@ import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkInfo
+import android.net.NetworkRequest
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import java.util.concurrent.CopyOnWriteArraySet
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -32,6 +33,8 @@ class NetworkMonitor(context: Context) {
 
     private val applicationContext: Context = context.applicationContext
     private val networkStateSubject = BehaviorSubject.create(readState(applicationContext, null))
+    // ponytail: allNetworks is empty on API 31+ even when Wi-Fi is up; trust callbacks.
+    private val availableNetworks = CopyOnWriteArraySet<Network>()
 
     init {
         registerConnectivityNetworkMonitor(applicationContext)
@@ -52,20 +55,26 @@ class NetworkMonitor(context: Context) {
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = updateNetworkState(context, null)
-            override fun onLost(network: Network) = updateNetworkState(context, null)
-            override fun onUnavailable() = updateNetworkState(context, null)
-            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) =
+            override fun onAvailable(network: Network) {
+                availableNetworks.add(network)
                 updateNetworkState(context, null)
+            }
+            override fun onLost(network: Network) {
+                availableNetworks.remove(network)
+                updateNetworkState(context, null)
+            }
+            override fun onUnavailable() {
+                availableNetworks.clear()
+                updateNetworkState(context, null)
+            }
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                availableNetworks.add(network)
+                updateNetworkState(context, null)
+            }
         }
         val registerAllNetworks = {
             runCatching {
-                connectivityManager.registerNetworkCallback(
-                    android.net.NetworkRequest.Builder()
-                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                        .build(),
-                    callback,
-                )
+                connectivityManager.registerNetworkCallback(NetworkRequest.Builder().build(), callback)
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -78,28 +87,36 @@ class NetworkMonitor(context: Context) {
         registerBroadcastAirplaneMode(context)
     }
 
+    @Suppress("DEPRECATION")
     private fun registerBroadcastConnectivityNetworkMonitor(context: Context) {
-        runCatching {
-            @Suppress("DEPRECATION")
-            context.registerReceiver(
-                object : BroadcastReceiver() {
-                    override fun onReceive(receiverContext: Context, intent: Intent) =
-                        updateNetworkState(receiverContext, intent)
-                },
-                IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION),
-            )
-        }
+        registerReceiver(
+            context,
+            object : BroadcastReceiver() {
+                override fun onReceive(receiverContext: Context, intent: Intent) =
+                    updateNetworkState(receiverContext, intent)
+            },
+            IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION),
+        )
     }
 
     private fun registerBroadcastAirplaneMode(context: Context) {
+        registerReceiver(
+            context,
+            object : BroadcastReceiver() {
+                override fun onReceive(receiverContext: Context, intent: Intent) =
+                    updateNetworkState(receiverContext, null)
+            },
+            IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED),
+        )
+    }
+
+    private fun registerReceiver(context: Context, receiver: BroadcastReceiver, filter: IntentFilter) {
         runCatching {
-            context.registerReceiver(
-                object : BroadcastReceiver() {
-                    override fun onReceive(receiverContext: Context, intent: Intent) =
-                        updateNetworkState(receiverContext, null)
-                },
-                IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED),
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(receiver, filter)
+            }
         }
     }
 
@@ -117,26 +134,29 @@ class NetworkMonitor(context: Context) {
      * Reference behavior: an exception while probing is treated as connected so the client never
      * strands itself in a permanent offline banner on a device with a restricted ConnectivityManager.
      */
-    private fun isDeviceConnected(context: Context, intent: Intent?): Boolean = try {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Match the reference: a transient/missing default must not hide another usable network.
-            connectivityManager.allNetworks.any { network ->
-                connectivityManager.getNetworkCapabilities(network)?.let { capabilities ->
-                    isConnectedNetwork(capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET), capabilities::hasTransport)
-                } == true
-            }
-        } else {
+    private fun isDeviceConnected(context: Context, intent: Intent?): Boolean {
+        return try {
+            if (availableNetworks.isNotEmpty()) return true
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            if (isUsable(connectivityManager, connectivityManager.activeNetwork)) return true
+            if (connectivityManager.allNetworks.any { isUsable(connectivityManager, it) }) return true
             @Suppress("DEPRECATION")
-            val candidates: List<NetworkInfo?> = listOf(
+            sequenceOf(
                 connectivityManager.activeNetworkInfo,
                 intent?.getParcelableExtra(ConnectivityManager.EXTRA_NETWORK_INFO),
-            ) + connectivityManager.allNetworks.map(connectivityManager::getNetworkInfo)
-            @Suppress("DEPRECATION")
-            candidates.any { it != null && it.isConnectedOrConnecting }
+                connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI),
+            ).any { it != null && it.isConnectedOrConnecting }
+        } catch (_: Exception) {
+            true
         }
-    } catch (_: Exception) {
-        true
+    }
+
+    private fun isUsable(connectivityManager: ConnectivityManager, network: Network?): Boolean {
+        val capabilities = network?.let { connectivityManager.getNetworkCapabilities(it) } ?: return false
+        return isConnectedNetwork(
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+            capabilities::hasTransport,
+        )
     }
 
     private companion object {
