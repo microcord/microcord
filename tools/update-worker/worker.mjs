@@ -1,4 +1,4 @@
-const API = "https://git.hoodnet.work/api/v3/repos/firecord/microcord";
+const API = "https://git.hoodnet.work/api/v3/repos/microcord/microcord";
 const DOWNLOAD_ORIGIN = "https://media.git.hoodnet.work";
 const APK_NAME = "app-release.apk";
 const MANIFEST_NAME = "update-manifest.json";

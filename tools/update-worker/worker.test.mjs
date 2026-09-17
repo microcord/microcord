@@ -3,7 +3,7 @@ import { afterEach, beforeEach, mock, test } from "node:test";
 import worker from "./worker.mjs";
 
 const origin = "https://updates.example.com";
-const api = "https://git.hoodnet.work/api/v3/repos/firecord/microcord";
+const api = "https://git.hoodnet.work/api/v3/repos/microcord/microcord";
 const env = { GITHUB_TOKEN: "local-test-only" };
 const release = {
   tag_name: "build-42", draft: false, prerelease: false, published_at: "2026-09-06T12:00:00Z",
