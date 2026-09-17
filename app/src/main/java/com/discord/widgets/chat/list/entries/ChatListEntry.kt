@@ -18,6 +18,7 @@ import com.discord.widgets.botuikit.ComponentStateMapper
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.user.NicknameUtils
 import com.discord.api.channel.isPrivate
+import com.discord.utilities.feature.FeatureFlags
 
 /**
  * One row of the chat list.
@@ -428,7 +429,8 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                 val nick = if (isPrivate) {
                     NicknameUtils.getFriendNickname(user.id)
                 } else {
-                    guildMembers[user.id]?.nick ?: user.member?.nick
+                    guildMembers[user.id]?.identityNick()
+                        ?: user.member?.nick?.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
                 }
                 names[user.id] = user.getDisplayName(nick)
             }

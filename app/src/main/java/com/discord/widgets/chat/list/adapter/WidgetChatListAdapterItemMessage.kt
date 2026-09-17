@@ -344,13 +344,14 @@ class WidgetChatListAdapterItemMessage(
 
     private fun configureAuthorName(entry: MessageEntry, message: Message) {
         val itemName = itemName ?: return
-        itemName.text = entry.authorDisplayName()
+        val guildIdentityEnabled = !FeatureFlags.disableServerProfilesEnabled()
+        itemName.text = entry.authorDisplayName(guildIdentityEnabled)
         itemName.setTextColor(authorTextColor(entry.author))
         // Font only: the reference leaves author names uncoloured, since a long channel would be
         // re-shading a name on every row.
         DisplayNameStyleRenderer.apply(
             itemName,
-            DisplayNameStyleUtils.resolve(message.author, entry.author),
+            DisplayNameStyleUtils.resolve(message.author, entry.author.takeIf { guildIdentityEnabled }),
             DisplayNameStyleRenderer.Mode.FONT,
         )
         itemName.setOnClickListener {
@@ -406,7 +407,8 @@ class WidgetChatListAdapterItemMessage(
             visibility = if (visible) View.VISIBLE else View.GONE
             if (visible) setPresence(presence)
         }
-        itemAvatarDecoration?.bind(entry.author?.avatarDecoration ?: message.author?.avatarDecorationData?.value)
+        val guildMember = chatIdentityMember(entry.author)
+        itemAvatarDecoration?.bind(guildMember?.avatarDecoration ?: message.author?.avatarDecorationData?.value)
         itemAvatar.setOnClickListener {
             adapter.eventHandler.onMessageAuthorAvatarClicked(message, adapter.data.guildId)
         }
@@ -421,7 +423,7 @@ class WidgetChatListAdapterItemMessage(
         val application = message.application
         if (message.isLocalApplicationCommand() &&
             message.author?.avatar?.value == null &&
-            entry.author?.avatarHash == null &&
+            guildMember?.avatarHash == null &&
             application?.icon != null
         ) {
             IconUtils.setIcon(itemAvatar, IconUtils.getApplicationIcon(application.id, application.icon))
@@ -433,7 +435,7 @@ class WidgetChatListAdapterItemMessage(
             itemAvatar,
             CoreUser(author),
             R.dimen.avatar_size_chat,
-            guildMember = entry.author,
+            guildMember = guildMember,
         )
     }
 
@@ -1019,8 +1021,11 @@ class WidgetChatListAdapterItemMessage(
         messageEntry: MessageEntry,
         didMention: Boolean = false,
     ) {
-        configureReplyAvatar(replyAuthor, replyGuildMember ?: messageEntry.author)
-        val name = messageEntry.nickOrUsernames[replyAuthor.id] ?: replyAuthor.displayName
+        val guildIdentityEnabled = !FeatureFlags.disableServerProfilesEnabled()
+        configureReplyAvatar(replyAuthor, (replyGuildMember ?: messageEntry.author).takeIf { guildIdentityEnabled })
+        val name = if (guildIdentityEnabled) {
+            messageEntry.nickOrUsernames[replyAuthor.id] ?: replyAuthor.displayName
+        } else replyAuthor.displayName
         configureReplyName(name, authorTextColor(replyGuildMember), didMention)
     }
 
@@ -1275,8 +1280,17 @@ class WidgetChatListAdapterItemMessage(
  * account username. The mapping is resolved once, when the row's entry is built, so every row that
  * mentions the same person agrees on what to call them.
  */
-internal fun MessageEntry.authorDisplayName(): String? =
-    message.author?.id?.let(nickOrUsernames::get)
+internal fun MessageEntry.authorDisplayName(
+    guildIdentityEnabled: Boolean = !FeatureFlags.disableServerProfilesEnabled(),
+): String? = message.author?.let { author ->
+    if (guildIdentityEnabled) nickOrUsernames[author.id]
+    else author.globalName?.takeIf(String::isNotBlank) ?: author.username
+}
+
+internal fun chatIdentityMember(
+    member: GuildMember?,
+    disableServerProfiles: Boolean = FeatureFlags.disableServerProfilesEnabled(),
+): GuildMember? = member.takeUnless { disableServerProfiles }
 
 internal fun Message.isFollowedChannelPost(): Boolean =
     type == 0 && messageReference != null && messageReference.type != FORWARD_REFERENCE_TYPE

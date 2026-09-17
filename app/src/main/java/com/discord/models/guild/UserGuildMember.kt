@@ -7,7 +7,7 @@ data class UserGuildMember(
     val user: User,
     val guildMember: GuildMember? = null,
 ) {
-    val nickname: String? = guildMember?.nick
+    val nickname: String? = guildMember?.identityNick()
 
     fun getNickOrUserName() = GuildMember.getNickOrUsername(guildMember, user)
 }

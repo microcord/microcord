@@ -157,7 +157,7 @@ class WidgetChatListAdapterItemStageInvite(
     private fun speaker(user: User, guildMember: GuildMember?) = StageCardSpeakersView.Speaker(
         user = user,
         guildMember = guildMember,
-        displayName = user.getDisplayName(guildMember?.nick),
+        displayName = user.getDisplayName(guildMember?.identityNick()),
     )
 
     private data class Model(

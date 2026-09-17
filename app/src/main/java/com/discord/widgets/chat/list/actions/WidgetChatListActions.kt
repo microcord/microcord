@@ -444,7 +444,7 @@ class WidgetChatListActions : AppBottomSheet() {
             ) = Model(
                 message = message,
                 guild = guild,
-                messageAuthorName = message.author?.getDisplayName(member?.nick).orEmpty(),
+                messageAuthorName = message.author?.getDisplayName(member?.identityNick()).orEmpty(),
                 messageContent = messageContent ?: message.content,
                 manageMessageContext = ManageMessageContext.from(
                     message,

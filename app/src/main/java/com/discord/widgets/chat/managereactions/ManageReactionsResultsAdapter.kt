@@ -96,7 +96,7 @@ class ManageReactionsResultsAdapter(recycler: RecyclerView) :
             super.onConfigure(position, data)
             val item = data as ReactionUserItem
             name.text = item.user.getDisplayName(
-                item.guildMember?.nick
+                item.guildMember?.identityNick()
                     ?: NicknameUtils.getNickname(null, item.channelId, item.user.id),
             )
             IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard, guildMember = item.guildMember)

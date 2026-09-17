@@ -3,6 +3,8 @@ package com.discord.widgets.chat.list.adapter
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.user.User
 import com.discord.models.message.Message
+import com.discord.models.member.GuildMember
+import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.restapi.RestAPIParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,6 +13,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WidgetChatListAdapterEventsHandlerTest {
+    @Test fun disabledServerProfilesUseAccountAuthorIdentity() {
+        val author = User(8L, "account", globalName = "Account Name")
+        val message = Message(id = 1L, author = author, type = 0)
+        val member = GuildMember(0, 0, null, "Server Name", null, false, null, 1L, 8L,
+            avatarHash = "server-avatar", bannerHash = "server-banner")
+        val entry = MessageEntry(message, null, member, roles = null,
+            nickOrUsernames = mapOf(8L to "Server Name"), isExpandedBlocked = false,
+            permissionsForChannel = null)
+
+        assertEquals("Server Name", entry.authorDisplayName(guildIdentityEnabled = true))
+        assertEquals("Account Name", entry.authorDisplayName(guildIdentityEnabled = false))
+        assertEquals(member, chatIdentityMember(member, disableServerProfiles = false))
+        assertNull(chatIdentityMember(member, disableServerProfiles = true))
+    }
+
     @Test fun componentInteractionDataMatchesButtonAndSelectPayloads() {
         assertNull(WidgetChatListAdapterEventsHandler.componentInteractionData(null, null, ComponentType.BUTTON))
 

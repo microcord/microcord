@@ -68,7 +68,7 @@ class SettingsMemberView constructor(
     fun configure(user: User, guildMember: GuildMember?) {
         this.user = user
         this.guildMember = guildMember
-        val nickname = guildMember?.nick
+        val nickname = guildMember?.identityNick()
         val hasNickname = !nickname.isNullOrBlank()
         val hasGuildAvatar = guildMember?.hasAvatar() == true
         val avatarRequestSize = resources.getDimensionPixelSize(R.dimen.avatar_size_large)

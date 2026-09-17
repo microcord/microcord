@@ -88,7 +88,7 @@ class StoreVoiceParticipants(
     ) {
         // A guild nick wins in a guild channel; in a private call there is no member, so the
         // friend nickname is what applies.
-        val nickname: String? = guildMember?.nick
+        val nickname: String? = guildMember?.identityNick()
             ?: NicknameUtils.getNickname(null, voiceState?.channelId, user.id)
         val callStreamId: Int? = streams?.callStreamId
         val applicationStreamId: Int? = streams?.applicationStreamId

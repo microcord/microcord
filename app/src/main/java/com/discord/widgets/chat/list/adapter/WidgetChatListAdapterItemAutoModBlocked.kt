@@ -59,7 +59,7 @@ class WidgetChatListAdapterItemAutoModBlocked(
             )
         }
 
-        username.text = entry.message.author?.getDisplayName(entry.author?.nick)
+        username.text = entry.message.author?.getDisplayName(entry.author?.identityNick())
         username.setTextColor(
             GuildMember.getColor(entry.author, ThemedColor.resolve(context, R.attr.colorHeaderPrimary)),
         )

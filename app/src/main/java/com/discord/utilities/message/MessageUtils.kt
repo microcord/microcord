@@ -119,7 +119,9 @@ object MessageUtils {
         nicks: List<ChannelRecipientNick>?,
         contextNickname: String?,
     ): String = user.getDisplayName(
-        contextNickname ?: nicks?.firstOrNull { it.id == user.id }?.nick ?: guildMember?.nick,
+        contextNickname ?: nicks?.firstOrNull { it.id == user.id }?.nick
+            ?.takeUnless { com.discord.utilities.feature.FeatureFlags.disableServerProfilesEnabled() }
+            ?: guildMember?.identityNick(),
     )
 
     /**

@@ -29,6 +29,7 @@ import com.discord.stores.StoreUserRelationships
 import com.discord.stores.StoreVoiceChannelSelected
 import com.discord.stores.StoreVoiceStates
 import com.discord.utilities.rx.leadingEdgeThrottle
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.streams.StreamContext
 import com.discord.widgets.user.presence.ModelRichPresence
 import com.discord.widgets.stage.StageRoles
@@ -148,7 +149,10 @@ object WidgetUserSheetViewModelStoreState {
                 val myStageRoles: Observable<StageRoles?> = stageChannel
                     ?.let { storeStageChannels.observeMyRoles(it.id) }
                     ?: Observable.just(null)
-                val profileData = storeUserProfile.observeUserProfile(user.id, scopedGuildId).switchMap { profile ->
+                val profileData = storeUserProfile.observeUserProfile(
+                    user.id,
+                    scopedGuildId.takeUnless { FeatureFlags.disableServerProfilesEnabled() },
+                ).switchMap { profile ->
                     val gameIds = profile.widgets.orEmpty().flatMapTo(linkedSetOf()) { widget ->
                         widget.data.games.orEmpty().map(UserProfile.ProfileWidgetGame::gameId)
                     }

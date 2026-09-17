@@ -59,7 +59,7 @@ class UserAvatarPresenceViewController(
 
     fun configureView(viewState: UserAvatarPresenceView.ViewState) {
         view.configure(viewState)
-        view.setAvatarDecoration(viewState.guildMember?.avatarDecoration ?: viewState.user.avatarDecoration)
+            view.setAvatarDecoration(viewState.guildMember?.identityAvatarDecoration() ?: viewState.user.avatarDecoration)
     }
 
     @MainThread

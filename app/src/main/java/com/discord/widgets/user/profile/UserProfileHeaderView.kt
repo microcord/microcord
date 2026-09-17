@@ -174,7 +174,7 @@ class UserProfileHeaderView(context: Context, attrs: AttributeSet) : LinearLayou
         val accountName = user.getUserNameWithDiscriminator()
         // A guild member id short-circuits the lookup, so a member with no nickname stays on the
         // account display name rather than falling through to a friend nickname.
-        val contextNickname = member?.nick
+        val contextNickname = member?.identityNick()
             ?: NicknameUtils.getNickname(member?.guildId, state.channelId, user.id)
         val displayName = user.getDisplayName(contextNickname)
         val primary = if (displayName == user.username) accountName else displayName

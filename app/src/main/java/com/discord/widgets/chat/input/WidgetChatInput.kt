@@ -1923,7 +1923,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val member = pending.messageReference.guildId?.let { guildId ->
             author?.id?.let { StoreStream.getGuilds().getMember(guildId, it) }
         }
-        val username = author?.getDisplayName(member?.nick).orEmpty()
+        val username = author?.getDisplayName(member?.identityNick()).orEmpty()
         val rendered = requireContext().i18nRender(R.string.mobile_replying_to, "username" to username)
         description.text = SpannableString(rendered).apply {
             // The renderer's emphasis run is exactly the name, so the role colour rides on it.

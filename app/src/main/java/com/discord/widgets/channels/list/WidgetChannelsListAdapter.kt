@@ -1575,7 +1575,7 @@ class WidgetChannelsListAdapter(
         }
 
         private fun speakerSummary(speakers: List<UserGuildMember>): CharSequence {
-            val first = speakers.first().let { it.user.getDisplayName(it.guildMember?.nick) }
+            val first = speakers.first().let { it.user.getDisplayName(it.guildMember?.identityNick()) }
             if (speakers.size == 1) return first
             return userSummaryLabel.i18nFormat(
                 R.string.user_summary_with_others,

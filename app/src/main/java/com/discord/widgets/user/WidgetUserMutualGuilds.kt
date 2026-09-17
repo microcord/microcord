@@ -103,7 +103,9 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
                 visibility = if (guild.icon == null) View.VISIBLE else View.GONE; text = guild.shortName
             }
             val hasGuildMemberAvatar = item.member?.hasAvatar() == true
-            val identity = item.user?.getDisplayName(item.nick)
+            val identity = item.user?.getDisplayName(
+                item.nick.takeUnless { com.discord.utilities.feature.FeatureFlags.disableServerProfilesEnabled() },
+            )
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_user_display_name).apply {
                 text = identity
                 visibility = if (item.nick != null || hasGuildMemberAvatar) View.VISIBLE else View.GONE

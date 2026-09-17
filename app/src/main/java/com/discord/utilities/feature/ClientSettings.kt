@@ -84,6 +84,7 @@ object ClientSettings {
     val tapTap = register(BooleanSetting("feature_tap_tap"))
     val fetchUncachedUsers = register(BooleanSetting("feature_fetch_uncached_users"))
     val viewProfileImages = register(BooleanSetting("feature_view_profile_images"))
+    val disableServerProfiles = register(BooleanSetting("feature_disable_server_profiles"))
     val chatboxCustomizations = register(BooleanSetting("feature_chatbox_customizations"))
     val headerCustomizations = register(BooleanSetting("feature_header_customizations"))
     val typingUserAvatars = register(BooleanSetting("feature_typing_user_avatars"))

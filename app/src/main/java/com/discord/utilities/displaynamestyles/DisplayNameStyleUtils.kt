@@ -4,6 +4,7 @@ import com.discord.api.user.DisplayNameStyles
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.api.user.User as ApiUser
+import com.discord.utilities.feature.FeatureFlags
 
 /** Which style a name should be drawn with, given where it is being drawn. */
 object DisplayNameStyleUtils {
@@ -16,7 +17,8 @@ object DisplayNameStyleUtils {
      */
     @JvmStatic
     fun resolve(user: User?, guildMember: GuildMember? = null): DisplayNameStyles? =
-        guildMember?.displayNameStyles ?: user?.displayNameStyles
+        guildMember?.displayNameStyles?.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
+            ?: user?.displayNameStyles
 
     /**
      * The same rule for a caller holding the wire user rather than the model one.
@@ -26,5 +28,6 @@ object DisplayNameStyleUtils {
      */
     @JvmStatic
     fun resolve(user: ApiUser?, guildMember: GuildMember? = null): DisplayNameStyles? =
-        guildMember?.displayNameStyles ?: user?.displayNameStyles?.value
+        guildMember?.displayNameStyles?.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
+            ?: user?.displayNameStyles?.value
 }

@@ -313,7 +313,7 @@ class WidgetUserSheet : AppBottomSheet() {
                 loaded.hasPremiumCustomization,
                 activity?.name,
                 activity?.platform,
-                loaded.guildMember,
+                loaded.contextualGuildMember,
                 loaded.isProfilePrivate,
             )
             viewModel.openPopoutLogged = true
@@ -963,7 +963,7 @@ class WidgetUserSheet : AppBottomSheet() {
         if (!state.isProfilePrivate) return
         binding.userSheetPrivateProfileText.text = requireContext().i18nFormat(
             R.string.user_profile_private_info_banner,
-            "username" to state.user.getDisplayName(state.guildMember?.nick),
+            "username" to state.user.getDisplayName(state.guildMember?.identityNick()),
         )
     }
 
@@ -973,7 +973,7 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetMemberSinceDiscord.text =
             TimeUtils.toMediumDate(TimeUtils.parseSnowflake(state.user.id))
 
-        val guildJoined = state.guildMember?.joinedAt?.dateTimeMillis
+        val guildJoined = state.contextualGuildMember?.joinedAt?.dateTimeMillis
         val guildId = state.currentGuildId?.takeIf { it > 0L }
         val showGuild = guildJoined != null && guildId != null
         binding.userSheetMemberSinceDivider.show(showGuild)
@@ -1123,15 +1123,18 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetMoreButton.setOnClickListener { anchor ->
             val userId = argumentsOrDefault.getLong(ARG_USER_ID)
             val guildId = menuGuildId()
+            val serverProfiles = !FeatureFlags.disableServerProfilesEnabled()
             UserActionsDialog.show(
                 parentFragmentManager,
                 userId,
                 argumentsOrDefault.getLong(ARG_CHANNEL_ID),
                 anchor,
                 guildId = guildId,
-                isShowingGuildProfile = currentGuildId() != null,
+                isShowingGuildProfile = serverProfiles && currentGuildId() != null,
                 onViewMainProfile = { reopen(userId, guildId, showGuildProfile = false) },
-                onViewServerProfile = { reopen(userId, guildId, showGuildProfile = true) },
+                onViewServerProfile = if (serverProfiles) {
+                    { reopen(userId, guildId, showGuildProfile = true) }
+                } else null,
             )
         }
         binding.userSheetRemoveFriendButton.setOnClickListener { confirmRemoveFriend() }
@@ -1159,7 +1162,7 @@ class WidgetUserSheet : AppBottomSheet() {
 
     private fun confirmRemoveFriend() {
         val state = viewModel.viewState as? WidgetUserSheetViewModel.ViewState.Loaded ?: return
-        val name = state.user.getDisplayName(state.guildMember?.nick)
+        val name = state.user.getDisplayName(state.guildMember?.identityNick())
         WidgetNoticeDialog.Builder(requireContext())
             .setTitle(requireContext().i18nRender(R.string.remove_friend_title, "name" to name))
             .setMessage(requireContext().i18nRender(R.string.remove_friend_body, "name" to name))

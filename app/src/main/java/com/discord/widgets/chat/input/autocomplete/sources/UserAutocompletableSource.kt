@@ -107,7 +107,7 @@ class UserAutocompletableSource(
                     UserAutocompletable(
                         user = user,
                         guildMember = member,
-                        nickname = member.nick,
+                        nickname = member.identityNick(),
                         presence = presences[userId],
                         canUserReadChannel = canRead,
                     ),

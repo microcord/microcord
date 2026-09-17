@@ -74,6 +74,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.viewProfileImagesEnabled()
             setOnCheckedListener(FeatureFlags::setViewProfileImagesEnabled)
         }
+        binding.settingsFeatureDisableServerProfiles.apply {
+            isChecked = FeatureFlags.disableServerProfilesEnabled()
+            setOnCheckedListener(FeatureFlags::setDisableServerProfilesEnabled)
+        }
         binding.settingsFeatureTypingUserAvatars.apply {
             isChecked = FeatureFlags.typingUserAvatarsEnabled()
             setOnCheckedListener(FeatureFlags::setTypingUserAvatarsEnabled)

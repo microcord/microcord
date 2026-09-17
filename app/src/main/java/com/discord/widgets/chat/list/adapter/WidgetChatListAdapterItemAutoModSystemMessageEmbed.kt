@@ -13,6 +13,7 @@ import com.discord.models.user.CoreUser
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MarkupEligibility
@@ -62,7 +63,7 @@ class WidgetChatListAdapterItemAutoModSystemMessageEmbed(
                 binding.chatListAdapterItemTextAvatar,
                 coreUser,
                 R.dimen.avatar_size_chat,
-                guildMember = entry.author,
+                guildMember = entry.author.takeUnless { FeatureFlags.disableServerProfilesEnabled() },
             )
             binding.username.text = GuildMember.getNickOrUsername(entry.author, coreUser)
         }

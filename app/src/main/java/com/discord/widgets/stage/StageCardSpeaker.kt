@@ -14,5 +14,5 @@ data class StageCardSpeaker(
     val user: User,
     val guildMember: GuildMember?,
 ) {
-    val displayName: String = user.getDisplayName(guildMember?.nick)
+    val displayName: String = user.getDisplayName(guildMember?.identityNick())
 }

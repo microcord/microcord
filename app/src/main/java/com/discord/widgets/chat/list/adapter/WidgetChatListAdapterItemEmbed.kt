@@ -656,7 +656,7 @@ class WidgetChatListAdapterItemEmbed(
                 StoreStream.getUsers().observeUsernames(mentions.users),
             ) { members: Map<Long, GuildMember>, usernames: Map<Long, String> ->
                 // A guild nickname wins over the account username wherever one exists.
-                usernames + members.mapNotNull { (id, member) -> member.nick?.let { id to it } }
+                usernames + members.mapNotNull { (id, member) -> member.identityNick()?.let { id to it } }
             },
             guilds.observeRoles(guildId, mentions.roles),
             StoreStream.getUsers().observeFetchingUserIds(),

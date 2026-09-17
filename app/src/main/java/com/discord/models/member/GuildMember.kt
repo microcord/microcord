@@ -10,6 +10,7 @@ import com.discord.api.user.DisplayNameStyles
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.user.User
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.utilities.feature.FeatureFlags
 
 data class GuildMember(
     @ColorInt val color: Int,
@@ -34,9 +35,18 @@ data class GuildMember(
 
     fun getRoles(): List<Long> = roles ?: emptyRoles
 
-    fun hasAvatar() = !avatarHash.isNullOrEmpty() && guildId > 0 && userId > 0
+    fun hasAvatar() = !FeatureFlags.disableServerProfilesEnabled() &&
+        !avatarHash.isNullOrEmpty() && guildId > 0 && userId > 0
 
-    fun hasBanner() = !bannerHash.isNullOrEmpty() && guildId > 0 && userId > 0
+    fun hasBanner() = !FeatureFlags.disableServerProfilesEnabled() &&
+        !bannerHash.isNullOrEmpty() && guildId > 0 && userId > 0
+
+    fun identityNick(): String? = nick.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
+    fun identityBannerHash(): String? = bannerHash.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
+    fun identityBio(): String? = bio.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
+    fun identityCollectibles(): Collectibles? = collectibles.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
+    fun identityAvatarDecoration(): AvatarDecorationData? =
+        avatarDecoration.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
 
     fun isCommunicationDisabled() =
         communicationDisabledUntil?.dateTimeMillis?.let { it > System.currentTimeMillis() } == true
@@ -94,14 +104,14 @@ data class GuildMember(
             member1: GuildMember?,
             member2: GuildMember?,
         ): Int {
-            val name1 = user1.getDisplayName(member1?.nick)
-            val name2 = user2.getDisplayName(member2?.nick)
+            val name1 = user1.getDisplayName(member1?.identityNick())
+            val name2 = user2.getDisplayName(member2?.identityNick())
             return name1.compareTo(name2, ignoreCase = true).takeUnless { it == 0 }
                 ?: user1.id.compareTo(user2.id)
         }
 
         @JvmStatic
-        fun getNickOrUsername(member: GuildMember?, user: User) = user.getDisplayName(member?.nick)
+        fun getNickOrUsername(member: GuildMember?, user: User) = user.getDisplayName(member?.identityNick())
 
         private val roleComparator = compareBy<GuildRole>({ it.position }, { it.id })
     }

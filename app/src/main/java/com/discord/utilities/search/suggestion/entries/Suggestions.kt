@@ -110,9 +110,9 @@ data class UserSuggestion(
     val userName: String = user.username
     val discriminator: Int = user.discriminator
     val userId: Long = user.id
-    val nickname: String? = guildMember?.nick
+    val nickname: String? = guildMember?.identityNick()
     /** Guild nickname, else the account display name, else the handle. */
-    val displayName: String = user.getDisplayName(guildMember?.nick)
+    val displayName: String = user.getDisplayName(guildMember?.identityNick())
     val usernameWithDiscriminator: String = usernameWithDiscriminator(userName, discriminator)
 
     override val category: SearchSuggestion.Category = when (targetType) {

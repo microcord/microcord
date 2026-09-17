@@ -12,6 +12,7 @@ import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.utilities.feature.FeatureFlags
 
 /**
  * Convenience bridge between a [Message] and the markdown pipeline for chat surfaces.
@@ -103,7 +104,7 @@ object MessageTextRenderer {
         message.mentions.orEmpty().forEach { user ->
             userNames[user.id] = user.getDisplayName(
                 members[user.id]?.nick
-                    ?: user.member?.nick
+                    ?: user.member?.nick?.takeUnless { FeatureFlags.disableServerProfilesEnabled() }
                     ?: NicknameUtils.getNickname(guildId, message.channelId, user.id),
             )
         }

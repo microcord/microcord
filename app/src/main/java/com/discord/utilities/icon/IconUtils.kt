@@ -15,6 +15,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.images.MGImages
+import com.discord.utilities.feature.FeatureFlags
 import com.facebook.imagepipeline.request.ImageRequestBuilder
 
 /**
@@ -290,7 +291,7 @@ object IconUtils  {
         size: Int? = AVATAR_SIZE_DP,
         allowAnimation: Boolean = false,
     ): String? =
-        if (guildMember != null && guildMember.hasAvatar()) {
+        if (!FeatureFlags.disableServerProfilesEnabled() && guildMember != null && guildMember.hasAvatar()) {
             getForGuildMember(guildMember, size, allowAnimation)
         } else {
             getForUser(user, allowAnimation, size)
@@ -641,7 +642,7 @@ object IconUtils  {
             } else {
                 null
             }
-        val url = if (guildMember != null && guildMember.hasAvatar()) {
+        val url = if (!FeatureFlags.disableServerProfilesEnabled() && guildMember != null && guildMember.hasAvatar()) {
             getForGuildMember(guildMember, sizePx)
         } else {
             getForUser(userId, userAvatar, discriminator, size = sizePx)

@@ -9,6 +9,7 @@ import com.discord.api.voice.state.StageRequestToSpeakState
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.user.MeUser
+import com.discord.models.member.GuildMember
 import com.discord.stores.Dispatcher
 import com.discord.stores.StoreUserNotes
 import com.discord.stores.StoreUserProfile
@@ -55,6 +56,29 @@ class WidgetUserSheetActionsTest {
 
         assertEquals("server bio" to true, WidgetUserSheetViewModel.resolveProfileBio(profile, "cached server", "cached account"))
         assertEquals("account bio" to false, WidgetUserSheetViewModel.resolveProfileBio(profile.copy(guildMemberProfile = null), null, "cached account"))
+    }
+
+    @Test
+    fun `disabled server profiles preserve guild context but remove identity overrides`() {
+        val profile = UserProfile(
+            premiumGuildSince = "today",
+            guildMemberProfile = UserProfile.ProfileMetadata(bio = "server bio", banner = "server banner"),
+            userProfile = UserProfile.ProfileMetadata(bio = "account bio", banner = "account banner"),
+            guildBadges = emptyList(),
+        )
+        val member = GuildMember(
+            color = 0x123456, hoistRoleId = 9L, roles = listOf(9L), nick = "server name",
+            premiumSince = null, pending = false, joinedAt = null, guildId = 1L, userId = 2L,
+            avatarHash = "server avatar", bannerHash = "server banner", bio = "cached server bio",
+        )
+
+        val (globalProfile, contextualMember) = WidgetUserSheetViewModel.profileIdentity(profile, member, true)
+        assertEquals(null, globalProfile.guildMemberProfile)
+        assertEquals(null, globalProfile.guildBadges)
+        assertEquals(null, globalProfile.premiumGuildSince)
+        assertEquals("account bio", globalProfile.userProfile?.bio)
+        assertEquals(null, contextualMember)
+        assertEquals(profile to member, WidgetUserSheetViewModel.profileIdentity(profile, member, false))
     }
 
     @Test

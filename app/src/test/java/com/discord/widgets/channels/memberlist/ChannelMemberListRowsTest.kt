@@ -10,8 +10,45 @@ import com.discord.widgets.channels.memberlist.adapter.ChannelMembersListAdapter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.After
+import org.junit.Before
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
+import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.feature.ClientPreferenceSnapshotTest.MemoryPreferences
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.stores.StoreStream
+import com.discord.stores.storeTestScheduler
 
 class ChannelMemberListRowsTest {
+    @get:Rule val temporary = TemporaryFolder()
+
+    @Before fun setUp() {
+        val preferences = MemoryPreferences()
+        StoreStream.initializeForTesting(temporary.newFolder(), preferences, preferences,
+            storeTestScheduler("member-list-identity-test"))
+    }
+
+    @After fun resetSettings() = SharedPreferencesProvider.setInstanceForTesting(null)
+
+    @Test fun disablingServerProfilesUsesAccountIdentityEverywhereInMemberRows() {
+        val preferences = MemoryPreferences()
+        SharedPreferencesProvider.setInstanceForTesting(preferences)
+        FeatureFlags.setDisableServerProfilesEnabled(true)
+        val user = CoreUser(1, "account", globalName = "Account Name")
+        val role = role(10, "Role")
+        val member = member(1, role.id, "Server Name")
+        val row = ChannelMemberListRows.guild(ChannelMemberListRows.GuildInput(
+            "guild", 2, listOf(LazyMemberListRow.Member(1)), mapOf(1L to user),
+            mapOf(1L to member), mapOf(1L to online),
+        )).single() as ChannelMemberListRow.Member
+
+        assertEquals("Account Name", row.displayName)
+        assertEquals(user.avatarDecoration, row.avatarDecoration)
+        assertEquals(user.displayNameStyles, row.displayNameStyles)
+        assertEquals(role.id, row.guildMember?.getRoles()?.single())
+    }
+
     private val online = Presence(ClientStatus.ONLINE, null, null)
     private val offline = Presence(ClientStatus.OFFLINE, null, null)
 

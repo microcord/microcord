@@ -16,6 +16,7 @@ import com.discord.widgets.channels.permissions.PermissionOwner
 import com.discord.views.VitoImageView
 import com.discord.utilities.user.UserUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 
 class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
@@ -62,7 +63,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
         image.hierarchy.setPlaceholderImage(ColorDrawable(0))
         image.setImageURI(url)
-        name.text = user.getDisplayName(owner.nickname)
+        name.text = user.getDisplayName(owner.nickname.takeUnless { FeatureFlags.disableServerProfilesEnabled() })
         description.text = user.username + UserUtils.discriminatorSuffix(user.discriminator)
         crown.visibility = if (owner.isOwner) View.VISIBLE else View.GONE
     }

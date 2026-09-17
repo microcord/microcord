@@ -86,7 +86,7 @@ class WidgetChatListAdapterItemBotComponentRow(
         return StoreStream.getGuilds().getMembers()[guildId].orEmpty().values
             .mapNotNull { member ->
                 val user = users[member.userId] ?: return@mapNotNull null
-                option(member.nick ?: user.displayName, member.userId)
+                option(member.identityNick() ?: user.displayName, member.userId)
             }
             .sortedBy { it.label }
     }

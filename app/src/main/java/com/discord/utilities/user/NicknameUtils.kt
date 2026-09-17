@@ -5,6 +5,7 @@ import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.api.user.User as ApiUser
+import com.discord.utilities.feature.FeatureFlags
 
 /**
  * Resolves the name to show for a user in a given context.
@@ -19,7 +20,7 @@ import com.discord.api.user.User as ApiUser
 object NicknameUtils {
 
     fun getNickname(guildId: Long?, channelId: Long?, userId: Long): String? {
-        if (guildId != null) return StoreStream.getGuilds().getMember(guildId, userId)?.nick
+        if (guildId != null) return StoreStream.getGuilds().getMember(guildId, userId)?.identityNick()
         if (channelId != null) {
             val channel = StoreStream.getChannels().getChannel(channelId) ?: return null
             if (channel.isPrivate()) return StoreStream.getUserRelationships().getNickname(userId)

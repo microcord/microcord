@@ -43,8 +43,8 @@ sealed class ChannelMemberListRow(open val key: String) {
         val isOwner: Boolean,
         val isApplicationStreaming: Boolean = false,
         val canDisplayStatusEmoji: Boolean = true,
-        val nameplate: Nameplate? = guildMember?.collectibles?.nameplate ?: user.collectibles?.nameplate,
-    val avatarDecoration: AvatarDecorationData? = guildMember?.avatarDecoration ?: user.avatarDecoration,
+        val nameplate: Nameplate? = guildMember?.identityCollectibles()?.nameplate ?: user.collectibles?.nameplate,
+    val avatarDecoration: AvatarDecorationData? = guildMember?.identityAvatarDecoration() ?: user.avatarDecoration,
     val displayNameStyles: DisplayNameStyles? = DisplayNameStyleUtils.resolve(user, guildMember),
     ) : ChannelMemberListRow("member:${user.id}")
 
@@ -238,7 +238,7 @@ object ChannelMemberListRows {
             }
         }
         val order = compareBy<Long> { userId ->
-            users.getValue(userId).getDisplayName(members[userId]?.nick).lowercase(Locale.ROOT)
+            users.getValue(userId).getDisplayName(members[userId]?.identityNick()).lowercase(Locale.ROOT)
         }.thenBy { it }
         return buildList {
             orderedRoles.forEach { role ->
@@ -273,7 +273,7 @@ object ChannelMemberListRows {
             user,
             guildMember,
             presences[userId],
-            user.getDisplayName(guildMember?.nick),
+            user.getDisplayName(guildMember?.identityNick()),
             userId == ownerId,
             userId in streamingUserIds,
         )

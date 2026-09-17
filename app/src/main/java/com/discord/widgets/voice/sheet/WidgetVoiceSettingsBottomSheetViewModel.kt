@@ -113,7 +113,8 @@ class WidgetVoiceSettingsBottomSheetViewModel(
                 members = model.participants.values.filter { it.voiceState != null }.map { participant ->
                     VoiceMember(
                         user = participant.user,
-                        name = participant.guildMember?.nick ?: participant.user.username,
+                        name = participant.guildMember?.identityNick()
+                            ?: participant.user.globalName ?: participant.user.username,
                         hasVideo = participant.voiceState?.selfVideo == true,
                         isMuted = participant.isMuted || participant.isDeafened,
                     )

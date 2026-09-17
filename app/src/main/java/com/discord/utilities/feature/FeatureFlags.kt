@@ -11,6 +11,8 @@ object FeatureFlags {
     fun setFetchUncachedUsersEnabled(enabled: Boolean) = setEnabled(ClientSettings.fetchUncachedUsers, enabled)
     fun viewProfileImagesEnabled() = enabled(ClientSettings.viewProfileImages)
     fun setViewProfileImagesEnabled(enabled: Boolean) = setEnabled(ClientSettings.viewProfileImages, enabled)
+    fun disableServerProfilesEnabled() = enabled(ClientSettings.disableServerProfiles)
+    fun setDisableServerProfilesEnabled(enabled: Boolean) = setEnabled(ClientSettings.disableServerProfiles, enabled)
     fun chatboxCustomizationsEnabled() = enabled(ClientSettings.chatboxCustomizations)
     fun setChatboxCustomizationsEnabled(enabled: Boolean) = setEnabled(ClientSettings.chatboxCustomizations, enabled)
     fun headerCustomizationsEnabled() = enabled(ClientSettings.headerCustomizations)

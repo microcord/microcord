@@ -115,7 +115,7 @@ class ServerSettingsRoleMembersViewModel(
                 member,
                 PermissionOwner.Member(
                     user,
-                    user.getDisplayName(member.nick),
+                    user.getDisplayName(member.identityNick()),
                     false,
                 ),
             )

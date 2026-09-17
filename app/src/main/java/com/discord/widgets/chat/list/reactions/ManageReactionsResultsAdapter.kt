@@ -40,7 +40,7 @@ class ManageReactionsResultsAdapter(
         override fun onConfigure(position: Int, data: ResultItem) {
             val item = data as ResultItem.ReactionUser
             name.text = item.user.getDisplayName(
-                item.guildMember?.nick
+                item.guildMember?.identityNick()
                     ?: NicknameUtils.getNickname(null, item.channelId, item.user.id),
             )
             IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard, guildMember = item.guildMember)

@@ -31,6 +31,7 @@ import com.discord.stores.StoreStream
 import com.discord.stores.StoreUserNotes
 import com.discord.stores.StoreUserProfile
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.permissions.ManageUserContext
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
@@ -161,6 +162,8 @@ class WidgetUserSheetViewModel(
             val profileLoaded: Boolean,
             val guildId: Long?,
             val guildMember: GuildMember?,
+            /** Full guild membership retained for roles, moderation and joined-at metadata. */
+            val contextualGuildMember: GuildMember? = guildMember,
             val userProfile: UserProfile,
             val applications: Map<Long, Application> = emptyMap(),
             val applicationIdentities: Map<Long, UserApplicationIdentity> = emptyMap(),
@@ -276,6 +279,11 @@ class WidgetUserSheetViewModel(
         val user = storeState.user
         val isMe = user.id == storeState.me.id
         val guildMember = storeState.computedMembers[user.id]
+        val (displayProfile, displayMember) = profileIdentity(
+            storeState.userProfile,
+            guildMember,
+            FeatureFlags.disableServerProfilesEnabled(),
+        )
         val myGuildMember = storeState.computedMembers[storeState.me.id]
 
         val channelVoiceState = storeState.currentChannelVoiceStates[user.id]
@@ -299,7 +307,7 @@ class WidgetUserSheetViewModel(
             .mapNotNull { roleId -> storeState.guildRoles[roleId] }
             .sortedByDescending { it.position }
 
-        val (bio, hasGuildMemberBio) = resolveProfileBio(storeState.userProfile, guildMember?.bio, user.bio)
+        val (bio, hasGuildMemberBio) = resolveProfileBio(displayProfile, displayMember?.bio, user.bio)
 
         val note = storeState.userNoteFetchState
         val userNote = (note as? StoreUserNotes.UserNoteState.Loaded)?.note?.note.orEmpty()
@@ -358,8 +366,8 @@ class WidgetUserSheetViewModel(
                 profileLoaded = storeState.userProfile.connectedAccounts.isNotEmpty() ||
                     note !is StoreUserNotes.UserNoteState.Loading,
                 guildId = storeState.guild?.id,
-                guildMember = guildMember,
-                userProfile = storeState.userProfile,
+                guildMember = displayMember,
+                userProfile = displayProfile,
                 applications = storeState.applications,
                 applicationIdentities = storeState.applicationIdentities,
                 games = storeState.games,
@@ -749,11 +757,29 @@ class WidgetUserSheetViewModel(
      * returned when asked for, and the note is a separate endpoint entirely.
      */
     fun fetchProfile() {
-        storeUserProfile.fetchProfile(userId, guildId, withMutualGuilds = true)
+        storeUserProfile.fetchProfile(
+            userId,
+            guildId.takeUnless { FeatureFlags.disableServerProfilesEnabled() },
+            withMutualGuilds = true,
+        )
         storeUserNotes.loadNote(userId)
     }
 
     companion object {
+        internal fun profileIdentity(
+            profile: UserProfile,
+            member: GuildMember?,
+            disableServerProfiles: Boolean,
+        ): Pair<UserProfile, GuildMember?> {
+            if (!disableServerProfiles) return profile to member
+            return profile.copy(
+                guildMember = null,
+                guildMemberProfile = null,
+                guildBadges = null,
+                premiumGuildSince = null,
+            ) to null
+        }
+
         /** Analytics location reported for relationship changes made from this sheet. */
         const val LOCATION = "User Profile"
 

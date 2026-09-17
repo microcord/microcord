@@ -98,7 +98,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         var rendered = content
         post.firstMessage?.mentions.orEmpty().forEach { mention ->
             val member = post.guildMembers[mention.id]
-            val displayName = "@${mention.getDisplayName(member?.nick)}"
+            val displayName = "@${mention.getDisplayName(member?.identityNick())}"
             rendered = rendered.replace("<@${mention.id}>", displayName).replace("<@!${mention.id}>", displayName)
         }
         post.channelNames.forEach { (id, name) -> rendered = rendered.replace("<#$id>", "#$name") }
@@ -130,7 +130,7 @@ class ForumBrowserPostView @JvmOverloads constructor(
         binding.forumPostOwnerName.visibility = binding.forumPostOwnerAvatar.visibility
         if (owner == null) return
         val member = post.guildMembers[owner.id]
-        binding.forumPostOwnerName.text = member?.nick ?: owner.username
+        binding.forumPostOwnerName.text = member?.identityNick() ?: owner.globalName ?: owner.username
         binding.forumPostOwnerName.setTextColor(GuildMember.getColor(member, ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal)))
         MGImages.setRoundingParams(binding.forumPostOwnerAvatar, cornerRadius = 0f, circle = true)
         IconUtils.setIcon(

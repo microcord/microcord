@@ -103,7 +103,7 @@ class GuildScheduledEventDescriptionParser(textView: LinkifiedTextView) {
         ) { channelNames: Map<Long, String>, members: Map<Long, GuildMember>, roles: Map<Long, GuildRole> ->
             MessageRenderContextModel(
                 channelNames = channelNames,
-                userNames = members.mapNotNull { (id, member) -> member.nick?.let { id to it } }.toMap(),
+                userNames = members.mapNotNull { (id, member) -> member.identityNick()?.let { id to it } }.toMap(),
                 roles = roles,
             )
         }
