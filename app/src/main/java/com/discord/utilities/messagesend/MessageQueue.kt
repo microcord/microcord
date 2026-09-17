@@ -11,6 +11,7 @@ import com.discord.utilities.networking.Backoff
 import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.attachments.CloudUploader
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.rest.SendUtils
 import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.utilities.rx.appSubscribe
@@ -234,8 +235,9 @@ class MessageQueue @JvmOverloads constructor(
             flags = message.flags,
         )
         val captchaPolicy = CaptchaRequestPolicy.preSolved(message.captchaSolution)
+        val uploadInline = DeveloperSettings.isLegacyMessageUploadsEnabled()
 
-        SendUtils.getSendPayload(contentResolver, body, request.attachments, inlineFileBodies = false)
+        SendUtils.getSendPayload(contentResolver, body, request.attachments, inlineFileBodies = uploadInline)
             .doOnNext { payload ->
                 when (payload) {
                     is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
@@ -256,6 +258,7 @@ class MessageQueue @JvmOverloads constructor(
                     contextPropertiesOf("location" to request.location),
                     api,
                     request.onProgress,
+                    uploadInline,
                 )
             }
             .restSubscribeOn(retry = message.nonce != null)
@@ -290,9 +293,18 @@ class MessageQueue @JvmOverloads constructor(
         context: String,
         client: RestAPIInterface = api,
         onProgress: (List<FileUpload>) -> Unit = {},
+        uploadInline: Boolean = false,
     ): Observable<com.discord.api.message.Message> {
         if (attachments.isNullOrEmpty() || contentResolver == null) {
             return client.sendMessage(channelId, ready.message, captchaPolicy, context)
+        }
+        if (uploadInline) {
+            val parts = ready.uploads.mapNotNull(FileUpload::part).toTypedArray()
+            return if (parts.isEmpty()) {
+                client.sendMessage(channelId, ready.message, captchaPolicy, context)
+            } else {
+                client.sendMessage(channelId, PayloadJSON(ready.message), parts, captchaPolicy, context)
+            }
         }
         return CloudUploader.stageAndSend(
             channelId,

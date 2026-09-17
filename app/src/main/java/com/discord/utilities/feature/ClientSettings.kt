@@ -196,6 +196,7 @@ object ClientSettings {
             StringSetSetting("USER_TRUSTED_DOMAINS_CACHE_KEY"),
             BooleanSetting("developer_verbose_boot", scope = Scope.DURABLE),
             BooleanSetting("developer_floating_shortcut", scope = Scope.DURABLE),
+            BooleanSetting("developer_legacy_message_uploads", scope = Scope.DURABLE),
             BooleanSetting("developer_log_gateway_events", scope = Scope.DURABLE),
             BooleanSetting("developer_log_gateway_lifecycle", scope = Scope.DURABLE),
             BooleanSetting("developer_log_gateway_voice_states", scope = Scope.DURABLE),

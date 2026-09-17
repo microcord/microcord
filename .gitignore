@@ -36,3 +36,4 @@ __pycache__/
 *.jks
 *.keystore
 !/app/manticord-dev.keystore
+/.vscode

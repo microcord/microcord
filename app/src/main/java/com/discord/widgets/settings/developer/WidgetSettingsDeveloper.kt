@@ -84,6 +84,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             isChecked = AppRestRequestLogger.isEnabled()
             setOnCheckedListener(AppRestRequestLogger::setEnabled)
         }
+        binding.settingsDeveloperLegacyMessageUploads.apply {
+            isChecked = DeveloperSettings.isLegacyMessageUploadsEnabled()
+            setOnCheckedListener(DeveloperSettings::setLegacyMessageUploadsEnabled)
+        }
         binding.settingsDeveloperStartupMetrics.setOnClickListener {
             WidgetSettingsStartupMetrics.launch(it.context)
         }
