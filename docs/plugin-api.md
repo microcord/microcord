@@ -1,8 +1,8 @@
-# Manticord Plugin API
+# Microcord Plugin API
 
 ## Status
 
-This document records the agreed architecture for bundled and externally installed Manticord
+This document records the agreed architecture for bundled and externally installed Microcord
 plugins. The `:plugin-api` manifest/lifecycle contract, global loading policy, dependency resolver,
 priority ordering, blocking-chain promotion, external APK loader, lifecycle execution, header,
 composer, bottom-tab, and profile-popout hosts, schema/custom settings, settings cards, signer approval, and
@@ -26,7 +26,7 @@ design.
 - Loading arbitrary uninstalled APK/resource tables from a custom archive.
 - Cross-process UI plugins. Android views cannot be contributed across a process boundary.
 - Asynchronous UI factories or event decisions.
-- A security sandbox. Enabled external plugins execute in Manticord's process.
+- A security sandbox. Enabled external plugins execute in Microcord's process.
 - Generic hooks into every application method. Hosts are added as typed extension points when a
   concrete use needs them.
 
@@ -76,13 +76,13 @@ manticordPlugin {
 ```
 
 The `:plugin-gradle` plugin validates that DSL and generates manifest placeholders for ID, entrypoint,
-description, Manticord version range, requirements, priority, load mode, and resource mode. The fixed manifest
+description, Microcord version range, requirements, priority, load mode, and resource mode. The fixed manifest
 snippet consumes those placeholders; plugin Kotlin code does not declare a duplicate manifest.
 `usesResources` defaults to `false`.
 
 ## Discovery
 
-Manticord performs one targeted `PackageManager` query for components matching the plugin intent. It
+Microcord performs one targeted `PackageManager` query for components matching the plugin intent. It
 does not enumerate every installed application.
 
 - Known package names and enabled state are cached in private preferences.
@@ -97,7 +97,7 @@ does not enumerate every installed application.
 ## Global Loading Switch
 
 The Plugins settings screen owns one master **Load Plugins** switch, enabled by default. The manager
-checks it before invoking any plugin source. When disabled, Manticord performs no bundled discovery,
+checks it before invoking any plugin source. When disabled, Microcord performs no bundled discovery,
 PackageManager query, class loading, resource context creation, dependency resolution, or plugin
 lifecycle work. This zero-discovery behavior is enforced by `PluginManager` and a focused regression
 test.
@@ -109,7 +109,7 @@ no-loading path.
 
 ## External Code And Resource Loading
 
-All external plugin code uses a direct `PathClassLoader` whose parent is Manticord's classloader:
+All external plugin code uses a direct `PathClassLoader` whose parent is Microcord's classloader:
 
 ```kotlin
 PathClassLoader(
@@ -120,12 +120,12 @@ PathClassLoader(
 ```
 
 Using the host classloader as parent ensures a plugin compiled with the plugin API as `compileOnly`
-shares Manticord's API classes instead of loading duplicate interfaces with incompatible identity.
+shares Microcord's API classes instead of loading duplicate interfaces with incompatible identity.
 
 For `usesResources=false`, the entrypoint is instantiated directly from that classloader. No package
 resource context is created.
 
-For `usesResources=true`, Manticord additionally calls:
+For `usesResources=true`, Microcord additionally calls:
 
 ```kotlin
 hostContext.createPackageContext(
@@ -134,7 +134,7 @@ hostContext.createPackageContext(
 )
 ```
 
-The resulting package context supplies the plugin's resources. Manticord wraps it so
+The resulting package context supplies the plugin's resources. Microcord wraps it so
 `getClassLoader()` returns the direct plugin classloader above. The wrapped context and an inflater
 cloned into it are required when plugin XML names plugin-owned custom view classes. The package
 context's own classloader is not used as the API boundary.
@@ -145,22 +145,22 @@ resource context, and preparing an inflater are unnecessary for code-only plugin
 ## API Artifact
 
 The published `dev.mantikafasi.manticord:plugin-api` compile-only JAR combines the stable plugin
-contracts, every compiled Manticord class, and `com.discord.R`. Plugins may directly import
+contracts, every compiled Microcord class, and `com.discord.R`. Plugins may directly import
 `StoreStream`, stores, models, widgets, utilities, and any other app code; the host-parented
-classloader resolves those imports to Manticord's runtime classes.
+classloader resolves those imports to Microcord's runtime classes.
 
 Public plugin records are read-only interfaces; factory/DSL functions return private
 implementations, so adding implementation fields does not alter plugin constructor ABI. Direct app
 internals are intentionally less stable, so compatibility is governed only by the Gradle DSL's
-mandatory Manticord app-version range and checked before class loading.
+mandatory Microcord app-version range and checked before class loading.
 
 Version 1 is intentionally a Kotlin/JVM API and exposes Kotlin function types plus RxJava 1. Those
 types and the compiler's pinned JVM-default mode are frozen for the full v1 line. Java-first support,
-replacing RxJava, adding setting kinds, or adding enum constants requires a new Manticord compatibility range.
+replacing RxJava, adding setting kinds, or adding enum constants requires a new Microcord compatibility range.
 
 ## Plugin Manifest
 
-For external plugins, Manticord constructs the read-only `PluginManifest` entirely from generated APK
+For external plugins, Microcord constructs the read-only `PluginManifest` entirely from generated APK
 metadata and package version/label information. Bundled plugins use the stable `pluginManifest(...)`
 factory and builder. No external entrypoint implements or returns a manifest.
 
@@ -169,11 +169,11 @@ from display names.
 
 ## Lifecycle
 
-RxJava 1 is already part of Manticord and is the lifecycle completion primitive. No coroutine
+RxJava 1 is already part of Microcord and is the lifecycle completion primitive. No coroutine
 dependency is added solely for plugins.
 
 ```kotlin
-interface ManticordPlugin {
+interface MicrocordPlugin {
     fun start(scope: PluginScope): Completable = Completable.complete()
     fun stop(): Completable = Completable.complete()
 }
@@ -183,7 +183,7 @@ interface ManticordPlugin {
 resource context, constructor, and lifecycle all run after first UI on the plugin coordinator and its
 dedicated executor.
 
-`BLOCKING` is an explicit manifest opt-in. Manticord invokes it on the plugin executor and waits for
+`BLOCKING` is an explicit manifest opt-in. Microcord invokes it on the plugin executor and waits for
 its start `Completable` before showing UI. It may therefore deliberately delay startup. The manager
 still owns timeout, failure reporting, and disposal so a broken blocking plugin cannot hold startup
 forever.
@@ -195,7 +195,7 @@ UI factories and bind callbacks remain synchronous, main-thread-only, and lifecy
 
 ## Requirements And Priority
 
-The loader validates unique IDs, Manticord compatibility, requirement versions, and dependency cycles
+The loader validates unique IDs, Microcord compatibility, requirement versions, and dependency cycles
 before starting a plugin.
 
 1. Requirements form a directed acyclic graph.
@@ -366,17 +366,17 @@ scope.ui.registerMessage(
 
 ### Message Interceptors
 
-`registerMessageInterceptor(...)` synchronously transforms Manticord's real
+`registerMessageInterceptor(...)` synchronously transforms Microcord's real
 `com.discord.models.message.Message` at shared `SEND`, `EDIT`, and `RECEIVE` boundaries.
 Interceptors are ordered by priority, then stable `owner:id` order. Return the original instance for
 a no-op or use Kotlin `copy(...)` to alter content, attachments, stickers, mentions, flags,
-references, embeds, or components in Manticord's local model. No wrapper is allocated; disabled or
+references, embeds, or components in Microcord's local model. No wrapper is allocated; disabled or
 non-matching interceptors leave the original message on the normal path.
 
 Normal Discord user send/edit REST routes still determine what reaches the server: send supports
 content, attachments, stickers, mentions, flags, and references; edit supports content and allowed
 mentions. Embeds and components are server-owned for normal user messages, so changing them affects
-Manticord's local optimistic/received rendering, not Discord's accepted payload.
+Microcord's local optimistic/received rendering, not Discord's accepted payload.
 
 ```kotlin
 scope.ui.registerMessageInterceptor(
@@ -395,7 +395,7 @@ scope.ui.registerMessageInterceptor(
 ```
 
 Plugins that need to observe received, sent, or edited messages should subscribe directly to the
-existing public Manticord store. No plugin-specific event fan-out is installed, so disabled plugins
+existing public Microcord store. No plugin-specific event fan-out is installed, so disabled plugins
 add no Gateway callback, main-thread post, or message-allocation overhead.
 
 ```kotlin
@@ -429,17 +429,17 @@ A plugin receives these view/resource capabilities through its scope and contrib
 
 Resource IDs from an external APK are meaningful only with that plugin's resource context and are
 never persisted. Independently compiled plugin theme attribute IDs do not equal host attribute IDs,
-even when names match. Custom XML may use plugin-owned themes and resources; automatic Manticord
+even when names match. Custom XML may use plugin-owned themes and resources; automatic Microcord
 theme integration uses the palette and host component factories rather than direct references to
 host `R` values.
 
 ## Settings API
 
-Every discovered plugin appears in the Manticord Plugins settings screen. The common page shows
+Every discovered plugin appears in the Microcord Plugins settings screen. The common page shows
 enabled state, app icon, version, source package, abbreviated signer fingerprint, and runtime state.
 The dedicated Settings button opens the plugin's schema and optional custom page.
 
-Normal plugin settings are declared as a schema and rendered with existing Manticord components.
+Normal plugin settings are declared as a schema and rendered with existing Microcord components.
 Supported entries are:
 
 - Section and description.
@@ -480,7 +480,7 @@ their plugin's namespaced settings and storage handles through the public scope.
 
 ## Main Thread
 
-`scope.applicationContext` is the stable Manticord application context. UI work should instead use:
+`scope.applicationContext` is the stable Microcord application context. UI work should instead use:
 
 ```kotlin
 scope.runOnMainThread { context ->
@@ -504,19 +504,19 @@ The host posts to the main thread, resolves the current `AppActivity`, and rende
 
 ## Storage
 
-Each plugin receives private namespaced directories under Manticord's storage for files and cache.
+Each plugin receives private namespaced directories under Microcord's storage for files and cache.
 The external APK's own application data directory is not used because loaded code executes under
-Manticord's UID, not the plugin package's normal process identity.
+Microcord's UID, not the plugin package's normal process identity.
 
 Ordinary settings use namespaced host preferences. Files and cache use SHA-256-derived directories
-under Manticord's private storage, so a plugin ID cannot escape its directory. Secret-setting storage
+under Microcord's private storage, so a plugin ID cannot escape its directory. Secret-setting storage
 is not exposed in v1; plugins must not put credentials into ordinary settings.
 
 ## Trust And Recovery
 
-Android requires every installed APK to carry a signing certificate. Manticord does not maintain an
+Android requires every installed APK to carry a signing certificate. Microcord does not maintain an
 approved signer list: self-signed plugin APKs are accepted. The first enable shows the package name,
-certificate fingerprint, and a warning that the plugin receives Manticord's process permissions and
+certificate fingerprint, and a warning that the plugin receives Microcord's process permissions and
 can access account data available to in-process code. Updates retain Android's normal same-signer
 enforcement.
 

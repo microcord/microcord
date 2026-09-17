@@ -1,13 +1,17 @@
-# Manticord
+# Microcord
 
 A native Android Discord client reconstructed in **Kotlin with Android Views and
-XML**, based on Discord Android **126.21 Stable**. Manticord keeps the classic
+XML**, based on Discord Android **126.21 Stable**. Microcord keeps the classic
 Android interface while adding compatibility with newer Discord features and
 local customization.
 
-The project is under active development. Core messaging, social and media flows
-are implemented, but complete behavioral parity is still a work in progress.
-See [the development plan](PLAN.md) for status and remaining work.
+This project is in an early development phase. Builds can contain bugs, missing
+behavior, and breaking changes. The application ID, package name, and related
+app identity may still change.
+
+Core messaging, social and media flows are implemented, but complete behavioral
+parity is still a work in progress. See [the development plan](PLAN.md) for
+status and remaining work.
 
 ## Download
 
@@ -16,8 +20,8 @@ See [the development plan](PLAN.md) for status and remaining work.
 - Requires **Android 6.0 (API 23) or newer**.
 - Install the APK with Android's package installer. Updates can be installed over
   the existing app without clearing its data.
-- Manticord uses the package `dev.mantikafasi.manticord`, separate from Discord's
-  official app.
+- Current package is `dev.mantikafasi.manticord`, separate from Discord's official
+  app. This identifier is not final and may change during development.
 
 The **Updates** screen can check for new builds, show release notes and commit
 history, download an update and open the installer. Automatic checks run when
@@ -33,7 +37,7 @@ Downloads do not start automatically.
 - Voice calls, video, screen sharing and game-activity icons in voice-member rows.
 - Modern polls, bot components, application commands and embedded Activities.
 - Theme, chat-input and header customization, plus optional feature flags.
-- Bundled and external APK plugins through the [Manticord Plugin API](docs/plugin-api.md).
+- Bundled and external APK plugins through the [Microcord Plugin API](docs/plugin-api.md).
 
 Some provider integrations and device-specific behavior remain incomplete; the
 [feature status table](PLAN.md#feature-status) distinguishes implementation from
@@ -128,5 +132,5 @@ steps; redact account credentials and private message content from diagnostics.
 - [zt64/aliucord-plugins](https://github.com/zt64/aliucord-plugins)
 - [BetterChatBox](https://github.com/wingio/plugins/tree/main/BetterChatbox)
 
-Manticord is not affiliated with or endorsed by Discord Inc. Recovered Discord
+Microcord is not affiliated with or endorsed by Discord Inc. Recovered Discord
 assets and third-party components retain their respective ownership and licenses.

@@ -1,4 +1,4 @@
-# Manticord Development Plan
+# Microcord Development Plan
 
 This document tracks architecture, compatibility decisions, feature status and
 remaining work. [README.md](README.md) covers installation and building;
