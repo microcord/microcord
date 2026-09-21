@@ -12,12 +12,10 @@ import com.discord.models.user.MeUser
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreGuildsSorted
-import com.discord.stores.StoreMessages
 import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.stores.StoreUserSettings
-import com.discord.utilities.messagesend.MessageSendLocation
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.computationLatest
@@ -56,7 +54,7 @@ open class StickerPickerViewModel(
     private val storeChannelsSelected: StoreChannelsSelected = StoreStream.getChannelsSelected(),
     private val storePermissions: StorePermissions = StoreStream.getPermissions(),
     private val storeUser: StoreUser = StoreStream.getUsers(),
-    private val storeMessages: StoreMessages = StoreStream.getMessages(),
+    private val stickerMessageSender: StickerMessageSender = StickerMessageSender(),
     storeStateObservable: Observable<StoreState> =
         observeStoreState(searchSubject, selectedCategoryIdSubject),
 ) : AppViewModel<StickerPickerViewModel.ViewState>() {
@@ -162,15 +160,8 @@ open class StickerPickerViewModel(
         if (!PermissionUtils.hasAccessWrite(channel, permissions)) return false
         if (sendability != StickerSendability.SENDABLE) return false
 
+        if (!stickerMessageSender.send(channel, sticker)) return false
         stickerStore.onStickerUsed(sticker)
-        storeMessages.sendMessage(
-            channelId = channelId,
-            author = meUser,
-            content = "",
-            stickers = listOf(sticker),
-            guildId = channel.guildId.takeIf { it != 0L },
-            location = MessageSendLocation.CHAT_INPUT,
-        ).subscribe({ }, { })
         searchSubject.onNext("")
         return true
     }

@@ -23,6 +23,7 @@ import com.discord.widgets.chat.input.models.AttachmentOptionValue
 import com.discord.widgets.chat.input.models.AutocompleteApplicationCommands
 import com.discord.widgets.chat.input.models.ChatInputMentionsMap
 import com.discord.widgets.chat.input.models.MentionToken
+import com.discord.widgets.chat.input.sticker.StickerMessageSender
 import java.util.concurrent.TimeUnit
 import com.lytefast.flexinput.model.Attachment
 import rx.Observable
@@ -75,6 +76,7 @@ class AutocompleteViewModel(
     },
     private val remoteAutocompleteDelayMs: Long = REMOTE_AUTOCOMPLETE_DELAY_MS,
     private val remoteRequestScheduler: Scheduler = Schedulers.computation(),
+    private val stickerMessageSender: StickerMessageSender = StickerMessageSender(),
 ) : AppViewModel<AutocompleteViewState>(AutocompleteViewState.Hidden) {
 
     private var autocompletables: Map<LeadingIdentifier, Set<Autocompletable>> = emptyMap()
@@ -239,14 +241,9 @@ class AutocompleteViewModel(
     fun sendSticker(sticker: com.discord.api.sticker.Sticker) {
         val channelId = currentChannelId ?: return
         val channel = StoreStream.getChannels().getChannel(channelId) ?: return
-        StoreStream.getStickers().onStickerUsed(sticker)
-        StoreStream.getMessages().sendMessage(
-            channelId = channelId,
-            author = StoreStream.getUsers().getMe(),
-            content = "",
-            stickers = listOf(sticker),
-            guildId = channel.guildId.takeIf { it != 0L },
-        ).subscribe({ }, { })
+        if (stickerMessageSender.send(channel, sticker)) {
+            StoreStream.getStickers().onStickerUsed(sticker)
+        }
     }
 
     fun selectAutocompleteItem(item: Autocompletable): Boolean {

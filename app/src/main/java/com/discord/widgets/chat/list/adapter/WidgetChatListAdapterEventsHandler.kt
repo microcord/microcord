@@ -56,6 +56,7 @@ import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.channels.list.WidgetChannelsListItemThreadActions
 import com.discord.widgets.chat.input.AppFlexInputViewModel
 import com.discord.widgets.chat.input.emoji.WidgetEmojiPickerSheet
+import com.discord.widgets.chat.input.sticker.StickerMessageSender
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
 import com.discord.widgets.chat.list.actions.MessageActions
 import com.discord.widgets.chat.list.actions.WidgetChatListActions
@@ -103,6 +104,7 @@ class WidgetChatListAdapterEventsHandler(
 
     private val fragmentManager get() = host.parentFragmentManager
     private val tapHandler = Handler(Looper.getMainLooper())
+    private val stickerMessageSender = StickerMessageSender()
     private var pendingTap: PendingTap? = null
     private var quickActionsPopup: PopupWindow? = null
     private var quickActionsMessageId = 0L
@@ -358,15 +360,7 @@ class WidgetChatListAdapterEventsHandler(
 
     override fun onSystemMessageCtaClicked(message: Message, channel: Channel, sticker: BaseSticker) {
         val resolvedSticker = StoreStream.getStickers().getStickers()[sticker.getStickerId()] ?: return
-        StoreStream.getPendingReplies().onCreatePendingReply(channel, message, true, true)
-        StoreStream.getMessages().sendMessage(
-            channelId = channel.id,
-            author = StoreStream.getUsers().getMe(),
-            content = "",
-            stickers = listOf(resolvedSticker),
-            guildId = channel.guildId.takeUnless { it == 0L },
-            location = MessageSendLocation.STICKER_REPLY,
-        ).subscribe({}, {})
+        stickerMessageSender.sendReply(channel, resolvedSticker, message)
     }
 
     override fun onThreadClicked(channel: Channel) =
