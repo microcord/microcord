@@ -128,6 +128,9 @@ coverage and passing builds do not establish complete behavioral parity.
 - The September 13 updater changes passed 21 focused JVM tests and 32 worker tests.
   The user confirmed an automatic update banner after an explicitly approved
   in-place downgrade to build 191 and resetting only `next_check`.
+- Component link-preview embeds (`type: components`) reuse the Components V2 renderer for
+  containers, markdown, separators, sections, media and read-only link buttons; a focused
+  deserialization-to-row fixture passed before the in-place device install.
 
 ## Compatibility Decisions
 

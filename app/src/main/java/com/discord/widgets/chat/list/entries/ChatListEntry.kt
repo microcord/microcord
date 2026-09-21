@@ -1,8 +1,10 @@
 package com.discord.widgets.chat.list.entries
 
 import com.discord.api.channel.Channel
-import com.discord.api.message.embed.EmbedType
+import com.discord.api.channel.isPrivate
 import com.discord.api.message.MessageTypes
+import com.discord.api.message.embed.EmbedType
+import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.role.GuildRole
 import com.discord.models.botuikit.MessageComponent
 import com.discord.models.botuikit.withInteractionsDisabled
@@ -10,15 +12,14 @@ import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreThreadMessages
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
+import com.discord.utilities.user.NicknameUtils
+import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 import com.discord.widgets.botuikit.ComponentStateMapper
-import com.discord.utilities.user.UserUtils.getDisplayName
-import com.discord.utilities.user.NicknameUtils
-import com.discord.api.channel.isPrivate
-import com.discord.utilities.feature.FeatureFlags
 
 /**
  * One row of the chat list.
@@ -171,8 +172,18 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
 
             if (!isAutoModSystemMessage) {
                 embeds.forEach { embed ->
-                    if (embed.type != EmbedType.APPLICATION_NEWS) {
-                        entries.add(
+                    when (embed.type) {
+                        EmbedType.APPLICATION_NEWS -> Unit
+                        EmbedType.COMPONENTS -> createComponentEmbedEntry(
+                            message = message,
+                            embed = embed,
+                            embedIndex = embedIndex,
+                            guildId = channel.guildId,
+                            animateEmojis = allowAnimatedEmojis,
+                            messageState = messageState,
+                            channel = channel,
+                        )?.let(entries::add)
+                        else -> entries.add(
                             EmbedEntry(
                                 embedIndex = embedIndex,
                                 guildId = channel.guildId,
@@ -185,8 +196,8 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                                 isThreadStarterMessage = isThreadStarterMessage,
                             ),
                         )
-                        embedIndex++
                     }
+                    if (embed.type != EmbedType.APPLICATION_NEWS) embedIndex++
                 }
             }
             return entries
@@ -342,6 +353,42 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                     mostRecentMessageGuildMember = channelMembers[mostRecentMessage?.author?.id],
                     parentMessage = message,
                 ),
+            )
+        }
+
+        /**
+         * Adapts a read-only component link preview to the existing Components V2 renderer.
+         *
+         * All interaction controls are disabled before binding. Link buttons remain enabled because
+         * following their URL does not send an application interaction.
+         */
+        fun createComponentEmbedEntry(
+            message: Message,
+            embed: MessageEmbed,
+            embedIndex: Int,
+            guildId: Long,
+            animateEmojis: Boolean,
+            messageState: StoreMessageState.State? = null,
+            channel: Channel? = null,
+        ): BotUiComponentEntry? {
+            if (embed.type != EmbedType.COMPONENTS) return null
+            val components = embed.components.orEmpty()
+            if (components.isEmpty()) return null
+            val mapped = ComponentStateMapper.processComponentsToMessageComponents(
+                components,
+                componentStoreState = null,
+                componentExperiments = BotComponentExperiments,
+                animateEmojis = animateEmojis,
+            ).map(MessageComponent::withInteractionsDisabled)
+            if (mapped.isEmpty()) return null
+            return BotUiComponentEntry(
+                message = message,
+                applicationId = message.applicationId ?: message.author?.id ?: 0L,
+                guildId = guildId,
+                messageComponents = mapped,
+                messageState = messageState,
+                channel = channel,
+                sourceEmbedIndex = embedIndex,
             )
         }
 

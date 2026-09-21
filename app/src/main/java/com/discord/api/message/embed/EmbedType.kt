@@ -18,5 +18,6 @@ enum class EmbedType(val apiValue: String) {
     GIFV("gifv"),
     RICH("rich"),
     APPLICATION_NEWS("application_news"),
+    COMPONENTS("components"),
     UNKNOWN("unknown"),
 }

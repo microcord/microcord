@@ -8,18 +8,19 @@ import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
+import com.discord.api.message.embed.EmbedType
 import com.discord.api.permission.Permission
 import com.discord.api.role.GuildRole
 import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
 import com.discord.stores.StoreMessageState
-import com.discord.stores.UserSettings
 import com.discord.stores.StoreMessagesLoader
-import com.discord.utilities.guilds.RoleUtils
-import com.discord.utilities.permissions.PermissionUtils
-import com.discord.utilities.icon.IconUtils
+import com.discord.stores.UserSettings
 import com.discord.utilities.feature.MessageCustomization
+import com.discord.utilities.guilds.RoleUtils
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
@@ -239,17 +240,30 @@ object ChatListRows {
             )
         }
         if (state.renderEmbeds) message.embeds.orEmpty().forEach { embed ->
-            rows += EmbedEntry(
-                embedIndex = mediaIndex++,
-                guildId = state.channel.guildId,
-                message = message,
-                messageState = state.messageStates[message.id],
-                embed = embed,
-                isBlockedExpanded = false,
-                allowAnimatedEmojis = state.animateEmojis,
-                autoPlayGifs = state.autoPlayGifs,
-                isThreadStarterMessage = false,
-            )
+            if (embed.type == EmbedType.COMPONENTS) {
+                ChatListEntry.createComponentEmbedEntry(
+                    message = message,
+                    embed = embed,
+                    embedIndex = mediaIndex,
+                    guildId = state.channel.guildId,
+                    animateEmojis = state.animateEmojis,
+                    messageState = state.messageStates[message.id],
+                    channel = state.channel,
+                )?.let(rows::add)
+            } else if (embed.type != EmbedType.APPLICATION_NEWS) {
+                rows += EmbedEntry(
+                    embedIndex = mediaIndex,
+                    guildId = state.channel.guildId,
+                    message = message,
+                    messageState = state.messageStates[message.id],
+                    embed = embed,
+                    isBlockedExpanded = false,
+                    allowAnimatedEmojis = state.animateEmojis,
+                    autoPlayGifs = state.autoPlayGifs,
+                    isThreadStarterMessage = false,
+                )
+            }
+            if (embed.type != EmbedType.APPLICATION_NEWS) mediaIndex++
         }
         rows += ChatListEntry.createStickerEntries(message)
         if (!message.components.isNullOrEmpty()) {

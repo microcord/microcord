@@ -243,7 +243,8 @@ fun LayoutMessageComponent.childError(): ActionInteractionComponentState.Failed?
  * survives because following it sends no interaction.
  */
 fun MessageComponent.withInteractionsDisabled(): MessageComponent = when (this) {
-    is ButtonMessageComponent -> copy(stateInteraction = ActionInteractionComponentState.Disabled)
+    is ButtonMessageComponent ->
+        if (url != null) this else copy(stateInteraction = ActionInteractionComponentState.Disabled)
     is SelectMessageComponent -> copy(stateInteraction = ActionInteractionComponentState.Disabled)
     is ActionRowMessageComponent -> copy(components = components.map(MessageComponent::withInteractionsDisabled))
     is SectionMessageComponent -> copy(

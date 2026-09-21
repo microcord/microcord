@@ -18,10 +18,14 @@ data class BotUiComponentEntry(
     val channel: Channel? = null,
     val guildMembers: Map<Long, GuildMember> = emptyMap(),
     val guildRoles: Map<Long, GuildRole> = emptyMap(),
+    /** Set for the component tree carried by one `components` link-preview embed. */
+    val sourceEmbedIndex: Int? = null,
 ) : ChatListEntry() {
 
     override val highlightMessage: Message get() = message
     override val type: Int = ChatListEntry.BOT_UI_COMPONENT
-    override val key: String =
-        "${ChatListEntry.BOT_UI_COMPONENT} -- ${message.nonce ?: message.id}"
+    override val key: String = buildString {
+        append("${ChatListEntry.BOT_UI_COMPONENT} -- ${message.nonce ?: message.id}")
+        sourceEmbedIndex?.let { append(" -- embed $it") }
+    }
 }

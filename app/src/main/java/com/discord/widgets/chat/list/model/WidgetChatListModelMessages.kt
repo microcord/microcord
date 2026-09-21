@@ -26,10 +26,11 @@ import com.discord.utilities.time.ClockFactory
 import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState
 import com.discord.widgets.botuikit.ComponentStateMapper
-import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.AttachmentEntry
-import com.discord.widgets.chat.list.entries.EmbedEntry
+import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
 import com.discord.widgets.chat.list.entries.InviteEmbedResolver
 import com.discord.widgets.chat.list.entries.MessageEntry
@@ -420,7 +421,11 @@ data class WidgetChatListModelMessages(
                     message,
                 )
             } else emptyList()
-            val hostedAccessories = forwardedRows + embedRows.filter { it is AttachmentEntry || it is EmbedEntry } + componentRows
+            val (hostedEmbedRows, standaloneEmbedRows) = embedRows.partition {
+                it is AttachmentEntry || it is EmbedEntry ||
+                    (it is BotUiComponentEntry && it.sourceEmbedIndex != null)
+            }
+            val hostedAccessories = forwardedRows + hostedEmbedRows + componentRows
             val customize = MessageCustomization.enabled
             val inRow = if (customize) emptyList() else hostedAccessories
             rows += MessageEntry(
@@ -432,7 +437,7 @@ data class WidgetChatListModelMessages(
             )
             if (customize) rows += hostedAccessories
             val threadSpineStart = rows.size
-            rows += embedRows.filterNot { it is AttachmentEntry || it is EmbedEntry }
+            rows += standaloneEmbedRows
             rows += ChatListEntry.createStickerEntries(message)
             rows += ChatListEntry.createGameInviteEntries(message)
             rows += ChatListEntry.createActivityMessageEntries(message)

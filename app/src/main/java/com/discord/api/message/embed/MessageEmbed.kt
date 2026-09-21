@@ -1,5 +1,6 @@
 package com.discord.api.message.embed
 
+import com.discord.api.botuikit.Component
 import com.discord.api.utcdatetime.UtcDateTime
 import com.google.gson.annotations.SerializedName
 
@@ -17,6 +18,9 @@ data class MessageEmbed(
     val provider: EmbedProvider?,
     val author: EmbedAuthor?,
     val fields: List<EmbedField>?,
+    /** Present only on `components` link-preview embeds. */
+    val components: List<Component>? = null,
+    val flags: Int? = null,
 )
 
 data class EmbedImage(val url: String?, val proxyUrl: String?, val width: Int?, val height: Int?)
