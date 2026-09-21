@@ -69,6 +69,7 @@ class FriendsListViewModel(
         val presences: Map<Long, Presence>,
         val applicationStreams: Map<Long, ModelApplicationStream>,
         val friendSuggestions: Map<Long, FriendSuggestion>,
+        val relationshipNotes: Map<Long, String> = emptyMap(),
     )
 
     sealed class ViewState {
@@ -110,6 +111,7 @@ class FriendsListViewModel(
             val user: User,
             val presence: Presence?,
             val relationshipType: Int,
+            val note: String? = null,
         ) : Item(TYPE_PENDING_FRIEND) {
             override val key: String = "$type${user.id}"
         }
@@ -313,6 +315,7 @@ class FriendsListViewModel(
                     applicationStreams = storeState.applicationStreams,
                     showContactSyncUpsell = storeState.showContactSyncUpsell,
                     friendSuggestions = storeState.friendSuggestions,
+                    relationshipNotes = storeState.relationshipNotes,
                 )
             },
             onSuccess = { sections -> handleComputedItems(sections, storeState.showContactSyncIcon) },
@@ -452,6 +455,7 @@ class FriendsListViewModel(
             applicationStreams: Map<Long, ModelApplicationStream>,
             showContactSyncUpsell: Boolean,
             friendSuggestions: Map<Long, FriendSuggestion>,
+            relationshipNotes: Map<Long, String> = emptyMap(),
         ): ListSections {
             val suggestedFriendItems = friendSuggestions.values
                 .map(Item::SuggestedFriend)
@@ -477,7 +481,14 @@ class FriendsListViewModel(
                 if (type == ModelUserRelationship.TYPE_INVITE_INCOMING ||
                     type == ModelUserRelationship.TYPE_INVITE_OUTGOING
                 ) {
-                    pending.add(Item.PendingFriendRequest(user, presence, type))
+                    pending.add(
+                        Item.PendingFriendRequest(
+                            user = user,
+                            presence = presence,
+                            relationshipType = type,
+                            note = relationshipNotes[userId],
+                        ),
+                    )
                 } else {
                     friends.add(Item.Friend(user, presence, applicationStreams.containsKey(userId)))
                 }
@@ -614,6 +625,7 @@ class FriendsListViewModel(
                         presences = presences.getPresences(),
                         applicationStreams = applicationStreaming.getStreamsByUser(),
                         friendSuggestions = friendSuggestions.getFriendSuggestions(),
+                        relationshipNotes = userRelationships.getNotes(),
                     )
                 }
         }

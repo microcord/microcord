@@ -39,4 +39,30 @@ class RestAPISerializeNullsContractTest {
         assertEquals(1, clients.count { it == "serializeNulls" })
         assertNotSame(RestAPI.api, RestAPI.apiSerializeNulls)
     }
+
+    @Test
+    fun `friend request sends personalized note`() {
+        RestAPI.install(
+            RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES),
+            emptyList(),
+        )
+        server.enqueue(MockResponse().setResponseCode(204))
+
+        RestAPI.apiSerializeNulls.sendRelationshipRequest(
+            RestAPIParams.UserRelationship.Add(
+                username = "alien",
+                discriminator = null,
+                note = "Saw you flying by...",
+            ),
+            "friend-context",
+        ).toBlocking().first()
+
+        val request = server.takeRequest()
+        assertEquals("/api/v9/users/@me/relationships", request.path)
+        assertEquals(
+            """{"username":"alien","discriminator":null,"note":"Saw you flying by..."}""",
+            request.body.readUtf8(),
+        )
+        assertEquals("friend-context", request.getHeader("X-Context-Properties"))
+    }
 }

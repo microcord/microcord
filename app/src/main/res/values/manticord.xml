@@ -63,6 +63,7 @@
     <string name="command_validation_unusable_attachments">This command has no attachment option for every file you attached.</string>
     <string name="allow_message_requests">Allow Message Requests</string>
     <string name="allow_message_requests_caption">People in this server can send you message requests</string>
+    <string name="friend_request_note_hint">Add a note (optional)</string>
     <string name="channels_and_roles">Channels &amp; Roles</string>
     <string name="channel_browser_title">Browse Channels</string>
     <string name="guild_report_raid_button_title">Report Raid</string>

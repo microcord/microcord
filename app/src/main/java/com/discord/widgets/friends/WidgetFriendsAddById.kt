@@ -41,11 +41,13 @@ import com.google.android.material.textfield.TextInputLayout
 class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
 
     private lateinit var inputWrap: TextInputLayout
+    private lateinit var noteWrap: TextInputLayout
     private lateinit var sendButton: MaterialButton
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         inputWrap = view.findViewById(R.id.friends_add_text_edit_wrap)
+        noteWrap = view.findViewById(R.id.friends_add_note_edit_wrap)
         sendButton = view.findViewById(R.id.friends_add_send)
 
         sendButton.setOnClickListener { extractTargetAndSendFriendRequest() }
@@ -53,7 +55,7 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
             if (editable.isEmpty()) setInputEditError(null)
             sendButton.isEnabled = editable.isNotEmpty()
         }
-        inputWrap.setOnImeActionDone {
+        noteWrap.setOnImeActionDone {
             extractTargetAndSendFriendRequest()
             dismissKeyboard()
         }
@@ -84,6 +86,7 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
     private fun dismissKeyboard() {
         hideKeyboard()
         if (::inputWrap.isInitialized) inputWrap.clearFocus()
+        if (::noteWrap.isInitialized) noteWrap.clearFocus()
     }
 
     private fun extractTargetAndSendFriendRequest() {
@@ -98,16 +101,18 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
             return
         }
         val target = extractUsernameAndDiscriminator(discordTag)
-        sendFriendRequest(target.username, target.discriminator)
+        val note = noteWrap.getTextOrEmpty().trim().toString().ifBlank { null }
+        sendFriendRequest(target.username, target.discriminator, note)
     }
 
-    private fun sendFriendRequest(username: String, discriminator: Int?) {
+    private fun sendFriendRequest(username: String, discriminator: Int?, note: String?) {
         // `discriminator` must reach the server as an explicit null for a unique username.
         val api = RestAPI.apiSerializeNulls
         api.sendRelationshipRequest(
             RestAPIParams.UserRelationship.Add(
                 username = username,
                 discriminator = discriminator,
+                note = note,
             ),
             relationshipContext(LOCATION),
         )
@@ -121,6 +126,7 @@ class WidgetFriendsAddById : AppFragment(R.layout.widget_friends_add_by_id) {
                     Toast.makeText(it, R.string.toast_add_friend, Toast.LENGTH_SHORT).show()
                 }
                 inputWrap.clear()
+                noteWrap.clear()
                 dismissKeyboard()
             }
     }

@@ -67,15 +67,34 @@ class StoreUserRelationshipNicknamesTest {
         assertEquals(emptyMap<Long, Int>(), store.getRelationships())
     }
 
+    @Test
+    fun `friend request notes arrive with READY and update from gateway events`() {
+        dispatch {
+            store.handleConnectionOpen(
+                payload(relationship(7L, note = "We met in Kotlin Club")),
+            )
+        }
+        assertEquals("We met in Kotlin Club", store.getNotes()[7L])
+
+        dispatch { store.handleRelationshipAdd(relationship(7L, note = "Updated note")) }
+
+        assertEquals("Updated note", store.getNotes()[7L])
+    }
+
     private fun dispatch(block: () -> Unit) {
         dispatcher.schedule(block)
         scheduler.triggerActions()
     }
 
-    private fun relationship(id: Long, nickname: String?) = ModelUserRelationship(
+    private fun relationship(
+        id: Long,
+        nickname: String? = null,
+        note: String? = null,
+    ) = ModelUserRelationship(
         id = id,
         type = ModelUserRelationship.TYPE_FRIEND,
         nickname = nickname,
+        note = note,
     )
 
     private fun payload(vararg relationships: ModelUserRelationship): ModelPayload =

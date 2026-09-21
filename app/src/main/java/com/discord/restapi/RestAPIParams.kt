@@ -1221,6 +1221,7 @@ object RestAPIParams {
         data class Add(
             val username: String,
             val discriminator: Int?,
+            val note: String? = null,
         )
     }
 

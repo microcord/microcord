@@ -20,6 +20,8 @@ data class ModelUserRelationship(
     @SerializedName("user_ignored") val userIgnored: Boolean = false,
     /** When the relationship started. Absent on friendships that predate the field. */
     val since: UtcDateTime? = null,
+    /** Personalized text attached to a pending friend request. */
+    val note: String? = null,
 ) {
     fun hydrate(users: Map<Long, User>): ModelUserRelationship =
         if (userId == null) this else copy(user = users[userId], userId = null)

@@ -10,12 +10,10 @@ import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.simple_pager.SimplePager
 
 /**
- * Host for the two ways to add a friend: by username tag, and by scanning for people nearby.
+ * Host for adding a friend by username.
  *
- * Reconstruction of the reference `com.discord.widgets.friends.WidgetFriendsAdd`. It carries no
- * state of its own — [Companion.show] is the single entry point every other screen uses, and it is
- * also where the "Add Friend Modal" analytics event is emitted so no caller can open the screen
- * without it being recorded.
+ * [Companion.show] is the single entry point every other screen uses and records the
+ * "Add Friend Modal" analytics event before navigation.
  */
 class WidgetFriendsAdd : AppFragment(R.layout.widget_friends_add) {
 
@@ -23,14 +21,11 @@ class WidgetFriendsAdd : AppFragment(R.layout.widget_friends_add) {
         super.onViewBound(view)
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.friends_section_add_friend)
-        view.findViewById<SimplePager>(R.id.add_friend_view_pager).apply {
-            adapter = SimplePager.Adapter(
+        view.findViewById<SimplePager>(R.id.add_friend_view_pager).adapter =
+            SimplePager.Adapter(
                 parentFragmentManager,
                 SimplePager.Item(getString(R.string.username)) { WidgetFriendsAddById() },
-                SimplePager.Item(getString(R.string.nearby_scan)) { WidgetFriendsFindNearby() },
             )
-            setTabLayout(view.findViewById(R.id.action_bar_tabs))
-        }
     }
 
     companion object {

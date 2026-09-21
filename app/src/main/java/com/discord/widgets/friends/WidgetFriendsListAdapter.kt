@@ -118,6 +118,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
         private val name: TextView = itemView.findViewById(R.id.friends_list_item_name)
         private val activity: SimpleDraweeSpanTextView =
             itemView.findViewById(R.id.friends_list_item_activity)
+        private val note: TextView = itemView.findViewById(R.id.friends_list_item_note)
         private val avatar: VitoImageView = itemView.findViewById(R.id.friends_list_item_avatar)
         private val status: StatusView = itemView.findViewById(R.id.friends_list_item_status)
         private val avatarDecoration: AvatarDecorationView =
@@ -141,6 +142,7 @@ class WidgetFriendsListAdapter(recycler: RecyclerView) :
                     if (incoming) R.string.incoming_friend_request else R.string.outgoing_friend_request,
                 ),
             )
+            note.setTextAndVisibilityBy(item.note)
             // Only an incoming request can be accepted; an outgoing one can only be cancelled.
             acceptButton.visibility = if (incoming) View.VISIBLE else View.GONE
             acceptButton.contentDescription = itemView.context.getString(

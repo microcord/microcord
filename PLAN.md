@@ -150,6 +150,7 @@ coverage and passing builds do not establish complete behavioral parity.
 | Releases | Pushes produce debug artifacts; manual workflow runs publish a signed APK and matching update manifest |
 | Version identity | Source SHA and commit timestamp identify builds; versionCode is commit timestamp minus the 2020 epoch, not the CI build number |
 | Bookmarks | Synced viewing, jumping and removal are retained; local bookmark creation was withdrawn by user request |
+| Nearby friends | Removed by user request; the retired Google Nearby Messages backend has no supported transport |
 | Diagnostics | Redact tokens, cookies, passwords, MFA/captcha values and message content, including exception text |
 | Resource compatibility | Restore first-party attributes; let dependencies own their attributes. Retain decoded-layout compatibility repairs and the inherited lint baseline |
 | Observer errors | Preserve the DEX-proven `ObservationDeck` exception/log-level behavior; do not remove it based on incomplete JADX output |

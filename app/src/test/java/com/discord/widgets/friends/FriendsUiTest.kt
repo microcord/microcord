@@ -54,6 +54,7 @@ class FriendsListViewModelTest {
         friendSuggestions = listOf(7L, 6L, 8L).associateWith {
             FriendSuggestion(user(it, "S$it"), null)
         },
+        relationshipNotes = mapOf(3L to "We met in Kotlin Club"),
     )
 
     @Test
@@ -74,6 +75,15 @@ class FriendsListViewModelTest {
                 .filterIsInstance<FriendsListViewModel.Item.PendingFriendRequest>()
                 .map { it.user.id },
         )
+    }
+
+    @Test
+    fun `pending request carries its friend request note`() {
+        val incoming = sections().pendingItems
+            .filterIsInstance<FriendsListViewModel.Item.PendingFriendRequest>()
+            .first { it.user.id == 3L }
+
+        assertEquals("We met in Kotlin Club", incoming.note)
     }
 
     @Test
@@ -183,14 +193,5 @@ class WidgetFriendsAddByIdTest {
 
         assertNull(WidgetFriendsAddById.extractUsernameAndDiscriminator("name").discriminator)
         assertNull(WidgetFriendsAddById.extractUsernameAndDiscriminator("name#12345").discriminator)
-    }
-}
-
-class NearbyManagerTest {
-    @Test
-    fun `only well formed user payloads are parsed`() {
-        assertEquals(123L, NearbyManager.parseUserId("u:123".toByteArray()))
-        assertNull(NearbyManager.parseUserId("x:123".toByteArray()))
-        assertNull(NearbyManager.parseUserId("u:not-a-number".toByteArray()))
     }
 }
