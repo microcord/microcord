@@ -2,7 +2,9 @@ package com.discord.widgets.chat.list.adapter
 
 import com.discord.R
 import com.discord.api.sticker.Sticker
+import com.discord.databinding.WidgetChatListAdapterItemStickerBinding
 import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.sticker.StickerView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.StickerEntry
@@ -23,19 +25,27 @@ class WidgetChatListAdapterItemSticker(
     adapter: WidgetChatListAdapter,
 ) : WidgetChatListItem(R.layout.widget_chat_list_adapter_item_sticker, adapter) {
 
-    private val stickerView: StickerView = itemView.findViewById(R.id.chat_list_adapter_item_sticker)
+    private val binding = WidgetChatListAdapterItemStickerBinding.bind(itemView)
 
-    override val subscription: Subscription? get() = stickerView.getSubscription()
+    override val subscription: Subscription? get() = binding.chatListAdapterItemSticker.getSubscription()
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as StickerEntry
+        binding.root.setOnClickListener {
+            adapter.eventHandler.onMessageClicked(entry.message, false, binding.root)
+        }
+        binding.root.setOnLongClickListenerConsumeClick {
+            adapter.eventHandler.onMessageLongClicked(entry.message, entry.message.content.orEmpty(), false)
+        }
         Observable.just(resolveSticker(entry.sticker.getStickerId()))
             .take(1)
             .appSubscribe(WidgetChatListAdapterItemSticker::class.java) { hydratedSticker ->
                 val sticker = hydratedSticker ?: entry.sticker
-                stickerView.setSticker(sticker)
-                stickerView.setOnClickListener { adapter.onStickerClicked(entry.message, sticker) }
+                binding.chatListAdapterItemSticker.setSticker(sticker)
+                binding.chatListAdapterItemSticker.setOnClickListener {
+                    adapter.onStickerClicked(entry.message, sticker)
+                }
             }
     }
 }
