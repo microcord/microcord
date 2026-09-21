@@ -460,7 +460,8 @@ class ChatAttachmentView @JvmOverloads constructor(
 
 internal fun isTextPreviewFilename(filename: String): Boolean {
     val lower = filename.lowercase(Locale.ROOT)
-    return lower.substringBefore('.') in TEXT_PREVIEW_NAMES || lower.substringAfterLast('.', "") in TEXT_PREVIEW_EXTENSIONS
+    return lower.substringBefore('.') in TEXT_PREVIEW_NAMES ||
+        filenameTypeToken(lower) in TEXT_PREVIEW_EXTENSIONS
 }
 
 internal fun decodeTextPreview(bytes: ByteArray): String? {
@@ -471,7 +472,7 @@ internal fun decodeTextPreview(bytes: ByteArray): String? {
 }
 
 internal fun syntaxLanguageForFilename(filename: String): String? = when (
-    filename.lowercase(Locale.ROOT).substringAfterLast('.', "")
+    filenameTypeToken(filename.lowercase(Locale.ROOT))
 ) {
     "kt", "kts" -> "kotlin"
     "proto", "protobuf" -> "protobuf"
@@ -486,6 +487,9 @@ internal fun syntaxLanguageForFilename(filename: String): String? = when (
     "diff", "patch" -> "diff"
     else -> null
 }
+
+private fun filenameTypeToken(filename: String): String =
+    filename.substringAfterLast('.', filename)
 
 private val TEXT_PREVIEW_NAMES = setOf("dockerfile", "makefile", "license", "readme")
 private val TEXT_PREVIEW_EXTENSIONS = (
