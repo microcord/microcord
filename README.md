@@ -134,3 +134,23 @@ steps; redact account credentials and private message content from diagnostics.
 
 Microcord is not affiliated with or endorsed by Discord Inc. Recovered Discord
 assets and third-party components retain their respective ownership and licenses.
+
+## License
+
+Microcord's own source — the Kotlin, Java, XML and build scripts written for this
+project — is licensed under the **GNU Affero General Public License, version 3
+only** (AGPL-3.0-only). The full text is in [LICENSE](LICENSE).
+
+That license does not extend to material recovered from Discord's APK or to
+bundled third-party components, which keep their own terms:
+
+| Material | Terms |
+| --- | --- |
+| Recovered Discord layouts, drawables, assets, string tables and transliterated code | Discord Inc.; not relicensed or redistributed under the AGPL |
+| `app/src/main/jniLibs/**` and `third_party/webrtc-discord-333.5` | WebRTC BSD 3-Clause; see [the native runtime provenance](third_party/webrtc-discord-333.5/README.md) |
+| `app/src/main/proto/discord_protos/**` | Discord Userdoccers project; see its vendored provenance note |
+| Public libraries | Their published licenses, listed in `gradle/libs.versions.toml` |
+
+The AGPL's remote-network clause (section 13) applies to Microcord itself: anyone
+running a modified public network service built from this code must offer the
+Corresponding Source of their version to its users.
