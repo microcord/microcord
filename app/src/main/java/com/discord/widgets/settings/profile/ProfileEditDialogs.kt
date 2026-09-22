@@ -8,50 +8,123 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentManager
+import androidx.core.view.isVisible
+import androidx.recyclerview.widget.LinearLayoutManager
+import com.discord.api.user.RecentAvatar
 import com.discord.R
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppDialog
+import com.discord.databinding.BottomSheetProfileAvatarSelectorBinding
+import com.discord.databinding.BottomSheetSimpleSelectorItemBinding
+import com.discord.databinding.ProfileRecentAvatarItemBinding
 import com.discord.utilities.color.ColorCompat
-import com.discord.utilities.view.recycler.MaxHeightRecyclerView
+import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.MGImages
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
 import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.google.android.material.button.MaterialButton
 import com.jaredrummler.android.colorpicker.ColorPanelView
 import com.jaredrummler.android.colorpicker.ColorPickerView
 
 class ProfileAvatarSelectorSheet : AppBottomSheet() {
-    override fun getContentViewResId() = R.layout.bottom_sheet_simple_selector
+    private var _binding: BottomSheetProfileAvatarSelectorBinding? = null
+    private val binding get() = requireNotNull(_binding)
+    override fun getContentViewResId() = R.layout.bottom_sheet_profile_avatar_selector
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val binding = BottomSheetProfileAvatarSelectorBinding.bind(view).also { _binding = it }
         setBottomSheetCollapsedStateDisabled()
-        view.findViewById<View>(R.id.widget_simple_bottom_sheet_selector_header).visibility = View.GONE
         val labels = argumentsOrDefault.getCharSequenceArray(ARG_LABELS).orEmpty()
         val destructiveIndex = argumentsOrDefault.getInt(ARG_DESTRUCTIVE_INDEX, -1)
-        view.findViewById<MaxHeightRecyclerView>(R.id.widget_simple_bottom_sheet_selector_recycler).adapter =
-            SimpleRecyclerAdapter(labels.toList()) { inflater, parent ->
+        binding.profileAvatarActions.apply {
+            layoutManager = LinearLayoutManager(context)
+            adapter = SimpleRecyclerAdapter(labels.toList()) { inflater, parent ->
                 OptionViewHolder(
-                    inflater.inflate(R.layout.bottom_sheet_simple_selector_item, parent, false),
+                    BottomSheetSimpleSelectorItemBinding.inflate(inflater, parent, false),
                     destructiveIndex,
                 )
             }
+        }
+        argumentsOrDefault.getLong(ARG_USER_ID, -1L).takeIf { it > 0L }?.let(::loadRecentAvatars)
     }
 
     override fun onPause() {
         super.onPause()
         dismiss()
     }
+    override fun onDestroyView() {
+        binding.profileAvatarActions.adapter = null
+        _binding = null
+        super.onDestroyView()
+    }
 
-    private inner class OptionViewHolder(itemView: View, private val destructiveIndex: Int) :
-        SimpleRecyclerAdapter.ViewHolder<CharSequence>(itemView) {
+    private fun loadRecentAvatars(userId: Long) {
+        binding.profileAvatarRecentHeader.isVisible = true
+        binding.profileAvatarRecentLoading.isVisible = true
+        RestAPI.api.getRecentAvatars()
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                ProfileAvatarSelectorSheet::class.java,
+                onNext = { response -> renderRecentAvatars(userId, response.avatars) },
+                errorHandler = { renderRecentAvatars(userId, emptyList()) },
+            )
+    }
+
+    private fun renderRecentAvatars(userId: Long, avatars: List<RecentAvatar>) {
+        val binding = _binding ?: return
+        binding.profileAvatarRecentLoading.isVisible = false
+        val visible = avatars.isNotEmpty()
+        binding.profileAvatarRecentHeader.isVisible = visible
+        binding.profileAvatarRecentScroll.isVisible = visible
+        binding.profileAvatarRecentContainer.apply {
+            removeAllViews()
+            avatars.forEachIndexed { index, avatar ->
+                val tile = ProfileRecentAvatarItemBinding.inflate(layoutInflater, this, false).root
+                tile.contentDescription = avatar.description
+                    ?: getString(R.string.user_settings_recent_avatar_number, index + 1)
+                MGImages.setImage(
+                    tile,
+                    IconUtils.getForArchivedUserAvatar(
+                        userId = userId,
+                        avatarId = avatar.id,
+                        storageHash = avatar.storageHash,
+                        allowAnimation = true,
+                        size = RECENT_AVATAR_SIZE,
+                    ),
+                    useSmallCache = false,
+                )
+                tile.setOnClickListener {
+                    parentFragmentManager.setFragmentResult(
+                        REQUEST_KEY,
+                        bundleOf(
+                            RESULT_RECENT_AVATAR_ID to avatar.id,
+                            RESULT_RECENT_AVATAR_HASH to avatar.storageHash,
+                        ),
+                    )
+                    dismiss()
+                }
+                addView(tile)
+            }
+        }
+    }
+
+    private inner class OptionViewHolder(
+        private val binding: BottomSheetSimpleSelectorItemBinding,
+        private val destructiveIndex: Int,
+    ) : SimpleRecyclerAdapter.ViewHolder<CharSequence>(binding.root) {
         override fun bind(data: CharSequence) {
-            itemView.findViewById<ImageView>(R.id.select_component_sheet_item_icon).visibility = View.GONE
-            itemView.findViewById<TextView>(R.id.select_component_sheet_item_description).visibility = View.GONE
-            itemView.findViewById<TextView>(R.id.select_component_sheet_item_title).apply {
+            binding.selectComponentSheetItemIcon.visibility = View.GONE
+            binding.selectComponentSheetItemDescription.visibility = View.GONE
+            binding.selectComponentSheetItemTitle.apply {
                 text = data
                 setTextColor(
                     if (bindingAdapterPosition == destructiveIndex) {
@@ -61,7 +134,7 @@ class ProfileAvatarSelectorSheet : AppBottomSheet() {
                     },
                 )
             }
-            itemView.setOnClickListener {
+            binding.root.setOnClickListener {
                 parentFragmentManager.setFragmentResult(
                     REQUEST_KEY,
                     bundleOf(RESULT_INDEX to bindingAdapterPosition),
@@ -74,13 +147,26 @@ class ProfileAvatarSelectorSheet : AppBottomSheet() {
     companion object {
         internal const val REQUEST_KEY = "PROFILE_AVATAR_SELECTOR"
         internal const val RESULT_INDEX = "selected_index"
+        internal const val RESULT_RECENT_AVATAR_ID = "recent_avatar_id"
+        internal const val RESULT_RECENT_AVATAR_HASH = "recent_avatar_hash"
         internal const val TAG = "ProfileAvatarSelectorSheet"
         private const val ARG_LABELS = "labels"
         private const val ARG_DESTRUCTIVE_INDEX = "destructive_index"
+        private const val ARG_USER_ID = "user_id"
+        private const val RECENT_AVATAR_SIZE = 128
 
-        fun show(fragmentManager: FragmentManager, labels: Array<String>, destructiveIndex: Int) {
+        fun show(
+            fragmentManager: FragmentManager,
+            labels: Array<String>,
+            destructiveIndex: Int,
+            userId: Long? = null,
+        ) {
             ProfileAvatarSelectorSheet().apply {
-                arguments = bundleOf(ARG_LABELS to labels, ARG_DESTRUCTIVE_INDEX to destructiveIndex)
+                arguments = bundleOf(
+                    ARG_LABELS to labels,
+                    ARG_DESTRUCTIVE_INDEX to destructiveIndex,
+                    ARG_USER_ID to (userId ?: -1L),
+                )
             }.show(fragmentManager, TAG)
         }
     }

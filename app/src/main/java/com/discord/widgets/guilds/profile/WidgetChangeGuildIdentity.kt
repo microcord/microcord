@@ -8,10 +8,8 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentManager
 import com.discord.R
-import com.discord.app.AppBottomSheet
 import com.discord.app.AppDialog
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -23,9 +21,10 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
-import com.discord.utilities.view.recycler.MaxHeightRecyclerView
-import com.discord.utilities.views.SimpleRecyclerAdapter
+import com.discord.utilities.rx.ui
+import com.discord.widgets.settings.profile.ProfileAvatarSelectorSheet
 import com.google.android.material.button.MaterialButton
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_identity) {
@@ -63,6 +62,23 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
         requireContext().getSharedPreferences("com.discord_preferences", Context.MODE_PRIVATE)
             .edit().putBoolean(USER_GUILD_PROFILE_VIEWED_CACHE_KEY, true).apply()
         showKeyboard(binding.setNicknameText)
+        childFragmentManager.setFragmentResultListener(
+            ProfileAvatarSelectorSheet.REQUEST_KEY,
+            viewLifecycleOwner,
+        ) { _, result ->
+            val recentId = result.getString(ProfileAvatarSelectorSheet.RESULT_RECENT_AVATAR_ID)
+            val recentHash = result.getString(ProfileAvatarSelectorSheet.RESULT_RECENT_AVATAR_HASH)
+            val loaded = viewModel.viewState as? WidgetChangeGuildIdentityViewModel.ViewState.Loaded
+            when {
+                recentId != null && recentHash != null && loaded != null ->
+                    downloadRecentAvatar(loaded.meUser.id, recentId, recentHash)
+                result.getInt(ProfileAvatarSelectorSheet.RESULT_INDEX) == 0 -> {
+                    imageSelectedResult = viewModel::updateAvatar
+                    openMediaChooser()
+                }
+                else -> viewModel.updateAvatar(null)
+            }
+        }
     }
 
     override fun onDestroyView() {
@@ -103,14 +119,12 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
                     add(getString(R.string.change_guild_member_avatar))
                     if (loaded.displayingGuildAvatar) add(getString(R.string.change_identity_modal_reset_primary_avatar))
                 }
-                GuildIdentityAvatarSheet.show(childFragmentManager, options) { index ->
-                    if (index == 0) {
-                        imageSelectedResult = viewModel::updateAvatar
-                        openMediaChooser()
-                    } else {
-                        viewModel.updateAvatar(null)
-                    }
-                }
+                ProfileAvatarSelectorSheet.show(
+                    childFragmentManager,
+                    options.toTypedArray(),
+                    destructiveIndex = if (loaded.displayingGuildAvatar) 1 else -1,
+                    userId = loaded.meUser.id,
+                )
             }
         }
         binding.upsellSection.visibility = if (loaded.shouldUpsell) View.VISIBLE else View.GONE
@@ -145,22 +159,47 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
         } else if (mimeType == "image/gif") {
             MGImages.requestDataUrl(context, uri, mimeType, imageSelectedResult)
         } else {
-            MediaPicker.requestImageCrop(
-                mediaPickerProvider(),
-                uri,
-                MediaPicker.CropTheme(
-                    android.graphics.Color.BLACK,
-                    android.graphics.Color.BLACK,
-                    android.graphics.Color.WHITE,
-                    android.graphics.Color.WHITE,
-                ),
-                maxOutputDimensionPx = 1024,
-            )
+            requestAvatarCrop(uri)
         }
+    }
+
+    private fun requestAvatarCrop(uri: Uri) {
+        MediaPicker.requestImageCrop(
+            mediaPickerProvider(),
+            uri,
+            MediaPicker.CropTheme(
+                android.graphics.Color.BLACK,
+                android.graphics.Color.BLACK,
+                android.graphics.Color.WHITE,
+                android.graphics.Color.WHITE,
+            ),
+            maxOutputDimensionPx = MAX_AVATAR_SIZE,
+        )
     }
 
     override fun onImageCropped(uri: Uri, mimeType: String) {
         MGImages.requestDataUrl(context, uri, mimeType, imageSelectedResult)
+    }
+
+    private fun downloadRecentAvatar(userId: Long, avatarId: String, storageHash: String) {
+        val url = IconUtils.getForArchivedUserAvatar(
+            userId = userId,
+            avatarId = avatarId,
+            storageHash = storageHash,
+            allowAnimation = true,
+            size = MAX_AVATAR_SIZE,
+        )
+        val input = File(requireContext().cacheDir, RECENT_AVATAR_INPUT_FILE)
+        MediaPicker.downloadRemoteImage(url, input)
+            .ui(this)
+            .appSubscribe(
+                WidgetChangeGuildIdentity::class.java,
+                context = context,
+                errorHandler = { AppToast.show(this, R.string.default_failure_to_perform_action_message) },
+            ) { uri ->
+                imageSelectedResult = viewModel::updateAvatar
+                requestAvatarCrop(uri)
+            }
     }
 
     private fun mediaPickerProvider() = object : MediaPicker.Provider {
@@ -175,6 +214,8 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
         const val USER_GUILD_PROFILE_VIEWED_CACHE_KEY = "USER_GUILD_PROFILE_VIEWED_CACHE_KEY"
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val EXTRA_SOURCE = "com.discord.intent.extra.EXTRA_SOURCE"
+        private const val MAX_AVATAR_SIZE = 1024
+        private const val RECENT_AVATAR_INPUT_FILE = "recent-guild-avatar"
 
         fun launch(guildId: Long, source: String, context: Context) = AppScreenRouter.launch(
             context,
@@ -184,53 +225,6 @@ class WidgetChangeGuildIdentity : AppFragment(R.layout.widget_change_guild_ident
     }
 }
 
-internal class GuildIdentityAvatarSheet : AppBottomSheet() {
-    var options: List<String> = emptyList()
-    var onSelected: ((Int) -> Unit)? = null
-
-    override fun getContentViewResId() = R.layout.bottom_sheet_simple_selector
-
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        setBottomSheetCollapsedStateDisabled()
-        view.findViewById<View>(R.id.widget_simple_bottom_sheet_selector_header).visibility = View.GONE
-        view.findViewById<MaxHeightRecyclerView>(R.id.widget_simple_bottom_sheet_selector_recycler).adapter =
-            SimpleRecyclerAdapter(options) { inflater, parent ->
-                OptionHolder(inflater.inflate(R.layout.bottom_sheet_simple_selector_item, parent, false))
-            }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        dismiss()
-    }
-
-    private inner class OptionHolder(view: View) : SimpleRecyclerAdapter.ViewHolder<String>(view) {
-        override fun bind(data: String) {
-            itemView.findViewById<View>(R.id.select_component_sheet_item_icon).visibility = View.GONE
-            itemView.findViewById<View>(R.id.select_component_sheet_item_description).visibility = View.GONE
-            itemView.findViewById<TextView>(R.id.select_component_sheet_item_title).apply {
-                text = data
-                setTextColor(
-                    if (bindingAdapterPosition == 1) ContextCompat.getColor(context, R.color.status_red_500)
-                    else currentTextColor,
-                )
-            }
-            itemView.setOnClickListener {
-                onSelected?.invoke(bindingAdapterPosition)
-                dismiss()
-            }
-        }
-    }
-
-    companion object {
-        fun show(fragmentManager: FragmentManager, options: List<String>, onSelected: (Int) -> Unit) =
-            GuildIdentityAvatarSheet().apply {
-                this.options = options
-                this.onSelected = onSelected
-            }.show(fragmentManager, GuildIdentityAvatarSheet::class.java.name)
-    }
-}
 
 internal class GuildIdentityDiscardDialog : AppDialog(R.layout.view_dialog_confirmation) {
     var onConfirm: (() -> Unit)? = null

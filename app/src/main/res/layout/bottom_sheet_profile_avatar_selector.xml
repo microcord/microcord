@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorBackgroundSecondary"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/profile_avatar_recent_header"
+        style="@style/UiKit.TextView.Bold"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/user_settings_recent_avatars"
+        android:textColor="?attr/colorHeaderPrimary"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/profile_avatar_recent_loading"
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            style="@style/UiKit.ProgressBar.White"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:contentDescription="@string/loading" />
+    </FrameLayout>
+
+    <HorizontalScrollView
+        android:id="@+id/profile_avatar_recent_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:fillViewport="false"
+        android:overScrollMode="never"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/profile_avatar_recent_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <com.discord.utilities.view.recycler.MaxHeightRecyclerView
+        android:id="@+id/profile_avatar_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp"
+        android:scrollbars="none" />
+</LinearLayout>

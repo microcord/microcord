@@ -131,6 +131,13 @@ coverage and passing builds do not establish complete behavioral parity.
 - Component link-preview embeds (`type: components`) reuse the Components V2 renderer for
   containers, markdown, separators, sections, media and read-only link buttons; a focused
   deserialization-to-row fixture passed before the in-place device install.
+- Profile crops decode GIF and animated WebP through Fresco and encode animated GIF
+  with `io.github.waynejo:androidndkgif:1.0.1` from Maven Central. Outputs use the
+  existing `image_provider/` FileProvider root and retain `image/gif` upload MIME.
+  Android runtime checks preserved all 96 distinct frames and 8,010 ms of the actual
+  archived WebP avatar; GIF timing/transparency checks also passed. Crop chrome was
+  visually checked, and archived-avatar downloads show the existing loading spinner.
+  Debug build/in-place install passed; the user confirmed the corrected flow works.
 
 ## Compatibility Decisions
 

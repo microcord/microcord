@@ -21,4 +21,6 @@ data class PatchUserBody(
     val displayNameFontId: NullSerializable<Int>? = null,
     val displayNameEffectId: NullSerializable<Int>? = null,
     val displayNameColors: NullSerializable<List<Int>>? = null,
+    /** Selects an entry returned by `GET users/@me/avatars` without re-uploading its image. */
+    val avatarId: String? = null,
 )

@@ -37,3 +37,4 @@ __pycache__/
 *.keystore
 !/app/manticord-dev.keystore
 /.vscode
+/.discord_js_cache

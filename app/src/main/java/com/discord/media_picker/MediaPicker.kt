@@ -11,8 +11,12 @@ import android.provider.MediaStore
 import androidx.annotation.ColorInt
 import androidx.core.content.FileProvider
 import com.yalantis.ucrop.UCrop
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.io.IOException
+import rx.Observable
+import rx.schedulers.Schedulers
 
 /**
  * Everything the app needs to get an image out of the device and into a screen.
@@ -31,6 +35,7 @@ object MediaPicker {
     private const val PREFS_NAME = "picker"
     private const val KEY_PENDING_CAPTURE_URI = "picker_uri"
     private const val CROP_OUTPUT_EXTRA = "com.yalantis.ucrop.OutputUri"
+    private val cdnClient = OkHttpClient()
 
     /**
      * Authority of the app's [FileProvider].
@@ -72,6 +77,31 @@ object MediaPicker {
         @ColorInt val toolbarWidgetColor: Int,
         @ColorInt val activeControlsColor: Int,
     )
+
+
+    /**
+     * Downloads a public CDN image into app-private storage for the normal crop/upload pipeline.
+     * A temporary sibling prevents a failed transfer from leaving a partial picker input behind.
+     */
+    fun downloadRemoteImage(url: String, destination: File): Observable<Uri> =
+        Observable.fromCallable {
+            val partial = File(destination.parentFile, "${destination.name}.part")
+            partial.delete()
+            try {
+                cdnClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                    if (!response.isSuccessful) throw IOException("Image download failed with HTTP ${response.code}")
+                    val body = response.body ?: throw IOException("Image download returned no body")
+                    partial.outputStream().use { output -> body.byteStream().use { it.copyTo(output) } }
+                    if (destination.exists() && !destination.delete()) {
+                        throw IOException("Unable to replace image download")
+                    }
+                    if (!partial.renameTo(destination)) throw IOException("Unable to store image download")
+                    Uri.fromFile(destination)
+                }
+            } finally {
+                partial.delete()
+            }
+        }.subscribeOn(Schedulers.io())
 
     /**
      * Opens the combined image chooser — camera, gallery and document providers in one sheet.
@@ -122,6 +152,7 @@ object MediaPicker {
                 .withMaxResultSize(maxDimension, maxDimension)
                 .withAspectRatio(aspectRatioX, aspectRatioY)
                 .getIntent(context)
+                .setClass(context, ProfileCropActivity::class.java)
 
             // uCrop writes through a file URI, so every activity that can serve the intent needs
             // read/write access to the destination.

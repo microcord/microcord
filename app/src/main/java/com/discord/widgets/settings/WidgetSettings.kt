@@ -83,7 +83,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         }
 
         bindRoute(binding.account, ::WidgetSettingsAccount)
-        bindRoute(binding.profile, ::WidgetEditUserOrGuildMemberProfile)
+        binding.profile.setOnClickListener { WidgetEditUserOrGuildMemberProfile.launch(requireContext()) }
         bindRoute(binding.authorizedApps, ::WidgetSettingsAuthorizedApps)
         bindRoute(binding.sessions, ::WidgetSettingsSessions)
         bindRoute(binding.textImagesSettings, ::WidgetSettingsMedia)

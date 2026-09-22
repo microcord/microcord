@@ -85,7 +85,7 @@ class ManifestPlatformContractTest {
 
         val connectService = manifest.component("com.discord.app.DiscordConnectService")
         assertFalse(connectService.descendants("intent-filter").any())
-        assertNotNull(manifest.component("com.yalantis.ucrop.UCropActivity"))
+        assertNotNull(manifest.component("com.discord.media_picker.ProfileCropActivity"))
     }
 
     @Test

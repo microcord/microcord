@@ -24,7 +24,7 @@ import com.discord.app.AppScreenRouter
 import com.discord.models.domain.ModelPayload
 import com.discord.stores.AuthNavigationState
 import com.discord.stores.StoreStream
-import com.yalantis.ucrop.UCropActivity
+import com.discord.media_picker.ProfileCropActivity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -91,7 +91,7 @@ class ProfileAvatarPickerTest {
             true,
         )
         val crop = instrumentation.addMonitor(
-            UCropActivity::class.java.name,
+            ProfileCropActivity::class.java.name,
             ActivityResult(
                 Activity.RESULT_OK,
                 Intent()

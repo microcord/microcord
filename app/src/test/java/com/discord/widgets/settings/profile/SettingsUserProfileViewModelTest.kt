@@ -114,6 +114,18 @@ class SettingsUserProfileViewModelTest {
         assertNull(profile?.pronouns)
     }
 
+    @Test fun `recent avatar selection sends its id instead of reuploading the hash`() {
+        val state = loaded(user = user(avatar = "old"))
+            .copy(currentAvatarId = "1357011390585507910", currentAvatarHash = "new-hash")
+
+        val patch = SettingsUserProfileViewModel.userPatch(state)
+
+        assertEquals("1357011390585507910", patch?.avatarId)
+        assertNull(patch?.avatar)
+        assertTrue(state.isDirty)
+        assertTrue(state.hasAvatarForDisplay)
+    }
+
     @Test fun `an untouched screen sends nothing`() {
         val state = loaded(user = user(bio = "same"), bio = "same")
 

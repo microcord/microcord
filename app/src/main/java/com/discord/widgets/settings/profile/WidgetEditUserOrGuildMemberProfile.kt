@@ -44,6 +44,8 @@ import com.discord.utilities.dimmer.DimmerView
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
+import com.discord.utilities.rx.withDimmer
+import com.discord.utilities.rx.ui
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.view.text.LinkifiedTextView
@@ -54,6 +56,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import java.util.concurrent.atomic.AtomicBoolean
+import java.io.File
 import java.io.Serializable
 
 class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_user_profile) {
@@ -262,11 +265,18 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 )
             }
         }
-        childFragmentManager.setFragmentResultListener(
+        parentFragmentManager.setFragmentResultListener(
             ProfileAvatarSelectorSheet.REQUEST_KEY,
             viewLifecycleOwner,
         ) { _, result ->
-            if (result.getInt(ProfileAvatarSelectorSheet.RESULT_INDEX) == 0) {
+            val recentId = result.getString(ProfileAvatarSelectorSheet.RESULT_RECENT_AVATAR_ID)
+            val recentHash = result.getString(ProfileAvatarSelectorSheet.RESULT_RECENT_AVATAR_HASH)
+            if (recentId != null && recentHash != null) {
+                avatarSelection = null
+                val userId = (viewModel.viewState as? SettingsUserProfileViewModel.ViewState.Loaded)
+                    ?.user?.id ?: return@setFragmentResultListener
+                downloadRecentAvatar(userId, recentId, recentHash)
+            } else if (result.getInt(ProfileAvatarSelectorSheet.RESULT_INDEX) == 0) {
                 uploadTarget = UploadTarget.AVATAR
                 openProfileMediaChooser()
             } else {
@@ -423,7 +433,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
 
     private fun tintSwatch(swatch: View, color: Int) {
         (swatch.background as? GradientDrawable)?.mutate()?.let { drawable ->
-            (drawable as GradientDrawable).setColor(color)
+            (drawable as GradientDrawable).setColor(color or 0xFF000000.toInt())
             swatch.background = drawable
         }
     }
@@ -635,6 +645,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
     private fun configureAvatar(state: SettingsUserProfileViewModel.ViewState.Loaded) {
         header.setOnAvatarEdit {
             if (!state.canEditGuildProfile) return@setOnAvatarEdit showPremiumRequired()
+
             val options = buildList {
                 add(
                     getString(
@@ -656,9 +667,10 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 }
             }
             ProfileAvatarSelectorSheet.show(
-                childFragmentManager,
+                parentFragmentManager,
                 options.toTypedArray(),
                 destructiveIndex = if (state.hasAvatarForDisplay) 1 else -1,
+                userId = state.user.id,
             )
         }
     }
@@ -731,28 +743,30 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                         .replace("{maxFileSizeMB}", MAX_BANNER_FILE_SIZE_MB.toString()),
                 )
             } else {
-                val stableUri = copyToLocalFile(uri) ?: return
-                requestDataUrl(stableUri, mimeType, target)
+                requestImageCrop(uri, target == UploadTarget.BANNER)
             }
         } else {
-            val banner = target == UploadTarget.BANNER
-            MediaPicker.requestImageCrop(
-                mediaPickerProvider(),
-                uri,
-                MediaPicker.CropTheme(Color.BLACK, Color.BLACK, Color.WHITE, Color.WHITE),
-                aspectRatioX = if (banner) 5f else 1f,
-                aspectRatioY = if (banner) 2f else 1f,
-                maxOutputDimensionPx = if (banner) MAX_BANNER_IMAGE_SIZE else MAX_AVATAR_SIZE,
-                onError = {
-                    uploadTarget = null
-                    AppToast.show(this, R.string.default_failure_to_perform_action_message)
-                },
-            )
+            requestImageCrop(uri, target == UploadTarget.BANNER)
         }
     }
 
+    private fun requestImageCrop(uri: Uri, banner: Boolean) {
+        MediaPicker.requestImageCrop(
+            mediaPickerProvider(),
+            uri,
+            MediaPicker.CropTheme(Color.BLACK, Color.BLACK, Color.WHITE, Color.WHITE),
+            aspectRatioX = if (banner) 5f else 1f,
+            aspectRatioY = if (banner) 2f else 1f,
+            maxOutputDimensionPx = if (banner) MAX_BANNER_IMAGE_SIZE else MAX_AVATAR_SIZE,
+            onError = {
+                uploadTarget = null
+                AppToast.show(this, R.string.default_failure_to_perform_action_message)
+            },
+        )
+    }
+
     override fun onImageCropped(uri: Uri, mimeType: String) {
-        uploadTarget?.let { requestDataUrl(uri, "image/png", it) }
+        uploadTarget?.let { requestDataUrl(uri, if (mimeType == "image/gif") mimeType else "image/png", it) }
     }
 
     private fun requestDataUrl(uri: Uri, mimeType: String, target: UploadTarget) {
@@ -807,17 +821,6 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         )
     }
 
-    private fun copyToLocalFile(uri: Uri): Uri? = runCatching {
-        val file = imageFile
-        requireContext().contentResolver.openInputStream(uri)?.use { input ->
-            file.outputStream().use(input::copyTo)
-        } ?: error("Unable to open selected image")
-        Uri.fromFile(file)
-    }.getOrElse {
-        uploadTarget = null
-        AppToast.show(this, R.string.default_failure_to_perform_action_message)
-        null
-    }
 
     private fun openProfileMediaChooser() {
         requestMedia {
@@ -830,6 +833,28 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
                 AppToast.show(this, R.string.default_failure_to_perform_action_message)
             }
         }
+    }
+
+    private fun downloadRecentAvatar(userId: Long, avatarId: String, storageHash: String) {
+        val url = IconUtils.getForArchivedUserAvatar(
+            userId = userId,
+            avatarId = avatarId,
+            storageHash = storageHash,
+            allowAnimation = true,
+            size = MAX_AVATAR_SIZE,
+        )
+        val input = File(requireContext().cacheDir, RECENT_AVATAR_INPUT_FILE)
+        MediaPicker.downloadRemoteImage(url, input)
+            .ui(this)
+            .withDimmer(dimmer, 0L)
+            .appSubscribe(
+                WidgetEditUserOrGuildMemberProfile::class.java,
+                context = context,
+                errorHandler = { AppToast.show(this, R.string.default_failure_to_perform_action_message) },
+            ) { uri ->
+                uploadTarget = UploadTarget.AVATAR
+                requestImageCrop(uri, banner = false)
+            }
     }
 
     private fun mediaPickerProvider() = object : MediaPicker.Provider {
@@ -853,6 +878,7 @@ class WidgetEditUserOrGuildMemberProfile : AppFragment(R.layout.widget_settings_
         private const val EXTRA_GUILD_ID = "com.discord.intent.extra.EXTRA_GUILD_ID"
         private const val DEFAULT_BANNER_COLOR = "#000000"
         private const val STATE_DRAFT = "profile_draft"
+        private const val RECENT_AVATAR_INPUT_FILE = "recent-profile-avatar"
         private const val STATE_UPLOAD_TARGET = "profile_upload_target"
         private const val STATE_AVATAR_SELECTION = "profile_avatar_selection"
         private const val STATE_BANNER_SELECTION = "profile_banner_selection"

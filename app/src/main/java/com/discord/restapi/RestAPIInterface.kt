@@ -87,6 +87,7 @@ import com.discord.api.thread.ThreadListing
 import com.discord.api.thread.ThreadMember
 import com.discord.api.user.PatchUserBody
 import com.discord.api.user.PatchUserProfileBody
+import com.discord.api.user.RecentAvatars
 import com.discord.api.user.User
 import com.discord.api.user.UserApplicationIdentities
 import com.discord.api.user.UserProfile
@@ -430,6 +431,9 @@ interface RestAPIInterface {
 
     @PATCH("users/@me")
     fun patchUser(@Body patchUserBody: PatchUserBody): Observable<User>
+
+    @GET("users/@me/avatars")
+    fun getRecentAvatars(): Observable<RecentAvatars>
 
     @PATCH("users/@me/profile")
     fun patchUserProfile(@Body body: PatchUserProfileBody): Observable<UserProfile.ProfileMetadata>

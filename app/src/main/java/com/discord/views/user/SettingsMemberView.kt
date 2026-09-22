@@ -144,9 +144,8 @@ class SettingsMemberView constructor(
  * same CDN cache entries.
  */
 internal fun avatarUrl(user: User, guildMember: GuildMember?, size: Int? = null, animate: Boolean = true): String {
-    val hash = guildMember?.takeIf(GuildMember::hasAvatar)?.avatarHash
-    if (hash?.startsWith("data:") == true) return hash
-    if (hash == null && user.avatar?.startsWith("data:") == true) return user.avatar!!
+    val hash = guildMember?.takeIf(GuildMember::hasAvatar)?.avatarHash ?: user.avatar
+    if (hash?.startsWith("data:") == true || hash?.startsWith("http") == true) return hash
     return IconUtils.getForGuildMemberOrUser(user, guildMember, size, animate)
         ?: IconUtils.getDefaultAvatar(0)
 }

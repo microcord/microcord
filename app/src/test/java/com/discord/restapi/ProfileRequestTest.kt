@@ -1,11 +1,13 @@
 package com.discord.restapi
 
 import com.discord.api.user.PatchUserProfileBody
+import com.discord.api.user.PatchUserBody
 import com.discord.nullserializable.NullSerializable
 import okhttp3.CookieJar
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -17,7 +19,7 @@ class ProfileRequestTest {
     private val server = MockWebServer()
     private val api by lazy {
         RestAPIBuilder(server.url("/api/").toString(), CookieJar.NO_COOKIES)
-            .build(RestAPIInterface::class.java)
+            .build(RestAPIInterface::class.java, interceptors = listOf(ClientMetadataInterceptor))
     }
 
     @After
@@ -56,6 +58,30 @@ class ProfileRequestTest {
             """{"banner":null,"bio":"","pronouns":""}""",
             server.takeRequest().body.readUtf8(),
         )
+    }
+
+    @Test
+    fun `recent avatars deserialize and selection sends avatar id`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"avatars":[{"id":"1357011390585507910","storage_hash":"hash","description":"old avatar"}]}""",
+            ),
+        )
+
+        val recent = api.getRecentAvatars().toBlocking().first()
+
+        assertEquals("1357011390585507910", recent.avatars.single().id)
+        assertEquals("hash", recent.avatars.single().storageHash)
+
+        server.enqueue(MockResponse().setBody("""{"id":"1","username":"user"}"""))
+        api.patchUser(PatchUserBody(avatarId = recent.avatars.single().id)).subscribe({ }, { })
+        val sent = server.takeRequest()
+        assertEquals("GET", sent.method)
+        assertEquals("/api/v9/users/@me/avatars", sent.path)
+        assertFalse(sent.getHeader("X-Super-Properties").isNullOrBlank())
+        val patch = server.takeRequest()
+        assertEquals("PATCH", patch.method)
+        assertEquals("""{"avatar_id":"1357011390585507910"}""", patch.body.readUtf8())
     }
 
     @Test

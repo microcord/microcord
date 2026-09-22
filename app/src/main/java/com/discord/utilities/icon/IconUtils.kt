@@ -220,6 +220,20 @@ object IconUtils  {
         return getDefaultAvatar(getDefaultAvatarIndex(userId, discriminator, isWebhook))
     }
 
+    /** CDN URL for an entry returned by `GET users/@me/avatars`. */
+    @JvmStatic
+    fun getForArchivedUserAvatar(
+        userId: Long,
+        avatarId: String,
+        storageHash: String,
+        allowAnimation: Boolean = false,
+        size: Int? = AVATAR_SIZE_DP,
+    ): String {
+        val extension = getImageExtension(storageHash, allowAnimation)
+        return "$CDN_HOST/avatars/$userId/archived/$avatarId/$storageHash.$extension" +
+            assetQuery(size, storageHash, allowAnimation, extension)
+    }
+
     @JvmStatic
     fun getForUser(user: User?, allowAnimation: Boolean = false, size: Int? = AVATAR_SIZE_DP): String? =
         getForUser(user?.id, user?.avatar, user?.discriminator, allowAnimation, size, user?.isWebhook == true)

@@ -30,6 +30,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
@@ -159,8 +160,16 @@ class PhotoEditorDialog : DialogFragment() {
         super.onStart()
         dialog?.window?.apply {
             WindowCompat.setDecorFitsSystemWindows(this, false)
-            statusBarColor = 0xff1e1f22.toInt()
-            navigationBarColor = 0xff1e1f22.toInt()
+            statusBarColor = EDITOR_CHROME_COLOR
+            navigationBarColor = EDITOR_CHROME_COLOR
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                isStatusBarContrastEnforced = false
+                isNavigationBarContrastEnforced = false
+            }
+            WindowInsetsControllerCompat(this, decorView).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         ViewCompat.requestApplyInsets(binding.photoEditorRoot)
@@ -494,6 +503,7 @@ class PhotoEditorDialog : DialogFragment() {
         internal const val TEXT_UNDERLINE = "underline"
         internal const val TEXT_DELETE = "delete"
         private const val DANGER = 0xffda373c.toInt()
+        private const val EDITOR_CHROME_COLOR = 0xff1e1f22.toInt()
         private val FILTERS = arrayOf(PhotoFilter.NONE, PhotoFilter.AUTO_FIX, PhotoFilter.BRIGHTNESS, PhotoFilter.CONTRAST, PhotoFilter.DOCUMENTARY, PhotoFilter.DUE_TONE, PhotoFilter.FILL_LIGHT, PhotoFilter.FISH_EYE, PhotoFilter.GRAIN, PhotoFilter.GRAY_SCALE, PhotoFilter.LOMISH, PhotoFilter.NEGATIVE, PhotoFilter.POSTERIZE, PhotoFilter.SATURATE, PhotoFilter.SEPIA, PhotoFilter.SHARPEN, PhotoFilter.TEMPERATURE, PhotoFilter.TINT, PhotoFilter.VIGNETTE)
 
         fun show(fragmentManager: androidx.fragment.app.FragmentManager, uri: Uri, name: String?, spoiler: Boolean) {

@@ -296,12 +296,11 @@
         </activity>
 
         <!--
-            Avatar/banner cropping. com.discord.media_picker.MediaPicker already launches UCrop, and
-            the ucrop 2.2.6 AAR ships an activity-less manifest, so without this entry every crop
-            throws ActivityNotFoundException. Not exported: only this app starts it.
+            Inset-aware uCrop host. Android's enforced edge-to-edge mode otherwise places the Done
+            action underneath the status bar. Not exported: only this app starts it.
         -->
         <activity
-            android:name="com.yalantis.ucrop.UCropActivity"
+            android:name="com.discord.media_picker.ProfileCropActivity"
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 

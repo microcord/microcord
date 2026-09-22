@@ -115,6 +115,14 @@ class IconUtilsTest {
     }
 
     @Test
+    fun buildsArchivedAvatarUrlsWithTheAvatarRecordId() {
+        assertEquals(
+            "https://cdn.discordapp.com/avatars/852/archived/123/hash.$staticExtension?size=128",
+            IconUtils.getForArchivedUserAvatar(852L, "123", "hash", size = 101),
+        )
+    }
+
+    @Test
     fun fallsBackToTheDiscriminatorDefaultAvatar() {
         assertEquals(
             "asset://asset/images/default_avatar_2.png",

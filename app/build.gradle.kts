@@ -227,6 +227,7 @@ dependencies {
     compileOnly(libs.fresco.middleware)
     implementation(libs.fresco.animated.gif)
     implementation(libs.fresco.animated.webp)
+    implementation(libs.fresco.animated.base)
     implementation(libs.firebase.messaging)
     implementation(libs.protobuf.java)
     implementation(libs.gson)
@@ -246,6 +247,7 @@ dependencies {
     implementation(libs.realtime.blur.view)
     implementation(libs.simpleast)
     implementation(libs.ucrop)
+    implementation(libs.androidndkgif)
     implementation(files("../third_party/webrtc-discord-333.5/webrtc-discord-333.5.aar"))
     implementation(libs.zxing.scanner) {
         exclude(group = "com.android.support")

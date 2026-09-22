@@ -76,6 +76,8 @@ class SettingsUserProfileViewModel(
         val profileEffectCleared: Boolean = false,
         val profileFrame: Long? = null,
         val profileFrameCleared: Boolean = false,
+        val avatarId: String? = null,
+        val avatarHash: String? = null,
     ) : Serializable
 
     data class StoreState(
@@ -112,6 +114,9 @@ class SettingsUserProfileViewModel(
             val currentProfileEffect: NullSerializable<Long>? = null,
             val currentProfileFrame: NullSerializable<Long>? = null,
             val currentPrimaryGuildId: NullSerializable<Long>? = null,
+            /** A recent-avatar pick is sent as [currentAvatarId]; its hash only drives preview. */
+            val currentAvatarId: String? = null,
+            val currentAvatarHash: String? = null,
         ) : ViewState() {
 
             /** The guild whose tag is worn, pending selection first, else what the account has. */
@@ -123,7 +128,7 @@ class SettingsUserProfileViewModel(
                 }
             /** The metadata this screen edits: the guild profile in a guild, the global one otherwise. */
             val savedProfile = if (meMember != null) userProfile.guildMemberProfile else userProfile.userProfile
-            val isDirty = currentAvatar != null || currentBannerImage != null ||
+            val isDirty = currentAvatar != null || currentAvatarId != null || currentBannerImage != null ||
                 currentBannerColorHex != null || isBioChanged || isPronounsChanged ||
                 currentAvatarDecoration != null || currentNameplate != null ||
                 currentThemeColors != null || currentProfileEffect != null || currentProfileFrame != null ||
@@ -229,10 +234,11 @@ class SettingsUserProfileViewModel(
             }
             private val hasUserAvatarForDisplay = meMember == null && user.avatar != null
             private val hasMemberAvatarForDisplay = meMember?.hasAvatar() == true
-            val hasAvatarForDisplay = when (currentAvatar) {
-                is NullSerializable.Value -> true
-                is NullSerializable.Null -> false
-                null -> hasUserAvatarForDisplay || hasMemberAvatarForDisplay
+            val hasAvatarForDisplay = when {
+                currentAvatarId != null -> true
+                currentAvatar is NullSerializable.Value -> true
+                currentAvatar is NullSerializable.Null -> false
+                else -> hasUserAvatarForDisplay || hasMemberAvatarForDisplay
             }
             private val hasUserBannerForDisplay = meMember == null && user.banner != null
             private val hasMemberBannerForDisplay = meMember?.hasBanner() == true
@@ -277,7 +283,22 @@ class SettingsUserProfileViewModel(
         updateViewState(state)
     }
 
-    @MainThread fun updateAvatar(value: String?) = update { copy(currentAvatar = value.serializable()) }
+    @MainThread
+    fun updateAvatar(value: String?) = update {
+        copy(currentAvatar = value.serializable(), currentAvatarId = null, currentAvatarHash = null)
+    }
+    @MainThread
+    fun selectRecentAvatar(id: String, storageHash: String) = update {
+        if (meMember != null || storageHash == user.avatar) {
+            copy(currentAvatar = null, currentAvatarId = null, currentAvatarHash = null)
+        } else {
+            copy(
+                currentAvatar = null,
+                currentAvatarId = id,
+                currentAvatarHash = storageHash,
+            )
+        }
+    }
     @MainThread fun updateBannerImage(value: String?) = update { copy(currentBannerImage = value.serializable()) }
     @MainThread fun updateBannerColor(value: String?) = update { copy(currentBannerColorHex = value.serializable()) }
     @MainThread fun updateNickname(value: String) = update { copy(currentNickname = value) }
@@ -361,8 +382,12 @@ class SettingsUserProfileViewModel(
             val loaded = state as ViewState.Loaded
             // Unsaved edits are previewed, not just the persisted values: a blank draft name reads
             // as "cleared" and the header falls back to the username, exactly as it will after save.
-            val editedAvatar = if (loaded.meMember == null && loaded.currentAvatar != null) {
-                loaded.currentAvatar.value
+            val editedAvatar = if (loaded.meMember == null) {
+                loaded.currentAvatarHash
+                    ?: loaded.currentAvatar?.value
+                    ?: loaded.user.avatar.takeIf {
+                        loaded.currentAvatar == null && loaded.currentAvatarId == null
+                    }
             } else loaded.user.avatar
             val user = loaded.user.copy(
                 avatar = editedAvatar,
@@ -447,6 +472,8 @@ class SettingsUserProfileViewModel(
             it.currentProfileEffect is NullSerializable.Null,
             (it.currentProfileFrame as? NullSerializable.Value)?.value,
             it.currentProfileFrame is NullSerializable.Null,
+            it.currentAvatarId,
+            it.currentAvatarHash,
         )
     }
 
@@ -471,6 +498,8 @@ class SettingsUserProfileViewModel(
         }
         val cleared = state.copy(
             currentAvatar = null,
+            currentAvatarId = null,
+            currentAvatarHash = null,
             currentBannerImage = null,
             currentBannerColorHex = null,
         )
@@ -545,7 +574,13 @@ class SettingsUserProfileViewModel(
             // renders from that same cache and would lose its badges.
             storeUserProfile.fetchProfile(state.user.id, guildId)
             val edit: SavedEdit = {
-                it.copy(user = merge(it.user, user), currentAvatarDecoration = null, currentNameplate = null)
+                it.copy(
+                    user = merge(it.user, user),
+                    currentAvatarDecoration = null,
+                    currentNameplate = null,
+                    currentAvatarId = null,
+                    currentAvatarHash = null,
+                )
             }
             edit
         }
@@ -611,6 +646,8 @@ class SettingsUserProfileViewModel(
                 currentProfileFrame = current?.currentProfileFrame,
                 currentAvatarDecoration = current?.currentAvatarDecoration,
                 currentNameplate = current?.currentNameplate,
+                currentAvatarId = current?.currentAvatarId,
+                currentAvatarHash = current?.currentAvatarHash,
             )
         }
 
@@ -618,10 +655,18 @@ class SettingsUserProfileViewModel(
             val globalName = if (state.isDisplayNameChanged) state.currentDisplayName.serializable() else null
             val decoration = state.currentAvatarDecoration.skuIdPatch(AvatarDecorationData::skuId)
             val nameplate = state.currentNameplate.skuIdPatch(Nameplate::skuId)
-            if (state.currentAvatar == null && globalName == null && decoration == null && nameplate == null) {
+            if (state.currentAvatar == null && state.currentAvatarId == null &&
+                globalName == null && decoration == null && nameplate == null
+            ) {
                 return null
             }
-            return PatchUserBody(state.currentAvatar, globalName, decoration, nameplate)
+            return PatchUserBody(
+                avatar = state.currentAvatar,
+                globalName = globalName,
+                avatarDecorationSkuId = decoration,
+                nameplateSkuId = nameplate,
+                avatarId = state.currentAvatarId,
+            )
         }
 
         internal fun guildMemberPatch(state: ViewState.Loaded): PatchGuildMemberBody? {
@@ -737,6 +782,8 @@ class SettingsUserProfileViewModel(
                 ?: NullSerializable.Null<Long>().takeIf { draft.profileEffectCleared },
             currentProfileFrame = draft.profileFrame?.let { NullSerializable.Value(it) }
                 ?: NullSerializable.Null<Long>().takeIf { draft.profileFrameCleared },
+            currentAvatarId = draft.avatarId,
+            currentAvatarHash = draft.avatarHash,
         )
 
         private fun observeStoreState(guildId: Long?): Observable<StoreState> =
