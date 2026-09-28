@@ -15,7 +15,10 @@ import com.discord.R
 import com.discord.app.AppDialog
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.databinding.UserActionsDialogBinding
+import com.discord.stores.StoreStream
+import com.discord.widgets.chat.input.applauncher.WidgetContextCommandsSheet
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.plugins.PluginContextMenuHost
@@ -70,6 +73,20 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
             binding.userActionsDialogViewMainProfileItem,
             binding.userActionsDialogViewServerProfileItem,
         ).forEach(::restoreIconOpacity)
+
+        val channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID, 0L)
+        val userId = argumentsOrDefault.getLong(ARG_USER_ID, 0L)
+        // Outside a channel that has user commands (e.g. from the friends list), fall back to the
+        // viewer's user-installed apps, which then run in the DM with this user.
+        val commands = StoreStream.getApplicationCommands()
+        val type = ApplicationCommandIndexCommand.TYPE_USER
+        val commandChannelId = channelId.takeIf { commands.getContextCommands(it, type).isNotEmpty() } ?: 0L
+        binding.userActionsDialogAppsItem.isVisible = commandChannelId != 0L ||
+            (userId != StoreStream.getUsers().getMe().id && commands.getPrivateChannelContextCommands(type).isNotEmpty())
+        binding.userActionsDialogAppsItem.setOnClickListener {
+            dismiss()
+            WidgetContextCommandsSheet.show(parentFragmentManager, commandChannelId, type, userId)
+        }
 
         binding.userActionsDialogBlockItem.setOnClickListener { viewModel.blockUser() }
         binding.userActionsDialogUnblockItem.setOnClickListener {

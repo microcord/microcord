@@ -388,10 +388,10 @@ class AppLauncherAdapter(
             command.name
         }
 
-    private fun iconUrl(id: Long, icon: String?): String? =
-        icon?.let { "https://cdn.discordapp.com/app-icons/$id/$it.webp?size=128" }
-
     companion object {
+        internal fun iconUrl(id: Long, icon: String?): String? =
+            icon?.let { "https://cdn.discordapp.com/app-icons/$id/$it.webp?size=128" }
+
         private const val TYPE_ROW = 0
         private const val TYPE_ACTIVITY = 1
 

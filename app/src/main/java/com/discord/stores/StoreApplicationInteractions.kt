@@ -417,6 +417,7 @@ class StoreApplicationInteractions(
         attachments: List<UploadAttachment>? = null,
         onSuccess: () -> Unit = {},
         onFail: (RestApiError) -> Unit = {},
+        targetId: Long? = null,
     ) = dispatcher.schedule {
         val localSendData = ApplicationCommandLocalSendData(
             nonce = nonceGenerator.nonce(),
@@ -430,6 +431,7 @@ class StoreApplicationInteractions(
             applicationCommandsValues = data.values,
             version = version ?: data.applicationCommand.version,
             applicationCommand = data.applicationCommand.apiCommand,
+            targetId = targetId,
         )
         storeApplicationCommandFrecency?.onCommandUsed(guildId, data.applicationCommand.id)
         handleSendApplicationCommandRequest(localSendData, attachments, onSuccess, onFail)

@@ -9,6 +9,7 @@ import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.api.commands.ApplicationIntegrationType
 import com.discord.api.commands.ApplicationCommandType
 import com.discord.models.commands.ApplicationCommand
+import com.discord.models.commands.ApplicationCommandLocalSendData
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.api.permission.Permission
 import com.discord.models.commands.CommandPermissionContext
@@ -26,6 +27,8 @@ import java.lang.reflect.Proxy
 import com.google.gson.GsonBuilder
 import com.google.gson.FieldNamingPolicy
 import org.junit.After
+import rx.plugins.RxJavaHooks
+import rx.schedulers.Schedulers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,8 +53,16 @@ class ApplicationCommandStoresTest {
      */
     private val directory = Files.createTempDirectory("application-command-stores").toFile()
 
-    @Before fun setUp() = Persister.init(directory)
-    @After fun tearDown() { directory.deleteRecursively() }
+    @Before fun setUp() {
+        Persister.init(directory)
+        // Fake REST answers on the test thread; TestScheduler is not safe to feed from another one.
+        RxJavaHooks.setOnIOScheduler { Schedulers.immediate() }
+    }
+
+    @After fun tearDown() {
+        RxJavaHooks.reset()
+        directory.deleteRecursively()
+    }
 
     // -- StoreAutocomplete ---------------------------------------------------------------------
 
@@ -462,6 +473,75 @@ class ApplicationCommandStoresTest {
     }
 
     @Test
+    fun contextMenuCommandsAreKeptApartFromSlashCommandsForTheIndexedChannel() {
+        fun command(id: Long, type: Int, name: String) =
+            ApplicationCommandIndexCommand(id = id, type = type, applicationId = 12L, name = name, version = "1")
+        val index = ApplicationCommandIndex(
+            applications = listOf(ApplicationCommandIndexApplication(12L, "Tools")),
+            applicationCommands = listOf(
+                command(1L, ApplicationCommandIndexCommand.TYPE_CHAT_INPUT, "ping"),
+                command(2L, ApplicationCommandIndexCommand.TYPE_USER, "Inspect User"),
+                command(3L, ApplicationCommandIndexCommand.TYPE_MESSAGE, "Translate"),
+            ),
+        )
+        val api = Proxy.newProxyInstance(
+            RestAPIInterface::class.java.classLoader,
+            arrayOf(RestAPIInterface::class.java),
+        ) { _, method, _ ->
+            when (method.name) {
+                "getGuildApplicationCommandIndex" -> Observable.just(Response.success(index))
+                "getUserApplicationCommandIndex" -> Observable.just(Response.success(ApplicationCommandIndex()))
+                else -> null
+            }
+        } as RestAPIInterface
+        val fixture = commandsFixture(restApi = api)
+
+        fixture.store.requestApplicationCommandIndex(7L, GUILD_ID, isBotDm = false)
+        fixture.await { fixture.store.getContextCommands(7L, ApplicationCommandIndexCommand.TYPE_MESSAGE).isNotEmpty() }
+
+        assertEquals(listOf("Translate"), fixture.store.getContextCommands(7L, ApplicationCommandIndexCommand.TYPE_MESSAGE).map { it.name })
+        assertEquals(listOf("Inspect User"), fixture.store.getContextCommands(7L, ApplicationCommandIndexCommand.TYPE_USER).map { it.name })
+        assertTrue(fixture.store.getContextCommands(8L, ApplicationCommandIndexCommand.TYPE_MESSAGE).isEmpty())
+        assertTrue(fixture.store.getDiscoverCommands().commands.none { it.name == "Translate" || it.name == "Inspect User" })
+
+        // Another channel in the same guild reuses the guild index; its commands must follow.
+        fixture.store.requestApplicationCommandIndex(8L, GUILD_ID, isBotDm = false)
+        fixture.scheduler.triggerActions()
+        assertEquals(listOf("Translate"), fixture.store.getContextCommands(8L, ApplicationCommandIndexCommand.TYPE_MESSAGE).map { it.name })
+        assertTrue(fixture.store.getContextCommands(7L, ApplicationCommandIndexCommand.TYPE_MESSAGE).isEmpty())
+    }
+
+    @Test
+    fun contextCommandSendDataCarriesTheTargetOntoTheWire() {
+        val command = ApplicationCommandIndexCommand(
+            id = 3L,
+            type = ApplicationCommandIndexCommand.TYPE_MESSAGE,
+            applicationId = 12L,
+            name = "Translate",
+            version = "1",
+        )
+        val wire = ApplicationCommandLocalSendData(
+            nonce = 1L,
+            channelId = 7L,
+            guildId = GUILD_ID,
+            commandGuildId = null,
+            application = ModelApplication(id = 12L, name = "Tools", commandCount = 0),
+            sessionId = null,
+            applicationCommandName = command.name,
+            applicationCommandId = command.id.toString(),
+            applicationCommandsValues = emptyList(),
+            version = command.version,
+            applicationCommand = command,
+            targetId = 99L,
+        ).toRestApiApplicationCommandDataParam()
+
+        assertEquals("99", wire.targetId)
+        assertEquals(ApplicationCommandIndexCommand.TYPE_MESSAGE, wire.type)
+        val json = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create().toJson(wire)
+        assertTrue(json.contains("\"target_id\":\"99\""))
+    }
+
+    @Test
     fun newerRemoteAutocompleteRequestRejectsTheOlderResponse() {
         val requests = mutableListOf<RestAPIParams.ApplicationCommand>()
         val api = Proxy.newProxyInstance(
@@ -618,10 +698,11 @@ class ApplicationCommandStoresTest {
         store.onCommandUsed(null, "200")
         scheduler.triggerActions()
 
-        assertEquals(listOf("100"), store.getTopCommandIds(GUILD_ID))
+        // A guild-scoped key ranks only in its guild; an unscoped (global) key ranks everywhere.
+        assertEquals(setOf("100", "200"), store.getTopCommandIds(GUILD_ID).toSet())
         assertEquals(listOf("200"), store.getTopCommandIds(null))
         assertEquals(listOf("200"), store.getTopCommandIds(0L))
-        assertTrue(store.getTopCommandIds(999L).isEmpty())
+        assertEquals(listOf("200"), store.getTopCommandIds(999L))
     }
 
     // -- Fixtures ------------------------------------------------------------------------------
@@ -643,6 +724,7 @@ class ApplicationCommandStoresTest {
             restApi = { restApi },
             indexCachePersister = indexCachePersister,
             observationDeck = deck,
+            channelType = { null },
         )
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store, frecency), deck))
         // The store parks requests until the socket says it is ready.

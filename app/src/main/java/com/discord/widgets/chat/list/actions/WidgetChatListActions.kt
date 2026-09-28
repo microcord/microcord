@@ -13,6 +13,8 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.api.commands.ApplicationCommandIndexCommand
+import com.discord.widgets.chat.input.applauncher.WidgetContextCommandsSheet
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isArchivedThread
@@ -197,6 +199,12 @@ class WidgetChatListActions : AppBottomSheet() {
         bind(binding.dialogChatActionsCopyId, model.isDeveloper && !isLocal) {
             copy(message.id.toString(), R.string.copy_id)
             dismiss()
+        }
+        val messageCommands = StoreStream.getApplicationCommands()
+            .getContextCommands(message.channelId, ApplicationCommandIndexCommand.TYPE_MESSAGE)
+        bind(binding.dialogChatActionsApps, !isLocal && messageCommands.isNotEmpty()) {
+            dismiss()
+            WidgetContextCommandsSheet.show(parentFragmentManager, message.channelId, ApplicationCommandIndexCommand.TYPE_MESSAGE, message.id)
         }
         bind(binding.dialogChatActionsReport, message.author?.id != model.me.id) {
             WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)

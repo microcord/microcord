@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorBackgroundPrimary"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="16dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:text="@string/apps"
+        style="@style/UiKit.TextView.H2.Bold" />
+
+    <com.discord.views.SearchInputView
+        android:id="@+id/context_commands_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        app:siv_hint="@string/search"
+        app:siv_search_content_description="@string/search" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/context_commands_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:nestedScrollingEnabled="false" />
+
+    <TextView
+        android:id="@+id/context_commands_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="16dp"
+        android:text="@string/no_results_found"
+        android:textColor="?attr/colorTextMuted"
+        android:visibility="gone"
+        style="@style/UiKit.TextView" />
+</LinearLayout>

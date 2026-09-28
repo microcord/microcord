@@ -32,6 +32,7 @@ data class ApplicationCommandLocalSendData(
     val version: String?,
     val interactionId: Long? = null,
     val applicationCommand: ApplicationCommandIndexCommand? = null,
+    val targetId: Long? = null,
 ) {
     val nonceString: String get() = nonce.toString()
 
@@ -70,6 +71,7 @@ data class ApplicationCommandLocalSendData(
             attachments = attachments,
             type = applicationCommand?.type ?: ApplicationCommandIndexCommand.TYPE_CHAT_INPUT,
             applicationCommand = applicationCommand,
+            targetId = targetId?.toString(),
         )
     }
 

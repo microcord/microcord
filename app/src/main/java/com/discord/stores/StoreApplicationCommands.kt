@@ -6,6 +6,7 @@ import com.discord.api.commands.ApplicationCommandAutocompleteChoice
 import com.discord.api.commands.ApplicationCommandAutocompleteResult
 import com.discord.api.commands.ApplicationCommandContext
 import com.discord.api.commands.ApplicationCommandIndex
+import com.discord.api.commands.ApplicationCommandIndexApplication
 import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.api.commands.ApplicationIntegrationType
 import com.discord.api.channel.Channel
@@ -104,6 +105,10 @@ class StoreApplicationCommands(
     private var queryGuildId: Long? = null
     private var query: String? = null
     private var indexedCommands: List<ApplicationCommand> = emptyList()
+
+    /** User and message context-menu commands from the current index; the snapshot pairs them with its channel. */
+    private var contextCommands: List<ApplicationCommand> = emptyList()
+    private var contextCommandsSnapshot: Pair<Long?, List<ApplicationCommand>> = null to emptyList()
     private var indexRequestGeneration: Long = 0L
     private var indexedChannelId: Long? = null
     private var indexedGuildId: Long? = null
@@ -112,7 +117,7 @@ class StoreApplicationCommands(
     private var pendingIndexSources: Int = 0
     private val loadedIndexSources = LinkedHashMap<Int, IndexedSource>()
     private var currentUserId = 0L
-    private var persistedIndexCache = PersistedIndexCache()
+    @Volatile private var persistedIndexCache = PersistedIndexCache()
 
     // -- Frecency ------------------------------------------------------------------------------
 
@@ -142,6 +147,34 @@ class StoreApplicationCommands(
     fun getDiscoverCommands(): DiscoverCommands = discoverCommandsSnapshot
 
     fun getQueryCommands(): List<ApplicationCommand> = queryCommandsSnapshot
+
+    /** [type] is [ApplicationCommandIndexCommand.TYPE_USER] or [ApplicationCommandIndexCommand.TYPE_MESSAGE]. */
+    fun getContextCommands(channelId: Long, type: Int): List<ApplicationCommand> =
+        contextCommandsSnapshot.takeIf { it.first == channelId }?.second.orEmpty().filter { it.type == type }
+
+    /**
+     * Context commands of the viewer's user-installed apps that may run in a DM, from the cached
+     * account index. Used where no channel is at hand (a profile opened from the friends list):
+     * the command then runs in the DM with its target.
+     */
+    fun getPrivateChannelContextCommands(type: Int): List<ApplicationCommand> {
+        val index = persistedIndexCache.userIndex ?: return emptyList()
+        val installation = ApplicationIntegrationType.USER_INSTALL.value
+        return index.applicationCommands
+            .filter { it.type == type }
+            .map { command ->
+                command.toSlashCommand(
+                    applicationPermissions = index.applications.firstOrNull { it.id == command.applicationId }?.permissions,
+                    installationType = installation,
+                )
+            }
+            .filter { it.isAvailableIn(0L, isBotDm = false) }
+            .sortedBy(ApplicationCommand::name)
+    }
+
+    /** The applications behind [getPrivateChannelContextCommands], for names and icons. */
+    fun getPrivateChannelContextApplications(): Map<Long, Application> =
+        persistedIndexCache.userIndex?.applications.orEmpty().associate { it.id to it.toModel() }
 
     fun getFrecencyCommands(guildId: Long): List<ApplicationCommand> =
         frecencyCommandsSnapshot[guildId].orEmpty()
@@ -183,6 +216,11 @@ class StoreApplicationCommands(
             } else {
                 getQueryCommands().filter(ApplicationCommand::builtIn)
             }
+        }.distinctUntilChanged()
+
+    fun observeContextCommands(channelId: Long, type: Int): Observable<List<ApplicationCommand>> =
+        observationDeck.connectRx(*sourcesWith(ContextCommandsUpdate, storePermissions)) {
+            if (shouldReturnApplicationCommands(channelPermissions(channelId))) getContextCommands(channelId, type) else emptyList()
         }.distinctUntilChanged()
 
     /** The frequently-used shortlist, capped at five. */
@@ -291,6 +329,9 @@ class StoreApplicationCommands(
             val botContextChanged = indexedIsBotDm != isBotDm
             indexedChannelId = channelId
             indexedIsBotDm = isBotDm
+            // The guild index is shared by every channel in the guild; re-snapshot so its context
+            // commands follow the viewer to the new channel.
+            markChanged(ContextCommandsUpdate)
             if (indexLoading) return@schedule
             if (loadedIndexSources.size == 2) {
                 if (botContextChanged) {
@@ -451,6 +492,8 @@ class StoreApplicationCommands(
         if (generation != indexRequestGeneration) return
         indexLoading = false
         indexedCommands = emptyList()
+        contextCommands = emptyList()
+        markChanged(ContextCommandsUpdate)
         handleGuildApplicationsUpdate(
             listOf(builtInCommandsProvider.getFrecencyApplication(), builtInCommandsProvider.getBuiltInApplication()),
         )
@@ -474,33 +517,31 @@ class StoreApplicationCommands(
         indexes.sortedBy(IndexedSource::installationType).forEach { source ->
             source.index.applications.forEach { app ->
                 val previous = applications[app.id]
-                applications[app.id] = Application(
-                    id = app.id,
-                    name = app.bot?.username ?: app.name,
-                    icon = app.icon,
-                    commandCount = 0,
-                    bot = app.bot ?: previous?.bot,
-                    botId = app.botId ?: app.bot?.id ?: previous?.botId,
-                    permissions = app.permissions ?: previous?.permissions,
-                    installationTypes = previous?.installationTypes.orEmpty() + source.installationType,
-                )
+                applications[app.id] = app.toModel(previous, source.installationType)
             }
         }
         val commands = LinkedHashMap<Long, ApplicationCommand>()
+        val contextMenu = LinkedHashMap<Long, ApplicationCommand>()
         indexes.sortedBy(IndexedSource::installationType).forEach { source ->
             source.index.applicationCommands.forEach { command ->
-                if (command.type != ApplicationCommandIndexCommand.TYPE_CHAT_INPUT &&
-                    command.type != ApplicationCommandIndexCommand.TYPE_PRIMARY_ENTRY_POINT
-                ) return@forEach
+                val target = when (command.type) {
+                    ApplicationCommandIndexCommand.TYPE_CHAT_INPUT,
+                    ApplicationCommandIndexCommand.TYPE_PRIMARY_ENTRY_POINT -> commands
+                    ApplicationCommandIndexCommand.TYPE_USER,
+                    ApplicationCommandIndexCommand.TYPE_MESSAGE -> contextMenu
+                    else -> return@forEach
+                }
                 val application = applications[command.applicationId]
                 val domain = command.toSlashCommand(
                     applicationPermissions = application?.permissions,
-                    installationType = if (commands.containsKey(command.id)) null else source.installationType,
+                    installationType = if (target.containsKey(command.id)) null else source.installationType,
                 )
-                if (domain.isAvailableIn(guildId ?: 0L, isBotDm)) commands[command.id] = domain
+                if (domain.isAvailableIn(guildId ?: 0L, isBotDm)) target[command.id] = domain
             }
         }
         indexedCommands = commands.values.toList()
+        contextCommands = contextMenu.values.sortedBy(ApplicationCommand::name)
+        markChanged(ContextCommandsUpdate)
         val counts = indexedCommands.groupingBy(ApplicationCommand::applicationId).eachCount()
         val realApplications = applications.values.map { it.copy(commandCount = counts[it.id] ?: 0) }
             .sortedBy(Application::name)
@@ -815,6 +856,9 @@ class StoreApplicationCommands(
         if (updateSources.contains(FrecencyCommandsUpdate)) {
             frecencyCommandsSnapshot = LinkedHashMap(frecencyCommands)
         }
+        if (updateSources.contains(ContextCommandsUpdate)) {
+            contextCommandsSnapshot = indexedChannelId to contextCommands
+        }
     }
 
     companion object {
@@ -824,6 +868,7 @@ class StoreApplicationCommands(
         val QueryCommandsUpdate = object : ObservationDeck.UpdateSource {}
         val AutocompleteResultsUpdate = object : ObservationDeck.UpdateSource {}
         val GuildApplicationsUpdate = object : ObservationDeck.UpdateSource {}
+        val ContextCommandsUpdate = object : ObservationDeck.UpdateSource {}
 
         const val COMMANDS_LIMIT_PER_REQUEST = 20
 
@@ -1112,6 +1157,18 @@ private fun ApplicationCommand.expandSubCommandGroup(
             untranslatedName = "$untranslatedName ${subcommandGroup.untranslatedName} ${leaf.untranslatedName}",
         )
     }
+
+/** An index application as the picker shows it, merged over what an earlier index said about it. */
+private fun ApplicationCommandIndexApplication.toModel(previous: Application? = null, installationType: Int? = null) = Application(
+    id = id,
+    name = bot?.username ?: name,
+    icon = icon,
+    commandCount = 0,
+    bot = bot ?: previous?.bot,
+    botId = botId ?: bot?.id ?: previous?.botId,
+    permissions = permissions ?: previous?.permissions,
+    installationTypes = previous?.installationTypes.orEmpty() + setOfNotNull(installationType),
+)
 
 fun ApplicationCommandIndexCommand.toSlashCommand(
     applicationPermissions: com.discord.api.commands.ApplicationCommandIndexPermissions?,

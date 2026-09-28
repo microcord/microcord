@@ -127,7 +127,7 @@ class ChannelSelector(
 
     /** Open the existing DM with [userId], or create and ingest it before selecting it. */
     @JvmOverloads
-    fun findAndSetDirectMessage(context: Context, userId: Long, onSelected: () -> Unit = {}) {
+    fun findAndSetDirectMessage(context: Context, userId: Long, onSelected: (channelId: Long) -> Unit = {}) {
         routeDirectMessage(
             userId = userId,
             findExistingChannelId = { recipientId ->
@@ -323,12 +323,12 @@ internal fun routeDirectMessage(
     findExistingChannelId: (Long) -> Long?,
     createChannel: (Long, (Long) -> Unit) -> Unit,
     selectChannel: (Long, Long) -> Unit,
-    onSelected: () -> Unit,
+    onSelected: (channelId: Long) -> Unit,
 ) {
     if (userId <= 0L) return
     val select: (Long) -> Unit = { channelId ->
         selectChannel(0L, channelId)
-        onSelected()
+        onSelected(channelId)
     }
     findExistingChannelId(userId)?.let(select) ?: createChannel(userId, select)
 }
