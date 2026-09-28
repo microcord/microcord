@@ -4,9 +4,12 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isPrivate
 import com.discord.api.permission.Permission
 import com.discord.api.sticker.Sticker
+import com.discord.api.sticker.StickerFormatType
 import com.discord.api.sticker.StickerType
 import com.discord.models.user.User
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.stickers.StickerUtils
 import com.discord.utilities.user.UserUtils
 
 /**
@@ -46,6 +49,41 @@ fun getStickerSendability(
     meUser: User,
     currentChannel: Channel? = null,
     currentChannelPermissions: Long? = null,
+): StickerSendability {
+    val sendability = getRealStickerSendability(sticker, meUser, currentChannel, currentChannelPermissions)
+    return if (isSpoofable(sticker, sendability)) StickerSendability.SENDABLE else sendability
+}
+
+/**
+ * Fake-Nitro: a guild sticker the viewer cannot really send goes out as a markdown hyperlink to
+ * its media-proxy URL instead, mirroring [com.discord.models.domain.emoji.ModelEmojiCustom]'s
+ * emoji spoof. Returns null when the flag is off or the sticker is genuinely sendable, in which
+ * case the sticker is sent normally.
+ */
+fun spoofedStickerContent(
+    sticker: Sticker,
+    meUser: User,
+    currentChannel: Channel?,
+    currentChannelPermissions: Long?,
+): String? {
+    val sendability = getRealStickerSendability(sticker, meUser, currentChannel, currentChannelPermissions)
+    if (!isSpoofable(sticker, sendability)) return null
+    val url = StickerUtils.getCDNAssetUrl(sticker, size = StickerUtils.DEFAULT_STICKER_SIZE_DP)
+    return "[${sticker.name}]($url)"
+}
+
+// Only guild stickers are ever gated, and they are never Lottie, which a link could not render.
+private fun isSpoofable(sticker: Sticker, sendability: StickerSendability): Boolean =
+    FeatureFlags.nitroSpoofEnabled() &&
+        sendability != StickerSendability.SENDABLE &&
+        sticker.type == StickerType.GUILD &&
+        sticker.formatType != StickerFormatType.UNKNOWN
+
+private fun getRealStickerSendability(
+    sticker: Sticker,
+    meUser: User,
+    currentChannel: Channel?,
+    currentChannelPermissions: Long?,
 ): StickerSendability {
     val canUsePremium = with(UserUtils) { meUser.canUsePremiumStickers }
     return when (sticker.type) {

@@ -44,4 +44,28 @@ class StickerMessageSenderTest {
         assertEquals(listOf(sticker), request.stickers)
         assertEquals(MessageSendLocation.CHAT_INPUT, request.location)
     }
+
+    @Test
+    fun spoofedStickerSendsLinkInsteadOfSticker() {
+        val channel = GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .create()
+            .fromJson("""{"id":"2","guild_id":"3","type":0}""", Channel::class.java)
+        val sticker = Sticker(
+            id = 4,
+            packId = null,
+            guildId = 9,
+            name = "wave",
+            description = "wave",
+            formatType = StickerFormatType.PNG,
+            tags = "wave",
+            type = StickerType.GUILD,
+        )
+        val link = "[wave](https://media.discordapp.net/stickers/4.png)"
+
+        val request = stickerSendRequest(channel, sticker, User(6, "sender"), null, spoofedContent = link)
+
+        assertEquals(link, request.content)
+        assertEquals(emptyList<Sticker>(), request.stickers)
+    }
 }

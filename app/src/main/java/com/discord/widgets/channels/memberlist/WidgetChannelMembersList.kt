@@ -96,7 +96,7 @@ class WidgetChannelMembersList : AppFragment(R.layout.widget_channel_members_lis
         subscription = viewModel.observeViewState().subscribe { next ->
             activity?.runOnUiThread {
                 when (next) {
-                    WidgetChannelMembersListViewModel.ViewState.Empty -> show(State(null, false, EmptyMemberList))
+                    is WidgetChannelMembersListViewModel.ViewState.Empty -> show(State(null, false, EmptyMemberList))
                     is WidgetChannelMembersListViewModel.ViewState.Loaded ->
                         show(State(next.channel, next.isOpen, next.listItems, next.isThreadJoined))
                 }
