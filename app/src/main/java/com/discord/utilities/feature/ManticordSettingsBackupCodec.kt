@@ -21,7 +21,7 @@ import okio.ByteString.Companion.toByteString
  * Unknown sibling values stay in UnknownFieldSet; opaque sibling bytes are never decoded.
  */
 object ManticordSettingsBackupCodec {
-    class UnrecognizedCloudData : IllegalArgumentException("Existing cloud data is not a supported Manticord backup")
+    class UnrecognizedCloudData : IllegalArgumentException("Existing cloud data is not a supported Microcord backup")
 
     private const val MAX_ENCODED_CHARS = 5_242_880
     private const val MAX_JSON_BYTES = 3 * 1024 * 1024

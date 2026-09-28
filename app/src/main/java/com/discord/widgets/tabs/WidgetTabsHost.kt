@@ -20,6 +20,7 @@ import com.discord.app.appViewModels
 import com.discord.databinding.WidgetTabsHostBinding
 import com.discord.plugins.PluginUiRegistry
 import com.discord.stores.StoreNavigation
+import com.discord.stores.StoreInviteSettings
 import com.discord.stores.StoreStream
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
@@ -31,6 +32,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
+import com.discord.widgets.guilds.invite.WidgetGuildInvite
 import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.widgets.auth.WidgetRemoteAuth
 import com.discord.widgets.media.WidgetQRScanner
@@ -437,6 +439,16 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                     }
             }
             is DeepLinkRoute.Settings -> StoreStream.getTabsNavigation().selectTab(NavigationTab.SETTINGS, true)
+            is DeepLinkRoute.Invite -> WidgetGuildInvite.launch(
+                requireContext(),
+                StoreInviteSettings.InviteCode(
+                    route.code,
+                    route.source ?: "Deeplink",
+                    route.eventId,
+                    route.targetChannelId,
+                    route.targetMessageId,
+                ),
+            )
             else -> return
         }
         StoreStream.getNavigation().consumePendingIntent(contract)

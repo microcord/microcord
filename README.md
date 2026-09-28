@@ -13,6 +13,8 @@ Core messaging, social and media flows are implemented, but complete behavioral
 parity is still a work in progress. See [the development plan](PLAN.md) for
 status and remaining work.
 
+**[Join the support server](https://discord.gg/YE8deBEVyd)** for help and feedback.
+
 ## Download
 
 **[Download the latest APK](https://microcord.mantikafasi.dev/latest.apk)**

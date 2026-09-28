@@ -4,21 +4,21 @@
     <string name="cloud_settings_description">Experimental storage in your Discord account. Manually save or restore local client preferences, customizations, and ordinary plugin settings. No automatic uploads.</string>
     <string name="cloud_settings_save">Save Local Settings to Cloud</string>
     <string name="cloud_settings_restore">Restore Local Settings from Cloud</string>
-    <string name="cloud_settings_save_confirm">Replace your Manticord cloud backup with this installation\'s local settings? Credentials, account caches, plugin approval certificates, and Android permissions are excluded. Unrecognized remote data will not be overwritten. Plugins must not store secrets in ordinary settings.</string>
-    <string name="cloud_settings_restore_confirm">Replace local settings and customization layouts from your cloud backup, then restart Manticord? Active calls will disconnect. Discord-synced preferences, credentials, plugin approvals, and Android permissions will not be changed. Plugin packages must already be installed.</string>
+    <string name="cloud_settings_save_confirm">Replace your Microcord cloud backup with this installation\'s local settings? Credentials, account caches, plugin approval certificates, and Android permissions are excluded. Unrecognized remote data will not be overwritten. Plugins must not store secrets in ordinary settings.</string>
+    <string name="cloud_settings_restore_confirm">Replace local settings and customization layouts from your cloud backup, then restart Microcord? Active calls will disconnect. Discord-synced preferences, credentials, plugin approvals, and Android permissions will not be changed. Plugin packages must already be installed.</string>
     <string name="cloud_settings_working">Working on cloud backup...</string>
     <string name="cloud_settings_saved">Cloud backup saved and verified.</string>
     <string name="cloud_settings_restored">Local settings restored.</string>
     <string name="cloud_settings_restore_failed">Settings restore failed. The pending backup is retained; retry from Feature Flags.</string>
     <string name="cloud_settings_invalid">The cloud backup is missing, incompatible, or contains another client\'s data. No settings were overwritten.</string>
-    <string name="cloud_settings_existing_data">Your cloud slot already contains data this version of Manticord cannot read. It was left untouched to avoid deleting an existing backup.</string>
+    <string name="cloud_settings_existing_data">Your cloud slot already contains data this version of Microcord cannot read. It was left untouched to avoid deleting an existing backup.</string>
     <string name="cloud_settings_save_invalid">Could not prepare the settings backup: invalid data or an unsupported size. Nothing was uploaded.</string>
     <string name="cloud_settings_clear">Clear Cloud Data</string>
     <string name="cloud_settings_clear_confirm">Permanently clear the existing data in the experimental cloud backup field? This can delete a backup created by another client. Your local settings and other Discord settings will not be deleted. This cannot be undone.</string>
     <string name="cloud_settings_cleared">Cloud data cleared and verified. You can now save a new backup.</string>
     <string name="cloud_settings_clear_failed">Could not safely clear and verify the cloud data. It may have changed on another client. Try again.</string>
     <string name="cloud_settings_conflict">The backup changed or could not be verified. Try again.</string>
-    <string name="cloud_settings_recovery_error">Settings recovery could not finish. The original snapshot is retained. Retry recovery before using Manticord; check that enough storage is available.</string>
+    <string name="cloud_settings_recovery_error">Settings recovery could not finish. The original snapshot is retained. Retry recovery before using Microcord; check that enough storage is available.</string>
     <string name="cloud_settings_retry">Retry Recovery</string>
-    <string name="cloud_settings_close">Close Manticord</string>
+    <string name="cloud_settings_close">Close Microcord</string>
 </resources>

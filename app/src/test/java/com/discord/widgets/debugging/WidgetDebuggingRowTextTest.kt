@@ -75,7 +75,7 @@ class WidgetDebuggingRowTextTest {
             listOf(item("request failed", IllegalStateException("token=$secret"))),
         )
 
-        assertTrue(exported.startsWith("Manticord debug log\n"))
+        assertTrue(exported.startsWith("Microcord debug log\n"))
         assertFalse(exported.contains(secret))
         assertTrue(exported.contains(AppLog.REDACTED))
     }

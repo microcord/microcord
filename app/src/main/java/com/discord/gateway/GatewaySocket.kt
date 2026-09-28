@@ -309,8 +309,8 @@ class GatewaySocket(
         BootLog.record(BootLogEvent.GATEWAY_DISCOVERY)
         val url = try {
             discovery.discover(ignoreSticky)
-        } catch (_: Throwable) {
-            logWarn("gateway discovery failed")
+        } catch (e: Throwable) {
+            logWarn("gateway discovery failed: ${e.javaClass.simpleName}: ${e.message}")
             scheduleReconnect("Gateway discovery failed")
             return
         }

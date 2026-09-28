@@ -1,7 +1,7 @@
 package com.discord.utilities.logging
 
 enum class BootLogEvent(val line: String) {
-    PROCESS_START("Starting MantiCord runtime"),
+    PROCESS_START("Starting MicroCord runtime"),
     PLATFORM_READY("Platform services ready"),
     NATIVE_READY("Native components loaded"),
     PERSISTENCE_READY("Persistent storage ready"),

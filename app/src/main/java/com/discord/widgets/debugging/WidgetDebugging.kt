@@ -251,7 +251,7 @@ internal fun debugLogExport(
     logs: List<AppLog.LoggedItem>,
     previousSessionLogs: String = "",
 ): String = buildString {
-    appendLine("Manticord debug log")
+    appendLine("Microcord debug log")
     logs.forEach { item ->
         appendLine(logRowText(item))
     }

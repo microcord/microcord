@@ -98,7 +98,7 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
                         title = snapshot?.manifest?.name ?: descriptor.label,
                         status = snapshot?.statusText() ?: when {
                             packageEnabled && !signerApproved -> "Signer changed · approval required"
-                            !appCompatible -> "Incompatible Manticord version"
+                            !appCompatible -> "Incompatible Microcord version"
                             PluginRuntime.externalFailure(descriptor.packageName) != null ->
                                 "Failed · ${PluginRuntime.externalFailure(descriptor.packageName)}"
                             packageEnabled -> "Loading"

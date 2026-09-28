@@ -53,7 +53,7 @@ class ManticordSettingsBackup(
         checkPermitted()
         api.getUserSettingsProto(3).single().map { response: UserSettingsProtoResponse ->
             checkPermitted()
-            requireNotNull(ManticordSettingsBackupCodec.decode(response.settings)) { "No Manticord cloud backup exists." }
+            requireNotNull(ManticordSettingsBackupCodec.decode(response.settings)) { "No Microcord cloud backup exists." }
                 .also(::validate)
         }
     }

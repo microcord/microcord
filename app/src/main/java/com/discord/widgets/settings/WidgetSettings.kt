@@ -109,6 +109,9 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         binding.support.setOnClickListener {
             UriHandler.handle(it.context, SUPPORT_URL)
         }
+        binding.supportServer.setOnClickListener {
+            UriHandler.handle(it.context, SUPPORT_SERVER_URL)
+        }
         binding.acknowledgements.setOnClickListener {
             UriHandler.handle(it.context, ACKNOWLEDGEMENTS_URL)
         }
@@ -233,6 +236,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.developer_options_header,
             R.id.app_info_header,
             R.id.support,
+            R.id.support_server,
             R.id.acknowledgements,
             *implementedRouteIds.toTypedArray(),
         )
@@ -255,6 +259,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
 
     companion object {
         private const val SUPPORT_URL = "https://support.discord.com"
+        private const val SUPPORT_SERVER_URL = "https://discord.gg/YE8deBEVyd"
         private const val ACKNOWLEDGEMENTS_URL = "https://discord.com/acknowledgements"
 
         /** Rows whose destination screen exists; everything else is hidden by [hideUnavailableRows]. */

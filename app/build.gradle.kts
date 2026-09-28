@@ -12,6 +12,11 @@ plugins {
 val firebaseConfig = file("google-services.json")
 if (firebaseConfig.exists()) {
     apply(plugin = libs.plugins.google.services.get().pluginId)
+    tasks.configureEach {
+        if (name == "processNonMinifiedReleaseGoogleServices" || name == "processBenchmarkReleaseGoogleServices") {
+            enabled = false
+        }
+    }
 } else {
     logger.lifecycle("google-services.json missing: push notifications will be inert in this build")
 }
@@ -126,6 +131,15 @@ android {
 }
 
 androidComponents {
+    // Baseline-profile generation installs these beside the real app instead of over it, so it can
+    // run on a daily-use device without touching that install's data. Their package is not in
+    // google-services.json, so they build as a checkout without Firebase config does.
+    onVariants(selector().withBuildType("nonMinifiedRelease")) { variant ->
+        variant.applicationId.set("dev.mantikafasi.manticord.benchmark")
+    }
+    onVariants(selector().withBuildType("benchmarkRelease")) { variant ->
+        variant.applicationId.set("dev.mantikafasi.manticord.benchmark")
+    }
     onVariants(selector().withBuildType("release")) { variant ->
         val apkDirectory = variant.artifacts.get(SingleArtifact.APK)
         val artifactsLoader = variant.artifacts.getBuiltArtifactsLoader()
