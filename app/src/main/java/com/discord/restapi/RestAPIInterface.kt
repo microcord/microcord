@@ -1756,6 +1756,16 @@ interface RestAPIInterface {
 
     // -- Invites and templates -----------------------------------------------------------------------------------------
 
+    /** The viewer's live friend invites; the modern client reuses the first before minting one. */
+    @GET("users/@me/invites")
+    fun getFriendInvites(): Observable<List<ModelInvite>>
+
+    @POST("users/@me/invites")
+    fun createFriendInvite(
+        @Body body: RestAPIParams.EmptyBody = RestAPIParams.EmptyBody(),
+        @Header(X_CONTEXT_PROPERTIES) context: String,
+    ): Observable<ModelInvite>
+
     @POST("invites/{code}")
     fun postInviteCode(
         @Path("code") code: String,

@@ -45,6 +45,9 @@ class ModelInvite private constructor(
     private var flags: Int = 0
     private var revoked: Boolean = false
     private var targetType: Int = 0
+
+    /** Wire `type`: [TYPE_GUILD], [TYPE_GROUP_DM] or [TYPE_FRIEND]. Absent on older payloads. */
+    private var type: Int? = null
     private var targetApplication: Application? = null
     private var temporary: Boolean = false
     private var uses: Int = 0
@@ -70,6 +73,13 @@ class ModelInvite private constructor(
     fun bypassesMemberVerification() =
         hasFlag(InviteFlags.IS_GUEST_INVITE) || hasFlag(InviteFlags.IS_APPLICATION_BYPASS)
     fun getTargetType() = targetType
+
+    /**
+     * A friend invite (`discord.gg` link minted by `POST users/@me/invites`); accepting it adds the
+     * inviter as a friend. Payloads without `type` are recognised the way the modern client does:
+     * an inviter with no guild and no group DM behind it.
+     */
+    fun isFriendInvite() = type == TYPE_FRIEND || (type == null && guild == null && channel == null && inviter != null)
     fun getTargetApplication() = targetApplication
     fun getTimeToExpirationMillis() = getExpirationTime() - System.currentTimeMillis()
     fun getUses() = uses
@@ -89,6 +99,7 @@ class ModelInvite private constructor(
             revoked == other.revoked &&
             temporary == other.temporary &&
             targetType == other.targetType &&
+            type == other.type &&
             uses == other.uses &&
             maxUses == other.maxUses &&
             approximatePresenceCount == other.approximatePresenceCount &&
@@ -110,6 +121,7 @@ class ModelInvite private constructor(
         result = 31 * result + revoked.hashCode()
         result = 31 * result + temporary.hashCode()
         result = 31 * result + targetType
+        result = 31 * result + (type ?: 0)
         result = 31 * result + uses
         result = 31 * result + maxUses
         result = 31 * result + approximatePresenceCount
@@ -130,7 +142,7 @@ class ModelInvite private constructor(
         "ModelInvite(inviter=$inviter, guild=$guild, memberVerificationForm=$memberVerificationForm, " +
             "guildScheduledEvent=$guildScheduledEvent, targetApplication=$targetApplication, channel=$channel, " +
             "createdAt=${getCreatedAt()}, expiresAt=$expiresAt, code=$code, " +
-            "maxAge=$maxAge, revoked=$revoked, temporary=$temporary, targetType=$targetType, uses=$uses, " +
+            "maxAge=$maxAge, revoked=$revoked, temporary=$temporary, targetType=$targetType, type=$type, uses=$uses, " +
             "maxUses=$maxUses, approximatePresenceCount=$approximatePresenceCount, " +
             "approximateMemberCount=$approximateMemberCount, newMember=$newMember, isStatic=$isStatic)"
 
@@ -188,6 +200,10 @@ class ModelInvite private constructor(
 
     companion object {
         const val URL_FORMAT = "%1\$s/%2\$s"
+
+        const val TYPE_GUILD = 0
+        const val TYPE_GROUP_DM = 1
+        const val TYPE_FRIEND = 2
         const val URL_FORMAT_WITH_EVENT = "%1\$s/%2\$s?event=%3\$s"
 
         fun createForStaticUrl(code: String?, guild: Guild?) = ModelInvite(null, code, guild)

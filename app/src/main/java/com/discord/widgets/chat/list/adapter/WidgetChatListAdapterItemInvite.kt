@@ -3,10 +3,10 @@ package com.discord.widgets.chat.list.adapter
 import android.content.Context
 import android.text.method.LinkMovementMethod
 import android.view.View
-import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.app.AppToast
+import com.discord.databinding.WidgetChatListAdapterItemInviteBinding
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayNameOrDefault
 import com.discord.api.channel.isGroup
@@ -14,11 +14,13 @@ import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.guild.GuildFeature
 import com.discord.i18n.i18nFormat
 import com.discord.models.domain.ModelInvite
+import com.discord.models.domain.ModelUserRelationship
 import com.discord.models.user.User
 import com.discord.stores.StoreInstantInvites
 import com.discord.stores.StoreStream
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.utilities.SnowflakeUtils.toSnowflake
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
@@ -26,16 +28,11 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
-import com.discord.utilities.view.rounded.RoundedRelativeLayout
-import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.views.ThemedColor
-import com.discord.views.guilds.ServerMemberCount
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.InviteEntry
 import com.discord.widgets.guilds.invite.WidgetGuildInviteShare
 import com.discord.widgets.guilds.invite.requiresApplication
-import com.discord.views.VitoImageView
-import com.google.android.material.button.MaterialButton
 import rx.Observable
 import rx.Subscription
 
@@ -51,22 +48,8 @@ class WidgetChatListAdapterItemInvite(
     adapter: WidgetChatListAdapter,
 ) : WidgetChatListAdapterItemInviteBase(R.layout.widget_chat_list_adapter_item_invite, adapter) {
 
-    private val splash: VitoImageView = itemView.findViewById(R.id.item_invite_splash)
+    private val binding = WidgetChatListAdapterItemInviteBinding.bind(itemView)
     private val splashChangeDetector = MGImages.DistinctChangeDetector()
-    private val splashContainer: RoundedRelativeLayout =
-        itemView.findViewById(R.id.item_invite_splash_container)
-    private val header: TextView = itemView.findViewById(R.id.item_invite_header)
-    private val image: VitoImageView = itemView.findViewById(R.id.item_invite_image)
-    private val imageText: TextView = itemView.findViewById(R.id.item_invite_image_text)
-    private val name: TextView = itemView.findViewById(R.id.item_invite_name)
-    private val channelName: TextView = itemView.findViewById(R.id.item_invite_channel_name)
-    private val memberCount: ServerMemberCount = itemView.findViewById(R.id.item_invite_member_container)
-    private val joinButton: MaterialButton = itemView.findViewById(R.id.item_invite_join_button)
-    private val joinedButton: MaterialButton = itemView.findViewById(R.id.item_invite_joined_button)
-    private val mentionButton: MaterialButton = itemView.findViewById(R.id.item_invite_mention_button)
-    private val loadingButton: View = itemView.findViewById(R.id.item_invite_loading_button)
-    private val hubLayout: FrameLayout = itemView.findViewById(R.id.item_invite_hub_layout)
-    private val hubLink: LinkifiedTextView = itemView.findViewById(R.id.item_invite_hub_link)
 
     private lateinit var item: InviteEntry
     private var iconUrl: String? = null
@@ -115,8 +98,9 @@ class WidgetChatListAdapterItemInvite(
         val guilds = StoreStream.getGuilds()
         val channels = StoreStream.getChannels()
         val accessibility = StoreStream.getAccessibility()
+        val relationships = StoreStream.getUserRelationships()
         return ObservationDeckProvider.get()
-            .connectRx(users, guilds, channels, accessibility)
+            .connectRx(users, guilds, channels, accessibility, relationships)
             .map { _ ->
                 val meId = users.getMe().id
                 val author = users.getUsers()[entry.userId]
@@ -132,6 +116,9 @@ class WidgetChatListAdapterItemInvite(
                         isMemberOfGuild = isMemberOfGuild,
                         channel = localChannel,
                         shouldAnimateGuildIcon = !accessibility.isReducedMotionEnabled(),
+                        isFriendOfInviter = invite.getInviter()?.let {
+                            relationships.getRelationships()[it.id] == ModelUserRelationship.TYPE_FRIEND
+                        } == true,
                     )
                 } else {
                     Model.Invalid(author, meId, localChannel)
@@ -149,20 +136,20 @@ class WidgetChatListAdapterItemInvite(
 
     private fun configureLoadingUI() {
         resetResolvedViews()
-        header.setText(R.string.instant_invite_resolving)
-        name.text = null
-        name.setTextColor(ThemedColor.resolve(itemView.context, R.attr.primary_100))
-        name.setBackgroundResource(R.drawable.drawable_empty_text_placeholder_dark)
-        image.setActualImageResource(R.drawable.drawable_empty_text_placeholder_dark)
+        binding.itemInviteHeader.setText(R.string.instant_invite_resolving)
+        binding.itemInviteName.text = null
+        binding.itemInviteName.setTextColor(ThemedColor.resolve(itemView.context, R.attr.primary_100))
+        binding.itemInviteName.setBackgroundResource(R.drawable.drawable_empty_text_placeholder_dark)
+        binding.itemInviteImage.setActualImageResource(R.drawable.drawable_empty_text_placeholder_dark)
         iconUrl = null
-        imageText.visibility = View.GONE
-        channelName.visibility = View.GONE
-        memberCount.visibility = View.GONE
-        mentionButton.visibility = View.GONE
-        joinButton.visibility = View.GONE
-        joinedButton.visibility = View.GONE
-        loadingButton.visibility = View.VISIBLE
-        hubLayout.visibility = View.GONE
+        binding.itemInviteImageText.visibility = View.GONE
+        binding.itemInviteChannelName.visibility = View.GONE
+        binding.itemInviteMemberContainer.visibility = View.GONE
+        binding.itemInviteMentionButton.visibility = View.GONE
+        binding.itemInviteJoinButton.visibility = View.GONE
+        binding.itemInviteJoinedButton.visibility = View.GONE
+        binding.itemInviteLoadingButton.visibility = View.VISIBLE
+        binding.itemInviteHubLayout.visibility = View.GONE
     }
 
     private fun configureInvalidUI(model: Model.Invalid?) {
@@ -170,22 +157,22 @@ class WidgetChatListAdapterItemInvite(
         val context = itemView.context
         val isInviter = model?.authorUser?.id == model?.meId && model?.authorUser != null
 
-        header.setText(
+        binding.itemInviteHeader.setText(
             if (isInviter) {
                 R.string.invite_button_title_inviter_invalid
             } else {
                 R.string.invite_button_title_invited_invalid
             },
         )
-        name.setText(R.string.invite_button_invalid)
-        name.setTextColor(ContextCompat.getColor(context, R.color.status_red_500))
-        name.setBackgroundResource(0)
-        image.setActualImageResource(R.drawable.img_wump_trash_dark)
+        binding.itemInviteName.setText(R.string.invite_button_invalid)
+        binding.itemInviteName.setTextColor(ContextCompat.getColor(context, R.color.status_red_500))
+        binding.itemInviteName.setBackgroundResource(0)
+        binding.itemInviteImage.setActualImageResource(R.drawable.img_wump_trash_dark)
         iconUrl = null
-        imageText.visibility = View.GONE
+        binding.itemInviteImageText.visibility = View.GONE
 
         val author = model?.authorUser
-        memberCount.setInvalidText(
+        binding.itemInviteMemberContainer.setInvalidText(
             when {
                 isInviter -> context.getString(R.string.invite_button_invalid_owner)
                 author != null ->
@@ -196,17 +183,17 @@ class WidgetChatListAdapterItemInvite(
                 else -> context.getString(R.string.instant_invite_ask_for_new_invite)
             },
         )
-        channelName.visibility = View.GONE
-        memberCount.visibility = View.VISIBLE
+        binding.itemInviteChannelName.visibility = View.GONE
+        binding.itemInviteMemberContainer.visibility = View.VISIBLE
 
         // The sender is offered a replacement invite; everyone else is offered a way to nudge them.
-        mentionButton.setText(if (isInviter) R.string.create_instant_invite else R.string.mention)
+        binding.itemInviteMentionButton.setText(if (isInviter) R.string.create_instant_invite else R.string.mention)
         // The sender can only be offered a replacement invite when the dead one still names a
         // guild to create it in.
         val canCreateReplacement = model?.channel != null
         val showMentionButton = if (isInviter) canCreateReplacement else true
-        mentionButton.visibility = if (showMentionButton) View.VISIBLE else View.GONE
-        mentionButton.setOnClickListener { view ->
+        binding.itemInviteMentionButton.visibility = if (showMentionButton) View.VISIBLE else View.GONE
+        binding.itemInviteMentionButton.setOnClickListener { view ->
             if (isInviter) {
                 val channel = model?.channel ?: return@setOnClickListener
                 WidgetGuildInviteShare.launch(
@@ -221,40 +208,35 @@ class WidgetChatListAdapterItemInvite(
             }
         }
 
-        joinButton.visibility = View.GONE
-        joinedButton.visibility = View.GONE
-        loadingButton.visibility = View.GONE
-        hubLayout.visibility = View.GONE
+        binding.itemInviteJoinButton.visibility = View.GONE
+        binding.itemInviteJoinedButton.visibility = View.GONE
+        binding.itemInviteLoadingButton.visibility = View.GONE
+        binding.itemInviteHubLayout.visibility = View.GONE
     }
 
     private fun configureResolvedUI(model: Model.Resolved) {
         val context = itemView.context
         val invite = model.invite
+        if (invite.isFriendInvite()) return configureFriendInviteUI(model)
         val guild = invite.guild
         val isInviter = model.authorUser != null && model.authorUser.id == model.meId
         val isSmallGuild = (guild?.memberCount ?: 0) < SMALL_GUILD_MEMBER_COUNT
         val isGroupDM = invite.channel?.isGroup() == true
         val isHub = guild?.features?.contains(GuildFeature.HUB) == true
-        // No channel and no guild, but somebody sent it: a friend invite to a plain DM.
-        val isFriendInvite = invite.channel == null && guild == null && invite.getInviter() != null
 
         val splashHash = guild?.splash
         IconUtils.setIcon(
-            splash,
+            binding.itemInviteSplash,
             splashHash?.let { IconUtils.getGuildSplashUrl(guild.id, it, displayWidthPx()) },
             changeDetector = splashChangeDetector,
         )
-        splashContainer.visibility = if (splashHash != null) View.VISIBLE else View.GONE
+        binding.itemInviteSplashContainer.visibility = if (splashHash != null) View.VISIBLE else View.GONE
 
-        header.text = when {
+        binding.itemInviteHeader.text = when {
             isGroupDM && isInviter -> context.getString(R.string.invite_button_title_inviter_group_dm)
             isInviter -> context.getString(R.string.invite_button_title_inviter)
             isGroupDM -> context.getString(R.string.invite_button_title_invited_group_dm)
             isHub -> context.getString(R.string.invite_button_title_invited_hub)
-            isFriendInvite -> context.i18nFormat(
-                R.string.instant_invite_you_have_been_invited_to_chat,
-                "username" to invite.getInviter()?.username,
-            )
             isSmallGuild && invite.getInviter() != null -> context.i18nFormat(
                 R.string.instant_invite_you_have_been_invited_to_join_by_user,
                 "username" to invite.getInviter()?.username,
@@ -262,23 +244,22 @@ class WidgetChatListAdapterItemInvite(
             else -> context.getString(R.string.invite_button_title_invited)
         }
 
-        name.text = if (isGroupDM) {
+        binding.itemInviteName.text = if (isGroupDM) {
             (model.channel ?: invite.channel)?.getDisplayNameOrDefault(context)
         } else {
             guild?.name
         }
-        name.setTextColor(ThemedColor.resolve(context, R.attr.primary_100))
-        name.setBackgroundResource(0)
+        binding.itemInviteName.setTextColor(ThemedColor.resolve(context, R.attr.primary_100))
+        binding.itemInviteName.setBackgroundResource(0)
 
         when {
-            isFriendInvite -> image.visibility = View.GONE
             isGroupDM -> {
-                image.visibility = View.VISIBLE
+                binding.itemInviteImage.visibility = View.VISIBLE
                 updateIconUrlIfChanged(IconUtils.getForChannel(invite.channel))
-                imageText.visibility = View.GONE
+                binding.itemInviteImageText.visibility = View.GONE
             }
             else -> {
-                image.visibility = View.VISIBLE
+                binding.itemInviteImage.visibility = View.VISIBLE
                 updateIconUrlIfChanged(
                     IconUtils.getForGuild(
                         guild?.id,
@@ -288,7 +269,7 @@ class WidgetChatListAdapterItemInvite(
                     ),
                 )
                 // The initials stand in for a guild that has no icon of its own.
-                imageText.setTextAndVisibilityBy(
+                binding.itemInviteImageText.setTextAndVisibilityBy(
                     guild?.name?.takeIf { guild.icon.isNullOrEmpty() }?.let(::shortGuildName),
                 )
             }
@@ -304,39 +285,93 @@ class WidgetChatListAdapterItemInvite(
         // For a group DM there is no guild to be a member of; having the channel locally is the
         // equivalent signal that the viewer is already in it.
         val isJoined = if (isGroupDM) model.channel != null else model.isMemberOfGuild
-        loadingButton.visibility = View.GONE
-        joinedButton.visibility = if (isJoined) View.VISIBLE else View.GONE
-        joinButton.visibility = if (isJoined) View.GONE else View.VISIBLE
-        joinButton.setText(if (invite.requiresApplication()) R.string.invite_button_apply_to_join else R.string.join_guild)
-        mentionButton.visibility = View.GONE
+        binding.itemInviteLoadingButton.visibility = View.GONE
+        binding.itemInviteJoinedButton.visibility = if (isJoined) View.VISIBLE else View.GONE
+        binding.itemInviteJoinButton.visibility = if (isJoined) View.GONE else View.VISIBLE
+        binding.itemInviteJoinButton.isEnabled = true
+        binding.itemInviteJoinButton.setText(if (invite.requiresApplication()) R.string.invite_button_apply_to_join else R.string.join_guild)
+        binding.itemInviteMentionButton.visibility = View.GONE
         val instanceId = inviteInstanceId(item.messageId, item.inviteCode)
-        joinButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
-        joinedButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
+        binding.itemInviteJoinButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
+        binding.itemInviteJoinedButton.setOnClickListener { joinServerOrDM(javaClass, invite, inviteInstanceId = instanceId) }
 
         // The reference gates the hub e-mail prompt on a growth experiment; the experiment client
         // is not reconstructed, so the prompt stays off, which is its default state.
-        hubLayout.visibility = View.GONE
-        hubLink.movementMethod = LinkMovementMethod.getInstance()
+        binding.itemInviteHubLayout.visibility = View.GONE
+        binding.itemInviteHubLink.movementMethod = LinkMovementMethod.getInstance()
+    }
+
+    /**
+     * Friend invite card, backported from the modern client's `FriendInvite` embed: the inviter's
+     * avatar and name, with "Add Friend" (disabled on your own link) or "Send Message" once the
+     * two of you are already friends.
+     */
+    private fun configureFriendInviteUI(model: Model.Resolved) {
+        resetResolvedViews()
+        val context = itemView.context
+        val invite = model.invite
+        val inviter = invite.getInviter()
+        val isOwnInvite = inviter?.id == model.meId
+
+        binding.itemInviteHeader.setText(
+            if (isOwnInvite) R.string.friend_invite_button_title_inviter else R.string.friend_invite_button_title_invited,
+        )
+        binding.itemInviteName.text = inviter?.username
+        binding.itemInviteName.setTextColor(ThemedColor.resolve(context, R.attr.primary_100))
+        binding.itemInviteName.setBackgroundResource(0)
+        updateIconUrlIfChanged(
+            inviter?.let { IconUtils.getForUser(it.id, it.avatar?.value, it.discriminator.toIntOrNull()) },
+        )
+        binding.itemInviteImageText.visibility = View.GONE
+        binding.itemInviteChannelName.visibility = View.GONE
+        binding.itemInviteMemberContainer.visibility = View.GONE
+        binding.itemInviteMentionButton.visibility = View.GONE
+        binding.itemInviteJoinedButton.visibility = View.GONE
+        binding.itemInviteLoadingButton.visibility = View.GONE
+        binding.itemInviteHubLayout.visibility = View.GONE
+
+        val openDM = model.isFriendOfInviter && !isOwnInvite
+        binding.itemInviteJoinButton.visibility = View.VISIBLE
+        binding.itemInviteJoinButton.isEnabled = !isOwnInvite
+        binding.itemInviteJoinButton.setText(if (openDM) R.string.send_message else R.string.add_friend)
+        binding.itemInviteJoinButton.setOnClickListener { view ->
+            if (inviter == null) return@setOnClickListener
+            if (openDM) {
+                ChannelSelector.getInstance().findAndSetDirectMessage(view.context, inviter.id)
+            } else {
+                joinServerOrDM(
+                    javaClass,
+                    invite,
+                    inviteInstanceId = inviteInstanceId(item.messageId, item.inviteCode),
+                    onInvitePostSuccess = {
+                        AppToast.show(
+                            view.context,
+                            view.context.i18nFormat(R.string.friend_invite_accept_confirmation, "username" to inviter.username),
+                        )
+                    },
+                )
+            }
+        }
     }
 
     private fun configureForTextChannel(isGroupDM: Boolean, invite: ModelInvite) {
-        memberCount.visibility = if (invite.channel != null) View.VISIBLE else View.GONE
+        binding.itemInviteMemberContainer.visibility = if (invite.channel != null) View.VISIBLE else View.GONE
         // A group DM has no presence roll-up, so only the total is shown.
-        memberCount.setOnline(invite.getApproximatePresenceCount().takeUnless { isGroupDM })
-        memberCount.setMembers(invite.getApproximateMemberCount())
+        binding.itemInviteMemberContainer.setOnline(invite.getApproximatePresenceCount().takeUnless { isGroupDM })
+        binding.itemInviteMemberContainer.setMembers(invite.getApproximateMemberCount())
         // Not part of the reference, which leaves the previous row's channel name behind here.
-        channelName.visibility = View.GONE
+        binding.itemInviteChannelName.visibility = View.GONE
     }
 
     private fun configureForVocalChannel(channel: Channel, context: Context) {
-        memberCount.visibility = View.GONE
+        binding.itemInviteMemberContainer.visibility = View.GONE
         val iconRes = when (channel.type) {
             Channel.GUILD_VOICE -> context.getThemedDrawableRes(R.attr.ic_volume_up)
             Channel.GUILD_STAGE_VOICE -> R.drawable.ic_channel_stage_24dp
             else -> 0
         }
-        channelName.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0)
-        channelName.setTextAndVisibilityBy(channel.getDisplayNameOrDefault(context, includePrefix = false))
+        binding.itemInviteChannelName.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0)
+        binding.itemInviteChannelName.setTextAndVisibilityBy(channel.getDisplayNameOrDefault(context, includePrefix = false))
     }
 
     /**
@@ -345,24 +380,24 @@ class WidgetChatListAdapterItemInvite(
      */
     private fun updateIconUrlIfChanged(url: String?) {
         if (iconUrl == url) return
-        IconUtils.setIcon(image, url, R.dimen.avatar_size_large)
+        IconUtils.setIcon(binding.itemInviteImage, url, R.dimen.avatar_size_large)
         iconUrl = url
     }
 
     /**
      * Undoes the view changes only [configureResolvedUI] makes, which a recycled holder would
-     * otherwise keep: another guild's banner, and the icon hidden for a friend invite.
+     * otherwise keep: another guild's banner, and a hidden icon.
      */
     private fun resetResolvedViews() {
-        splashContainer.visibility = View.GONE
-        IconUtils.setIcon(splash, null as String?)
-        image.visibility = View.VISIBLE
+        binding.itemInviteSplashContainer.visibility = View.GONE
+        IconUtils.setIcon(binding.itemInviteSplash, null as String?)
+        binding.itemInviteImage.visibility = View.VISIBLE
     }
 
     private fun displayWidthPx(): Int = itemView.resources.displayMetrics.widthPixels
 
     /** What the reference calls a guild's short name: the possessive `'s ` collapsed to a space. */
-    private fun shortGuildName(name: String): String = name.replace(POSSESSIVE, " ")
+    private fun shortGuildName(guildName: String): String = guildName.replace(POSSESSIVE, " ")
 
     /** The three faces of the card. */
     private sealed class Model {
@@ -375,6 +410,7 @@ class WidgetChatListAdapterItemInvite(
             val isMemberOfGuild: Boolean,
             val channel: Channel?,
             val shouldAnimateGuildIcon: Boolean,
+            val isFriendOfInviter: Boolean,
         ) : Model()
 
         data class Invalid(
