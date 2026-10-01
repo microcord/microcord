@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -53,6 +54,9 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
     private lateinit var rolesAdapter: RolesAdapter
     private var model: Model? = null
 
+    /** Set while the create request is in flight, so a second tap cannot create a duplicate. */
+    private var creating = false
+
     private val channelType: Int
         get() = when {
             initialType == Channel.CATEGORY -> Channel.CATEGORY
@@ -68,6 +72,7 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
         val binding = WidgetCreateChannelBinding.bind(view).also { _binding = it }
 
         rolesAdapter = RolesAdapter()
+        binding.createChannelRoleAccessRecycler.layoutManager = LinearLayoutManager(view.context)
         binding.createChannelRoleAccessRecycler.adapter = rolesAdapter
         binding.createChannelRoleAccessRecycler.setHasFixedSize(false)
         binding.createChannelRoleAccessRecycler.isNestedScrollingEnabled = false
@@ -146,6 +151,8 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
 
     private fun createChannel() {
         val state = model ?: return
+        if (creating) return
+        creating = true
         RestAPI.api.createGuildChannel(
             guildId,
             RestAPIParams.CreateGuildChannel(
@@ -164,7 +171,7 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
             ),
         ).restSubscribeOn(retry = false).map { it.body() }.filter { it != null }.map { it!! }
             .ui(this)
-            .appSubscribe(javaClass, requireContext()) { onChannelCreated(it, state) }
+            .appSubscribe(javaClass, requireContext(), onTerminated = { creating = false }) { onChannelCreated(it, state) }
     }
 
     private fun onChannelCreated(channel: Channel, state: Model) {
@@ -263,9 +270,10 @@ class WidgetCreateChannel : AppFragment(R.layout.widget_create_channel) {
         private var roles = emptyList<GuildRole>()
         val selectedRoleIds = linkedSetOf<Long>()
 
+        /** Keeps the user's picks across store re-emissions; only roles that vanished are dropped. */
         fun submit(value: List<GuildRole>) {
             roles = value
-            selectedRoleIds.clear()
+            selectedRoleIds.retainAll(value.mapTo(HashSet(), GuildRole::id))
             notifyDataSetChanged()
         }
 
