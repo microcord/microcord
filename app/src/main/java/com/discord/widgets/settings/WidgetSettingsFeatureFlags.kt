@@ -64,7 +64,15 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
         }
         binding.settingsFeatureTapTap.apply {
             isChecked = FeatureFlags.tapTapEnabled()
-            setOnCheckedListener(FeatureFlags::setTapTapEnabled)
+            setOnCheckedListener { enabled ->
+                FeatureFlags.setTapTapEnabled(enabled)
+                binding.settingsFeatureTapTapReplyOwn.visibility = if (enabled) View.VISIBLE else View.GONE
+            }
+        }
+        binding.settingsFeatureTapTapReplyOwn.apply {
+            visibility = if (FeatureFlags.tapTapEnabled()) View.VISIBLE else View.GONE
+            isChecked = FeatureFlags.tapTapReplyOwnEnabled()
+            setOnCheckedListener(FeatureFlags::setTapTapReplyOwnEnabled)
         }
         binding.settingsFeatureFetchUncachedUsers.apply {
             isChecked = FeatureFlags.fetchUncachedUsersEnabled()

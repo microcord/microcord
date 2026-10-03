@@ -58,6 +58,7 @@ class WidgetChatListAdapterEventsHandlerTest {
 
         assertEquals(TapTapBehavior.Action.EDIT, TapTapBehavior.action(own, 7))
         assertEquals(TapTapBehavior.Action.REPLY, TapTapBehavior.action(other, 7))
+        assertEquals(TapTapBehavior.Action.REPLY, TapTapBehavior.action(own, 7, replyToOwn = true))
         assertEquals(200L, TapTapBehavior.TIMEOUT_MS)
     }
 

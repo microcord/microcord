@@ -82,6 +82,7 @@ object ClientSettings {
 
     val voiceMessages = register(BooleanSetting("feature_voice_messages", true))
     val tapTap = register(BooleanSetting("feature_tap_tap"))
+    val tapTapReplyOwn = register(BooleanSetting("feature_tap_tap_reply_own"))
     val fetchUncachedUsers = register(BooleanSetting("feature_fetch_uncached_users"))
     val viewProfileImages = register(BooleanSetting("feature_view_profile_images"))
     val disableServerProfiles = register(BooleanSetting("feature_disable_server_profiles"))

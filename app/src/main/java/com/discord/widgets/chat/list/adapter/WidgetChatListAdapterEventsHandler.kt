@@ -431,7 +431,7 @@ class WidgetChatListAdapterEventsHandler(
 
     private fun handleDoubleTap(message: Message) {
         val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
-        when (TapTapBehavior.action(message, StoreStream.getUsers().getMe().id)) {
+        when (TapTapBehavior.action(message, StoreStream.getUsers().getMe().id, FeatureFlags.tapTapReplyOwnEnabled())) {
             TapTapBehavior.Action.EDIT -> editMessage(message, channel)
             TapTapBehavior.Action.REPLY -> replyToMessage(message, channel)
         }
@@ -616,8 +616,9 @@ internal object TapTapBehavior {
     fun canHandle(message: Message) = !message.isEphemeralMessage() && !message.isLocal() &&
         !message.isFailed() && !message.isLoading()
 
-    fun action(message: Message, currentUserId: Long) =
-        if (message.author?.id == currentUserId) Action.EDIT else Action.REPLY
+    /** Own messages are edited unless [replyToOwn] ("Reply to own messages") is set. */
+    fun action(message: Message, currentUserId: Long, replyToOwn: Boolean = false) =
+        if (message.author?.id == currentUserId && !replyToOwn) Action.EDIT else Action.REPLY
 }
 
 internal object QuickMessageActionsBehavior {

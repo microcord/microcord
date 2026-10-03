@@ -7,6 +7,8 @@ object FeatureFlags {
     fun setVoiceMessagesEnabled(enabled: Boolean) = setEnabled(ClientSettings.voiceMessages, enabled)
     fun tapTapEnabled() = enabled(ClientSettings.tapTap)
     fun setTapTapEnabled(enabled: Boolean) = setEnabled(ClientSettings.tapTap, enabled)
+    fun tapTapReplyOwnEnabled() = enabled(ClientSettings.tapTapReplyOwn)
+    fun setTapTapReplyOwnEnabled(enabled: Boolean) = setEnabled(ClientSettings.tapTapReplyOwn, enabled)
     fun fetchUncachedUsersEnabled() = enabled(ClientSettings.fetchUncachedUsers)
     fun setFetchUncachedUsersEnabled(enabled: Boolean) = setEnabled(ClientSettings.fetchUncachedUsers, enabled)
     fun viewProfileImagesEnabled() = enabled(ClientSettings.viewProfileImages)
