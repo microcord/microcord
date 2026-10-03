@@ -250,6 +250,30 @@ class StoreStreamTest {
     }
 
     @Test
+    fun followingTheDeviceKeepsThePickedDarkThemeAndPersists() {
+        val store = StoreStream.getUserSettingsSystem()
+        store.setTheme(ModelUserSettings.THEME_MIDNIGHT, apiSync = false)
+        store.setFollowSystem(true)
+
+        val restored = StoreUserSettingsSystem({}, stream.dispatcher, stream.observationDeck, prefs, durablePrefs)
+        restored.restore()
+        val settings = restored.observeSettings(false).toBlocking().first()
+        assertEquals(ModelUserSettings.THEME_MIDNIGHT, settings.theme)
+        assertTrue(settings.followSystem)
+    }
+
+    @Test
+    fun theBriefSystemThemeValueMigratesToFollowingWithDark() {
+        durablePrefs.edit().putString("CACHE_KEY_THEME", "system").commit()
+
+        val restored = StoreUserSettingsSystem({}, stream.dispatcher, stream.observationDeck, prefs, durablePrefs)
+        restored.restore()
+        val settings = restored.observeSettings(false).toBlocking().first()
+        assertEquals(ModelUserSettings.THEME_DARKER, settings.theme)
+        assertTrue(settings.followSystem)
+    }
+
+    @Test
     fun singletonInitializesCompleteSliceOnce() {
         val again = StoreStream.initializeForTesting(directory.toFile(), memoryPreferences(), memoryPreferences(), scheduler)
         assertSame(stream, again)

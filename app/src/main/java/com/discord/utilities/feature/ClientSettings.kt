@@ -178,6 +178,7 @@ object ClientSettings {
             // No stored override means StoreUserSettingsSystem chooses the current device theme.
             StringSetting("CACHE_KEY_THEME", scope = Scope.DURABLE),
             BooleanSetting("CACHE_KEY_THEME_SYNC", true, Scope.DURABLE),
+            BooleanSetting("CACHE_KEY_THEME_FOLLOW_SYSTEM", false, Scope.DURABLE),
             BooleanSetting("CACHE_KEY_VOICE_SETTINGS_IS_MUTED"),
             BooleanSetting("CACHE_KEY_VOICE_SETTINGS_IS_DEAFENED"),
             BooleanSetting("CACHE_KEY_VOICE_SETTINGS_AUTOMATIC_VAD", true),

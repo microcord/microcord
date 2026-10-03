@@ -268,7 +268,7 @@ class ClientPreferenceSnapshotTest {
             "default/CACHE_KEY_VOICE_SETTINGS_OUTPUT_VOLUME" to listOf("-1", "1e999", "1e-10000"),
             "durable/developer_floating_shortcut_x" to listOf("-0.01", "1.01", "NaN"),
             "default/CACHE_KEY_LOCALE" to listOf("", "en_US", "en/US", "en--US", "en\nUS"),
-            "durable/CACHE_KEY_THEME" to listOf("system", "../../theme"),
+            "durable/CACHE_KEY_THEME" to listOf("sepia", "../../theme"),
             "default/feature_gif_provider" to listOf("giphy", "OTHER"),
             "default/feature_chatbox_customizations_layout" to listOf("SEND:UNKNOWN", "UNKNOWN:LEFT", "SEND:LEFT,SEND:RIGHT"),
             "default/header_customization_channel_layout" to listOf("VOICE:true", "PINS:1"),

@@ -3,6 +3,7 @@ package com.discord.stores
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.content.res.Resources
 import androidx.core.content.edit
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
@@ -18,20 +19,43 @@ class StoreUserSettingsSystem(
     private val preferences: SharedPreferences = SharedPreferencesProvider.get(),
     private val sessionDurablePreferences: SharedPreferences = SharedPreferencesProvider.getPrefsSessionDurable(),
 ) : StoreV2() {
-    data class Settings(val theme: String, val _locale: String?, val fontScale: Int) {
+    /**
+     * [theme] is the theme picked in settings. With [followSystem] on it is the theme used while
+     * the device is in dark mode, and Light is used otherwise; [resolvedTheme] is what is shown.
+     */
+    data class Settings(
+        val theme: String,
+        val _locale: String?,
+        val fontScale: Int,
+        val followSystem: Boolean = false,
+    ) {
         val locale: String get() = _locale ?: ModelUserSettings.getDefaultLocale()
+
+        /** Re-read on every activity creation, which a device dark-mode switch triggers. */
+        val resolvedTheme: String
+            get() = when {
+                !followSystem -> theme
+                Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK !=
+                    Configuration.UI_MODE_NIGHT_YES -> ModelUserSettings.THEME_LIGHT
+                theme == ModelUserSettings.THEME_LIGHT -> ModelUserSettings.THEME_DARKER
+                else -> theme
+            }
     }
 
     private lateinit var settings: Settings
     private var defaultTheme = ModelUserSettings.THEME_LIGHT
 
-    fun getTheme() = settings.theme
+    /** The theme in effect; see [Settings.resolvedTheme]. */
+    fun getTheme() = settings.resolvedTheme
+
+    /** The theme picked in settings, which [getTheme] may override while following the device. */
+    fun getThemeSetting() = settings.theme
 
     /**
      * Light is the only light theme; Material You inherits the dark palette and none of them follow
      * the OS night mode, so `Configuration.UI_MODE_NIGHT_MASK` says nothing about how the app looks.
      */
-    fun isDarkTheme() = settings.theme != ModelUserSettings.THEME_LIGHT
+    fun isDarkTheme() = settings.resolvedTheme != ModelUserSettings.THEME_LIGHT
 
     fun getLocale() = settings.locale
     fun getFontScale() = settings.fontScale
@@ -52,7 +76,10 @@ class StoreUserSettingsSystem(
 
     internal fun restore(defaultTheme: String = ModelUserSettings.THEME_LIGHT) {
         this.defaultTheme = defaultTheme
-        val stored = sessionDurablePreferences.getString(KEY_THEME, defaultTheme) ?: defaultTheme
+        // "system" was briefly a theme of its own before following the device became a switch.
+        val storedRaw = sessionDurablePreferences.getString(KEY_THEME, defaultTheme) ?: defaultTheme
+        val stored = if (storedRaw == "system") ModelUserSettings.THEME_DARKER else storedRaw
+        val followSystem = storedRaw == "system" || sessionDurablePreferences.getBoolean(KEY_THEME_FOLLOW_SYSTEM, false)
         // Without this an install that had the AMOLED theme on falls through to Ash, since nothing
         // answers to the old name any more.
         val theme = if (stored == ModelUserSettings.THEME_LEGACY_MIDNIGHT) {
@@ -66,6 +93,7 @@ class StoreUserSettingsSystem(
             theme,
             preferences.getString(KEY_LOCALE, null),
             preferences.getInt(KEY_FONT_SCALE, -1),
+            followSystem,
         )
     }
 
@@ -80,6 +108,12 @@ class StoreUserSettingsSystem(
             sessionDurablePreferences.edit { putString(KEY_THEME, theme) }
             markChanged()
         }
+    }
+
+    fun setFollowSystem(enabled: Boolean) = dispatcher.schedule {
+        settings = settings.copy(followSystem = enabled)
+        sessionDurablePreferences.edit { putBoolean(KEY_THEME_FOLLOW_SYSTEM, enabled) }
+        markChanged()
     }
 
     fun setLocale(locale: String?, apiSync: Boolean, onSynced: (() -> Unit)? = null) {
@@ -137,7 +171,7 @@ class StoreUserSettingsSystem(
     @StoreThread
     internal fun reset() {
         StoreThreadScheduler.assertCurrentThread()
-        settings = Settings(defaultTheme, null, -1)
+        settings = Settings(defaultTheme, null, -1, settings.followSystem)
         onFontScaleUpdated(-1)
         markChanged()
     }
@@ -145,11 +179,12 @@ class StoreUserSettingsSystem(
     /**
      * Whether an incoming account theme should replace the local one.
      *
-     * Material You is the only theme the account cannot express, so it is the only one an echo
-     * could undo. Guards the synced path alone: picking a theme by hand always wins.
+     * Material You and following the device are what the account cannot express, so they are what
+     * an echo could undo (another client's Light would replace the chosen dark theme). Guards the
+     * synced path alone: picking a theme by hand always wins.
      */
-    private fun acceptsSyncedTheme(): Boolean =
-        getIsThemeSyncEnabled() && settings.theme != ModelUserSettings.THEME_MATERIAL_YOU
+    private fun acceptsSyncedTheme(): Boolean = getIsThemeSyncEnabled() &&
+        settings.theme != ModelUserSettings.THEME_MATERIAL_YOU && !settings.followSystem
 
     @StoreThread
     fun handleUserSettingsProto(proto: PreloadedUserSettings) {
@@ -170,6 +205,7 @@ class StoreUserSettingsSystem(
     companion object {
         private const val KEY_THEME = "CACHE_KEY_THEME"
         private const val KEY_THEME_SYNC = "CACHE_KEY_THEME_SYNC"
+        private const val KEY_THEME_FOLLOW_SYSTEM = "CACHE_KEY_THEME_FOLLOW_SYSTEM"
         private const val KEY_LOCALE = "CACHE_KEY_LOCALE"
         private const val KEY_LOCALE_SYNC = "CACHE_KEY_LOCALE_SYNC"
         private const val KEY_FONT_SCALE = "CACHE_KEY_FONT_SCALE"

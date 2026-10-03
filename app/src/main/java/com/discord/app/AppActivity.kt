@@ -298,7 +298,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         appliedLocale = userSettings.getLocale()
         settingsSubscription = userSettings.observeSettings(true)
             .bindToComponentLifecycle(this)
-            .subscribe { settings -> runOnUiThread { onUserSettingsChanged(settings.locale, settings.theme, settings.fontScale) } }
+            .subscribe { settings -> runOnUiThread { onUserSettingsChanged(settings.locale, settings.resolvedTheme, settings.fontScale) } }
         // Hosted here rather than on the switcher sheet, which is dismissed the moment a switch
         // starts and so would never live long enough to report how it ended.
         StoreStream.getMultiAccountSwitch().observeResults()

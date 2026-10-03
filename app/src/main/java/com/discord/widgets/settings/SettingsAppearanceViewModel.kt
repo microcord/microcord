@@ -43,6 +43,7 @@ class SettingsAppearanceViewModel(
         data class Loaded(
             val meUser: MeUser,
             val currentTheme: String,
+            val followSystem: Boolean,
             val fontScale: Int,
             val isThemeSyncEnabled: Boolean,
             val syncProfileThemes: Boolean,
@@ -72,6 +73,7 @@ class SettingsAppearanceViewModel(
                 ViewState.Loaded(
                     meUser = storeState.meUser,
                     currentTheme = storeState.settings.theme,
+                    followSystem = storeState.settings.followSystem,
                     fontScale = storeState.settings.fontScale,
                     isThemeSyncEnabled = userSettingsSystem.getIsThemeSyncEnabled(),
                     syncProfileThemes = storeState.syncProfileThemes,
@@ -92,6 +94,8 @@ class SettingsAppearanceViewModel(
     /** Repeated taps on "Light" light the screen up. The run resets after a pause. */
     @MainThread
     fun onLightThemeTapped() {
+        // Following the device already uses Light by day; picking it means "always Light".
+        userSettingsSystem.setFollowSystem(false)
         updateTheme(ModelUserSettings.THEME_LIGHT)
         val taps = holyLightTaps++
         if (taps == 0) resetAfterTimeout { holyLightTaps = 0 }
@@ -117,6 +121,18 @@ class SettingsAppearanceViewModel(
     fun onMaterialYouThemeTapped() {
         userSettingsSystem.setIsSyncThemeEnabled(false)
         userSettingsSystem.setTheme(ModelUserSettings.THEME_MATERIAL_YOU, apiSync = false)
+    }
+
+    /**
+     * Client-only: the account cannot express it. While on, the picked theme is the one used in
+     * dark mode, so Light (which would mean light all day) is swapped for Dark.
+     */
+    @MainThread
+    fun onFollowSystemToggled(enabled: Boolean) {
+        if (enabled && userSettingsSystem.getThemeSetting() == ModelUserSettings.THEME_LIGHT) {
+            userSettingsSystem.setTheme(ModelUserSettings.THEME_DARKER, apiSync = false)
+        }
+        userSettingsSystem.setFollowSystem(enabled)
     }
 
     /** A run of taps has to be a run: pausing for [EASTER_EGG_UNLOCK_TIMEOUT_SECONDS] starts over. */

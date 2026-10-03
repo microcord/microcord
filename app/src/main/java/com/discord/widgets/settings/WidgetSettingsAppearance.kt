@@ -115,6 +115,10 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         binding.settingsAppearanceThemeMaterialYouRadio.setContainerClickListener {
             viewModel.onMaterialYouThemeTapped()
         }
+        binding.settingsAppearanceThemeSystemSwitch.setOnCheckedListener(null)
+        binding.settingsAppearanceThemeSystemSwitch.isChecked = viewState.followSystem
+        binding.settingsAppearanceThemeSystemSwitch
+            .setOnCheckedListener(Action1 { viewModel.onFollowSystemToggled(it) })
 
         binding.settingsAppearanceSyncSwitch.setOnCheckedListener(null)
         binding.settingsAppearanceSyncSwitch.isChecked = viewState.isThemeSyncEnabled
