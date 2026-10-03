@@ -168,30 +168,17 @@ class StorePermissions(
     }
 
     /**
-     * A page of history can carry thread starter channels the client has not seen; their guild is
-     * recomputed so the newly known threads get permissions.
+     * Threads learned from a page of history or from search results, which the gateway never
+     * delivered. Without permissions the channel selector treats them as unviewable and falls back
+     * to another channel, so opening one from a search result or a link did nothing.
+     *
+     * Reads each thread back from [storeChannels], which has resolved its guild id. Search hits do
+     * not carry their thread (the API returns threads in a separate list), so the reference's
+     * `hits.map { it.thread }` recompute never ran here.
      */
     @StoreThread
-    fun handleMessagesLoaded(messages: List<Message>) {
-        if (meId == 0L) return
-        val guildId = messages.mapNotNull(Message::thread).firstOrNull()?.guildId ?: return
-        updateGuildPermissions(guildId, storeChannels.getThreadsForGuildInternal(guildId))
-    }
-
-    /**
-     * Search results carry threads the same way history does.
-     *
-     * Note the reference reads `hits.map { it.thread }.firstOrNull()` rather than `mapNotNull`,
-     * so a first hit without a thread ends the check — that behaviour is preserved.
-     *
-     * Takes the hit list rather than `SearchState` because `utilities/search/network/state` does
-     * not exist in this project yet.
-     */
-    @StoreThread
-    fun handleSearchFinish(hits: List<Message>?) {
-        if (meId == 0L) return
-        val guildId = hits?.map(Message::thread)?.firstOrNull()?.guildId ?: return
-        updateGuildPermissions(guildId, storeChannels.getThreadsForGuildInternal(guildId))
+    fun handleThreadsDiscovered(threads: Collection<Channel>) {
+        threads.mapNotNull { storeChannels.findChannelByIdInternal(it.id) }.forEach(::updateChannelPermissions)
     }
 
     /** Starting or ending a stage widens or narrows what a lurker in that channel may do. */

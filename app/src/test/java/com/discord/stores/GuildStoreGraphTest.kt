@@ -478,7 +478,7 @@ class GuildStoreGraphTest {
         assertEquals(setOf(10L), permissions.getPermissionsByChannelInternal(1).keys)
     }
 
-    @Test fun loadedMessagesRecomputeTheGuildOwningTheirThreads() {
+    @Test fun discoveredThreadsGetPermissions() {
         val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
         val guilds = StoreGuilds(users, dispatcher, deck)
         val channels = StoreChannels(dispatcher, deck, isAuthenticated = { true })
@@ -495,11 +495,17 @@ class GuildStoreGraphTest {
         }
         scheduler.triggerActions()
 
-        // A message with no thread must not blow up or clear anything.
-        dispatcher.schedule { permissions.handleMessagesLoaded(listOf(message(1, author = 7))) }
-        dispatcher.schedule { permissions.handleSearchFinish(listOf(message(1, author = 7))) }
+        // A search result's thread arrives without ever being sent over the gateway.
+        val thread = gson.fromJson(
+            """{"id":20,"type":11,"guild_id":1,"parent_id":10,"name":"thread"}""",
+            Channel::class.java,
+        )
+        dispatcher.schedule {
+            channels.handleSearchFinish(listOf(thread))
+            permissions.handleThreadsDiscovered(listOf(thread))
+        }
         scheduler.triggerActions()
-        assertEquals(setOf(10L, 11L), permissions.getPermissionsByChannelInternal(1).keys)
+        assertEquals(setOf(10L, 11L, 20L), permissions.getPermissionsByChannelInternal(1).keys)
     }
 
     // endregion

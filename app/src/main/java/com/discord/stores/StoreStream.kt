@@ -1606,7 +1606,9 @@ class StoreStream private constructor(
             dispatcher.schedule {
                 applicationInteractions.handleMessagesCreateOrLoad(chunk.messages)
                 messages.handleMessagesLoaded(chunk)
-                channels.handleMessagesLoaded(chunk.messages.mapNotNull(DomainMessage::thread))
+                val threads = chunk.messages.mapNotNull(DomainMessage::thread)
+                channels.handleMessagesLoaded(threads)
+                permissions.handleThreadsDiscovered(threads)
                 threadMessages.handleMessagesLoaded(chunk)
                 messageReplies.handleLoadMessages(chunk.messages)
                 guildMemberRequester.handleLoadMessages(chunk.channelId, chunk.messages)
@@ -1778,6 +1780,12 @@ class StoreStream private constructor(
                 observeConnectionOpen = { connectionOpen.observeConnectionOpen() },
                 selectChannel = { channel -> selectChannelInternal(channel.guildId, channel.id) },
                 meUserId = { users.getMe().id },
+                fetchChannel = { channelId ->
+                    RestAPI.api.getChannel(channelId).subscribeOn(Schedulers.io()).subscribe(
+                        { channel -> if (channel.isThread()) dispatcher.schedule { handleThreadCreateOrUpdateInternal(channel) } },
+                        { /* the jump times out and is dropped, as before */ },
+                    )
+                },
             ),
         )
         messageAck.init(channelsSelected.observeResolvedSelectedChannel(), chat, messagesLoader)
@@ -1962,8 +1970,9 @@ class StoreStream private constructor(
     @StoreThread
     fun handleSearchFinish(searchState: com.discord.utilities.search.network.state.SearchState) {
         channels.handleSearchFinish(searchState.threads.orEmpty())
-        permissions.handleSearchFinish(searchState.hits)
+        // After threadsJoined: a private thread's visibility depends on the user's membership.
         threadsJoined.handleSearchFinish(searchState.threads, searchState.threadMembers)
+        permissions.handleThreadsDiscovered(searchState.threads.orEmpty())
     }
 
     @StoreThread

@@ -25,6 +25,7 @@ import org.junit.Before
 import org.junit.Test
 import rx.Observable
 import rx.schedulers.TestScheduler
+import rx.subjects.BehaviorSubject
 
 class MessageHistoryStoreTest {
     @Before
@@ -168,6 +169,46 @@ class MessageHistoryStoreTest {
 
         assertTrue(jumped.await(2, TimeUnit.SECONDS))
         assertEquals(listOf(Direction.AROUND), requests.filter { it.channelId == 2L }.map { it.direction })
+    }
+
+    /** A thread the user never joined is not in the local store; the jump has to fetch it. */
+    @Test
+    fun jumpFetchesAChannelTheLocalStoreDoesNotHold() {
+        val requests = mutableListOf<LoadRequest>()
+        val jumped = CountDownLatch(1)
+        val loader = StoreMessagesLoader(
+            loader = { request, callback ->
+                requests += request
+                if (request.direction == Direction.AROUND) jumped.countDown()
+                callback(Result.success(emptyList()))
+            },
+            scheduler = TestScheduler(),
+            retryJitter = { 0 },
+        ).apply { handleBackgrounded(false) }
+        val fetched = BehaviorSubject.create<Channel?>(null as Channel?)
+        val deck = ObservationDeck()
+        loader.init(
+            StoreChat(Dispatcher(TestScheduler()), deck),
+            StoreMessages(deck),
+            StoreMessagesLoader.Dependencies(
+                observeChannelMessages = { Observable.just(emptyList()) },
+                observeMessage = { _, _ -> Observable.just(null) },
+                observeChannel = { fetched },
+                getChannel = { null },
+                observeConnectionOpen = { Observable.just(true) },
+                selectChannel = { loader.handleChannelSelected(it.id) },
+                meUserId = { 1L },
+                fetchChannel = { id -> fetched.onNext(channel(id, Channel.PUBLIC_THREAD)) },
+            ),
+        )
+        loader.handleAuthToken("token")
+        loader.handleChannelSelected(1)
+        requests.clear()
+
+        loader.jumpToMessage(3, 500)
+
+        assertTrue(jumped.await(2, TimeUnit.SECONDS))
+        assertEquals(listOf(Direction.AROUND), requests.filter { it.channelId == 3L }.map { it.direction })
     }
 
     /** A short page means there is nothing older; a full one leaves the door open. */

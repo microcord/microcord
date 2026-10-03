@@ -104,6 +104,12 @@ class StoreMessagesLoader @JvmOverloads constructor(
         val observeConnectionOpen: () -> Observable<Boolean>,
         val selectChannel: (Channel) -> Unit,
         val meUserId: () -> Long,
+        /**
+         * Asks the server for a channel the local store does not hold. Threads the user has not
+         * joined (and archived ones) never arrive over the gateway, so a jump into one would
+         * otherwise wait out its timeout and be dropped.
+         */
+        val fetchChannel: (channelId: Long) -> Unit = {},
     )
 
     private data class PendingJump(val channelId: Long, val messageId: Long)
@@ -331,6 +337,7 @@ class StoreMessagesLoader @JvmOverloads constructor(
             return
         }
 
+        deps.fetchChannel(channelId)
         jumpChannelSubscription = deps.observeConnectionOpen()
             .take(1)
             .switchMap { isConnected ->
