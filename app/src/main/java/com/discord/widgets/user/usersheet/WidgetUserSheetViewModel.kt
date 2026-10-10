@@ -52,6 +52,7 @@ import com.discord.widgets.stage.StageRoles
 import com.discord.widgets.stage.usersheet.UserProfileStageActionsView
 import rx.Observable
 import rx.subjects.PublishSubject
+import com.discord.widgets.friends.StrangerFriendRequest
 
 /**
  * State and behaviour for the user sheet — the bottom sheet that opens on any avatar tap.
@@ -223,6 +224,9 @@ class WidgetUserSheetViewModel(
 
         /** A friend request the server refused; [abortCode] selects the explanatory copy. */
         data class ShowFriendRequestErrorToast(val abortCode: Int, val username: String) : Event()
+
+        /** 80013: ask before befriending a stranger, then repeat the same request confirmed. */
+        data class ConfirmStrangerRequest(val type: Int?, val username: String, @StringRes val successToast: Int) : Event()
 
         data class LaunchMessage(val userId: Long) : Event()
         data class LaunchVoiceCall(val channelId: Long) : Event()
@@ -513,10 +517,10 @@ class WidgetUserSheetViewModel(
      * @param type `null` accepts an incoming request; otherwise a [ModelUserRelationship] type.
      * @param successToast shown once the server confirms.
      */
-    fun addRelationship(type: Int?, username: String, @StringRes successToast: Int) {
+    fun addRelationship(type: Int?, username: String, @StringRes successToast: Int, confirmStranger: Boolean = false) {
         restAPI.api.addRelationship(
             userId,
-            RestAPIParams.UserRelationship(type, friendToken),
+            RestAPIParams.UserRelationship(type, friendToken, confirmStranger.takeIf { it }),
             RELATIONSHIP_CONTEXT,
         )
             .restSubscribeOn()
@@ -524,7 +528,13 @@ class WidgetUserSheetViewModel(
             .appSubscribe(
                 errorClass = WidgetUserSheetViewModel::class.java,
                 errorHandler = { error ->
-                    eventSubject.onNext(Event.ShowFriendRequestErrorToast(error.code, username))
+                    eventSubject.onNext(
+                        if (!confirmStranger && StrangerFriendRequest.isConfirmationRequired(error)) {
+                            Event.ConfirmStrangerRequest(type, username, successToast)
+                        } else {
+                            Event.ShowFriendRequestErrorToast(error.code, username)
+                        },
+                    )
                 },
             ) { eventSubject.onNext(Event.ShowToast(successToast)) }
     }

@@ -103,6 +103,8 @@ object RestAPIAbortCodes {
     const val RELATIONSHIP_INVALID_SELF = 80003
     const val RELATIONSHIP_INVALID_DISCORD_TAG = 80004
     const val RELATIONSHIP_ALREADY_FRIENDS = 80007
+    /** Befriending someone with no mutual friends or small mutual servers needs `confirm_stranger_request`. */
+    const val RELATIONSHIP_INVALID_NO_CONFIRMATION = 80013
 
     const val GIFTING_CANT_REDEEM_SUBSCRIPTION_MANAGED = 100022
     const val GIFTING_CANT_REDEEM_SUBSCRIPTION_PAST_DUE = 100023

@@ -17,6 +17,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.google.android.material.button.MaterialButton
 import com.discord.i18n.i18nRender
+import com.discord.widgets.friends.StrangerFriendRequest
 
 /**
  * Explains why a call could not be placed: the two users are not friends.
@@ -70,10 +71,10 @@ class WidgetCallFailed : AppDialog(R.layout.view_dialog_confirmation) {
         confirmButton.setOnClickListener { sendFriendRequest(user.id, user.username) }
     }
 
-    private fun sendFriendRequest(userId: Long, username: String) {
+    private fun sendFriendRequest(userId: Long, username: String, confirmStranger: Boolean = false) {
         RestAPI.api.addRelationship(
             userId,
-            RestAPIParams.UserRelationship(null, null),
+            RestAPIParams.UserRelationship(null, null, confirmStranger.takeIf { it }),
             RELATIONSHIP_CONTEXT,
         )
             .restSubscribeOn()
@@ -82,7 +83,15 @@ class WidgetCallFailed : AppDialog(R.layout.view_dialog_confirmation) {
                 errorClass = WidgetCallFailed::class.java,
                 // The reference maps abort codes through `RestAPIAbortMessages`; that table is
                 // not reconstructed yet, so every failure shows the generic message.
-                errorHandler = { toast(getString(R.string.default_failure_to_perform_action_message)) },
+                errorHandler = { error ->
+                    if (!confirmStranger && StrangerFriendRequest.isConfirmationRequired(error)) {
+                        StrangerFriendRequest.confirm(parentFragmentManager, requireContext()) {
+                            sendFriendRequest(userId, username, confirmStranger = true)
+                        }
+                    } else {
+                        toast(getString(R.string.default_failure_to_perform_action_message))
+                    }
+                },
             ) {
                 toast(getString(R.string.friend_request_sent))
                 dismiss()

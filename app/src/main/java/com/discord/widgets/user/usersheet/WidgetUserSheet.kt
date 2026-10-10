@@ -83,6 +83,7 @@ import rx.subscriptions.CompositeSubscription
 import dev.mantikafasi.manticord.plugins.api.PluginProfileContext
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import dev.mantikafasi.manticord.plugins.api.pluginProfileContext
+import com.discord.widgets.friends.StrangerFriendRequest
 
 /**
  * The user sheet: the bottom sheet that opens whenever an avatar or a name is tapped.
@@ -1230,6 +1231,11 @@ class WidgetUserSheet : AppBottomSheet() {
 
             is WidgetUserSheetViewModel.Event.ShowFriendRequestErrorToast ->
                 toast(relationshipErrorMessage(event.abortCode, event.username))
+
+            is WidgetUserSheetViewModel.Event.ConfirmStrangerRequest ->
+                StrangerFriendRequest.confirm(parentFragmentManager, requireContext()) {
+                    viewModel.addRelationship(event.type, event.username, event.successToast, confirmStranger = true)
+                }
 
             is WidgetUserSheetViewModel.Event.LaunchMessage -> messageNavigator.open(event.userId)
 

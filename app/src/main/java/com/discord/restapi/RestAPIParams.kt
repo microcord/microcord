@@ -1214,8 +1214,11 @@ object RestAPIParams {
     data class UserRelationship(
         val type: Int? = null,
         val friendToken: String? = null,
+        /** Sent as `true` once the user confirmed befriending a stranger; see `StrangerFriendRequest`. */
+        val confirmStrangerRequest: Boolean? = null,
     ) {
-        override fun toString() = "UserRelationship(type=$type, credentials=<redacted>)"
+        override fun toString() =
+            "UserRelationship(type=$type, confirmStrangerRequest=$confirmStrangerRequest, credentials=<redacted>)"
 
         /** [discriminator] is null for a unique username; the field is sent as an explicit null. */
         data class Add(

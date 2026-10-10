@@ -193,6 +193,10 @@ class WidgetFriendsList : AppFragment(R.layout.widget_friends_list) {
             )
         is FriendsListViewModel.Event.LaunchVoiceCall ->
             privateCallLauncher.launchVoiceCall(event.channelId)
+        is FriendsListViewModel.Event.ConfirmStrangerRequest ->
+            StrangerFriendRequest.confirm(parentFragmentManager, requireContext()) {
+                viewModel.acceptFriendRequest(event.userId, event.username, confirmStranger = true)
+            }
     }
 
     private fun showToast(text: CharSequence?) {

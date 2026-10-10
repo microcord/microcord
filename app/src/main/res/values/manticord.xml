@@ -3,6 +3,8 @@
     <string name="manticord_member_group_count" translatable="false">%1$s — %2$d</string>
     <color name="loading_background">#2B2E31</color>
     <string name="manticord_app_name">Microcord</string>
+    <string name="manticord_stranger_request_title">Accept friend request?</string>
+    <string name="manticord_stranger_request_body">This may be someone you don\'t know. You don\'t share any mutual friends or small mutual servers with them.</string>
     <string name="manticord_save_to_file">Save to file</string>
     <string name="manticord_theme_system">Sync with device</string>
     <string name="manticord_theme_system_help">Use Light in light mode and the theme picked below in dark mode.</string>

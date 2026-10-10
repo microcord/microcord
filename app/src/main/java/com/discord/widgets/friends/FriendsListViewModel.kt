@@ -87,6 +87,9 @@ class FriendsListViewModel(
         data class ShowFriendRequestErrorToast(val abortCode: Int, val username: String) : Event()
 
         data class LaunchVoiceCall(val channelId: Long) : Event()
+
+        /** 80013: ask before accepting a stranger's request; see [StrangerFriendRequest]. */
+        data class ConfirmStrangerRequest(val userId: Long, val username: String) : Event()
     }
 
     /**
@@ -190,14 +193,22 @@ class FriendsListViewModel(
 
     // region actions
 
-    fun acceptFriendRequest(userId: Long, username: String) {
+    fun acceptFriendRequest(userId: Long, username: String, confirmStranger: Boolean = false) {
         val api = restApi() ?: return
-        api.addRelationship(userId, RestAPIParams.UserRelationship(), relationshipContext(LOCATION))
+        api.addRelationship(
+            userId,
+            RestAPIParams.UserRelationship(confirmStrangerRequest = confirmStranger.takeIf { it }),
+            relationshipContext(LOCATION),
+        )
             .restSubscribeOn()
             .ui(this)
             .appSubscribe(
                 errorClass = FriendsListViewModel::class.java,
-                errorHandler = { error ->
+                errorHandler = errorHandler@{ error ->
+                    if (!confirmStranger && StrangerFriendRequest.isConfirmationRequired(error)) {
+                        eventSubject.onNext(Event.ConfirmStrangerRequest(userId, username))
+                        return@errorHandler
+                    }
                     RestAPIAbortMessages.handleAbortCodeOrDefault(
                         error,
                         onHandle = { emitShowFriendRequestAbortToast(error.code, username) },
