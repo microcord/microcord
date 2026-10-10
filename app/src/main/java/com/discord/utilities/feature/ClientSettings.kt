@@ -101,6 +101,7 @@ object ClientSettings {
     val profileFrames = register(BooleanSetting("feature_profile_frames", true))
     val nitroSpoof = register(BooleanSetting("feature_nitro_spoof"))
     val silentTyping = register(BooleanSetting("feature_silent_typing"))
+    val capitalizeSentences = register(BooleanSetting("feature_capitalize_sentences", true))
     val smoothKeyboard = register(BooleanSetting("feature_smooth_keyboard"))
     val maximumRefreshRate = register(BooleanSetting("feature_maximum_refresh_rate", true))
     val cloudSettingsBackup = register(BooleanSetting("feature_cloud_settings_backup", backupPolicy = BackupPolicy.EXCLUDE))

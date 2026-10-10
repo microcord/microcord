@@ -30,9 +30,9 @@ class ClientPreferenceSnapshotTest {
             FeatureFlags::setMessageLimitCounterEnabled, FeatureFlags::setAvatarDecorationsEnabled,
             FeatureFlags::setNameplatesEnabled, FeatureFlags::setProfileEffectsEnabled,
             FeatureFlags::setProfileFramesEnabled, FeatureFlags::setNitroSpoofEnabled,
-            FeatureFlags::setSilentTypingEnabled,
+            FeatureFlags::setSilentTypingEnabled, FeatureFlags::setCapitalizeSentencesEnabled,
         ).forEachIndexed { index, setter -> setter(index % 2 == 0) }
-        assertEquals(21, defaults.values.size)
+        assertEquals(22, defaults.values.size)
         ChatInputCustomization.save(ChatInputCustomization.Button.entries.mapIndexed { index, button ->
             ChatInputCustomization.Entry(button, ChatInputCustomization.Zone.entries[index % 5])
         })

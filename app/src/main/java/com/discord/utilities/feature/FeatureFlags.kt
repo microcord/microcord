@@ -45,6 +45,8 @@ object FeatureFlags {
     fun setNitroSpoofEnabled(enabled: Boolean) = setEnabled(ClientSettings.nitroSpoof, enabled)
     fun silentTypingEnabled() = enabled(ClientSettings.silentTyping)
     fun setSilentTypingEnabled(enabled: Boolean) = setEnabled(ClientSettings.silentTyping, enabled)
+    fun capitalizeSentencesEnabled() = enabled(ClientSettings.capitalizeSentences)
+    fun setCapitalizeSentencesEnabled(enabled: Boolean) = setEnabled(ClientSettings.capitalizeSentences, enabled)
     fun smoothKeyboardEnabled() = enabled(ClientSettings.smoothKeyboard)
     fun setSmoothKeyboardEnabled(enabled: Boolean) = setEnabled(ClientSettings.smoothKeyboard, enabled)
     fun maximumRefreshRateEnabled() = enabled(ClientSettings.maximumRefreshRate)

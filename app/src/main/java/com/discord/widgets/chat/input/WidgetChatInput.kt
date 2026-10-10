@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.input
 
+import android.text.InputType
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
@@ -405,8 +406,20 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         view?.post(::updateSendButtonVisibility)
     }
 
+    /** The 126.21 chat box is plain textMultiLine, so keyboards never auto-capitalize; this adds it. */
+    private fun applyCapitalizeSentences(editText: FlexEditText) {
+        val inputType = if (FeatureFlags.capitalizeSentencesEnabled()) {
+            editText.inputType or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        } else {
+            editText.inputType and InputType.TYPE_TEXT_FLAG_CAP_SENTENCES.inv()
+        }
+        if (inputType != editText.inputType) editText.inputType = inputType
+    }
+
     override fun onResume() {
         super.onResume()
+        // Re-applied on resume so the switch takes effect on returning to the chat.
+        input?.let(::applyCapitalizeSentences)
         if (FeatureFlags.smoothKeyboardEnabled()) {
             // adjustResize performs its own window resize in lockstep with our manual
             // widget_chat_bottom_space resize, doubling the offset on API 35+ edge-to-edge
@@ -522,6 +535,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         })
         val editText = flexBinding.textInput
         input = editText
+        // The field can be rebuilt without this fragment resuming, so it is set here as well.
+        applyCapitalizeSentences(editText)
         truncatedHint = WidgetChatInputTruncatedHint(editText).also { it.addBindedTextWatcher(this) }
         editText.addTextChangedListener(watcher)
         // Public FlexInput also closes its own tray from a touch listener. Remove that competing

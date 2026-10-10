@@ -114,6 +114,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.nitroSpoofEnabled()
             setOnCheckedListener(FeatureFlags::setNitroSpoofEnabled)
         }
+        binding.settingsFeatureCapitalizeSentences.apply {
+            isChecked = FeatureFlags.capitalizeSentencesEnabled()
+            setOnCheckedListener(FeatureFlags::setCapitalizeSentencesEnabled)
+        }
         binding.settingsFeatureSilentTyping.apply {
             isChecked = FeatureFlags.silentTypingEnabled()
             setOnCheckedListener(FeatureFlags::setSilentTypingEnabled)
