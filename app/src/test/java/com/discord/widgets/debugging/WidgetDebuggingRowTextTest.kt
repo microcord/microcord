@@ -90,8 +90,8 @@ class WidgetDebuggingRowTextTest {
     }
 
     @Test
-    fun `device info sits between the title and the log rows`() {
-        val exported = debugLogExport(listOf(item("row", null)), deviceInfo = "Device: Test Phone")
+    fun `header sits between the title and the log rows`() {
+        val exported = debugLogExport(listOf(item("row", null)), header = "Device: Test Phone")
 
         assertTrue(exported.startsWith("Microcord debug log\nDevice: Test Phone\n\nrow"))
     }

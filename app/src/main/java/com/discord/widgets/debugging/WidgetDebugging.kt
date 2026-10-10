@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.ColorInt
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
@@ -17,6 +18,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
@@ -27,6 +29,7 @@ import com.discord.utilities.rx.computationBuffered
 import com.discord.utilities.rx.ui
 import com.discord.utilities.systemlog.SystemLogUtils
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
+import java.io.File
 import rx.Observable
 import rx.schedulers.Schedulers
 import rx.subjects.BehaviorSubject
@@ -71,13 +74,17 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        // Pinned above the newest log line (the list is reversed, so the end renders at the top),
+        // and shown whatever the filters: no report is useful without them.
+        val headerRows = debugHeader(requireContext()).asReversed()
+            .map { LogRow(AppLog.LoggedItem(Log.INFO, it, null)) }
         Observable.combineLatest(
             AppLog.observeLogs().distinctUntilChanged(),
             filterSubject.distinctUntilChanged(),
             showSystemLogsSubject.distinctUntilChanged(),
         ) { logs, isFiltered, showSystemLogs ->
             Model(
-                filterDebugLogs(logs, isFiltered, showSystemLogs).map(::LogRow),
+                filterDebugLogs(logs, isFiltered, showSystemLogs).map(::LogRow) + headerRows,
                 isFiltered,
                 showSystemLogs,
             )
@@ -103,6 +110,7 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
                         menuItem.isChecked = checked
                         showSystemLogsSubject.onNext(checked)
                     }
+                    R.id.menu_debugging_share -> shareLogs()
                     R.id.menu_debugging_save -> startActivityForResult(
                         Intent(Intent.ACTION_CREATE_DOCUMENT)
                             .addCategory(Intent.CATEGORY_OPENABLE)
@@ -126,9 +134,39 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
         saveLogs(data?.data ?: return)
     }
 
+    private fun exportText(): String {
+        val header = debugHeader(requireContext()).joinToString(System.lineSeparator() + System.lineSeparator())
+        return debugLogExport(AppLog.getLogs(), SystemLogUtils.fetchPreviousSessionLogs(), header)
+    }
+
+    /** Writes the export into the provider-shared cache folder and opens the share sheet on it. */
+    private fun shareLogs() {
+        val context = requireContext().applicationContext
+        val output = exportText()
+        Observable.fromCallable {
+            val directory = File(context.cacheDir, "debug_logs").apply { mkdirs() }
+            // Only the latest export is kept; older ones are already shared or abandoned.
+            directory.listFiles()?.forEach { it.delete() }
+            File(directory, "microcord-debug-${System.currentTimeMillis()}.txt").apply { writeText(output) }
+        }
+            .subscribeOn(Schedulers.io())
+            .ui(this)
+            .subscribe(
+                { file ->
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val send = Intent(Intent.ACTION_SEND)
+                        .setType("text/plain")
+                        .putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    startActivity(Intent.createChooser(send, getString(R.string.share)))
+                },
+                { AppToast.show(this, R.string.default_failure_to_perform_action_message) },
+            )
+    }
+
     private fun saveLogs(uri: Uri) {
         val resolver = requireContext().contentResolver
-        val output = debugLogExport(AppLog.getLogs(), SystemLogUtils.fetchPreviousSessionLogs(), deviceInfo(requireContext()))
+        val output = exportText()
         Observable.fromCallable {
             resolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(output) }
                 ?: error("Unable to open debug log destination")
@@ -272,14 +310,20 @@ internal fun deviceInfo(context: Context): String {
     ).joinToString(separator = System.lineSeparator())
 }
 
+/** Device info and the X-Super-Properties sent with every request: required context for any bug report. */
+internal fun debugHeader(context: Context): List<String> = listOf(
+    deviceInfo(context),
+    "X-Super-Properties: ${AnalyticSuperProperties.superPropertiesString}",
+)
+
 internal fun debugLogExport(
     logs: List<AppLog.LoggedItem>,
     previousSessionLogs: String = "",
-    deviceInfo: String = "",
+    header: String = "",
 ): String = buildString {
     appendLine("Microcord debug log")
-    if (deviceInfo.isNotBlank()) {
-        appendLine(deviceInfo)
+    if (header.isNotBlank()) {
+        appendLine(header)
         appendLine()
     }
     logs.forEach { item ->
