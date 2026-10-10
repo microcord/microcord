@@ -368,6 +368,24 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             // (not just its settled value), so the resize tracks the keyboard instead of jumping.
             SmoothKeyboardReactionHelper.install(view, ::applyBottomInset)
         }
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            // Below Android 11 this edge-to-edge window is not resized for the keyboard, the IME
+            // inset never reaches the listener above, and the animation callback does not exist:
+            // a debug log from Android 8.1 showed a 725px keyboard over an unmoved chat box. The
+            // root insets do report it, so the spacer follows them on every layout pass.
+            var appliedBottom = -1
+            view.viewTreeObserver.addOnGlobalLayoutListener {
+                val root = ViewCompat.getRootWindowInsets(view) ?: return@addOnGlobalLayoutListener
+                val bottom = (
+                    root.getInsets(WindowInsetsCompat.Type.ime()).bottom -
+                        root.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                    ).coerceAtLeast(0)
+                if (bottom != appliedBottom) {
+                    appliedBottom = bottom
+                    applyBottomInset(bottom)
+                }
+            }
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -420,7 +438,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         super.onResume()
         // Re-applied on resume so the switch takes effect on returning to the chat.
         input?.let(::applyCapitalizeSentences)
-        if (FeatureFlags.smoothKeyboardEnabled()) {
+        // Below Android 11 there is no animation callback to drive the spacer, and adjustNothing
+        // would stop the keyboard height being reported at all; adjustResize stays.
+        if (FeatureFlags.smoothKeyboardEnabled() && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             // adjustResize performs its own window resize in lockstep with our manual
             // widget_chat_bottom_space resize, doubling the offset on API 35+ edge-to-edge
             // devices; owning IME positioning exclusively through insets avoids the stacking.
@@ -430,7 +450,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     override fun onPause() {
-        if (FeatureFlags.smoothKeyboardEnabled()) {
+        if (FeatureFlags.smoothKeyboardEnabled() && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             @Suppress("DEPRECATION")
             requireActivity().window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         }
