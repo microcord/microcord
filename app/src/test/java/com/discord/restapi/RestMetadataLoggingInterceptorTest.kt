@@ -35,12 +35,20 @@ class RestMetadataLoggingInterceptorTest {
     }
 
     @Test
-    fun `debug build enables logging and release build disables it`() {
-        val debugClient = OkHttpClient.Builder().addDebugRestLogging(true).build()
-        val releaseClient = OkHttpClient.Builder().addDebugRestLogging(false).build()
+    fun `release build logs only while the developer switch is on`() {
+        val server = MockWebServer()
+        repeat(2) { server.enqueue(MockResponse()) }
+        val logs = mutableListOf<String>()
+        var switchOn = false
+        val client = OkHttpClient.Builder().addDebugRestLogging(false, logs::add) { switchOn }.build()
+        fun call() = client.newCall(okhttp3.Request.Builder().url(server.url("/api/v9/users/@me")).build()).execute().close()
 
-        assertTrue(debugClient.interceptors.any { it is RestMetadataLoggingInterceptor })
-        assertFalse(releaseClient.interceptors.any { it is RestMetadataLoggingInterceptor })
+        call()
+        assertTrue(logs.isEmpty())
+        switchOn = true
+        call()
+        assertTrue(logs.any { it.contains("path=/api/v9/users/@me status=200") })
+        server.shutdown()
     }
 
     @Test

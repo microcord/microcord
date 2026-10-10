@@ -22,23 +22,28 @@ import okio.Buffer
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava.RxJavaCallAdapterFactory
 
+/**
+ * Installed in every build, so the developer-options "log REST requests" switch also works in the
+ * release builds people actually report bugs from. [debugBuild] additionally logs a status line for
+ * every request without the switch, as debug builds always have.
+ */
 internal fun OkHttpClient.Builder.addDebugRestLogging(
-    enabled: Boolean,
+    debugBuild: Boolean,
     logger: (String) -> Unit = { AppLog.d("REST", it) },
     verbose: () -> Boolean = AppRestRequestLogger::isEnabled,
-) = apply {
-    if (enabled) addInterceptor(RestMetadataLoggingInterceptor(logger, verbose))
-}
+) = addInterceptor(RestMetadataLoggingInterceptor(logger, verbose, debugBuild))
 
 internal class RestMetadataLoggingInterceptor(
     private val logger: (String) -> Unit,
     private val verbose: () -> Boolean = { false },
+    private val alwaysLogStatus: Boolean = true,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
+        val verbose = verbose()
+        if (!verbose && !alwaysLogStatus) return chain.proceed(request)
         val startedAt = System.nanoTime()
         val prefix = "method=${request.method} path=${request.url.encodedPath}"
-        val verbose = verbose()
         if (verbose) {
             logger("$prefix requestHeaders=${request.headers.sanitized()} requestBody=${request.body.sanitized()}")
         }

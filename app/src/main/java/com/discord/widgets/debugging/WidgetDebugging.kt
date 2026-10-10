@@ -128,7 +128,7 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 
     private fun saveLogs(uri: Uri) {
         val resolver = requireContext().contentResolver
-        val output = debugLogExport(AppLog.getLogs(), SystemLogUtils.fetchPreviousSessionLogs())
+        val output = debugLogExport(AppLog.getLogs(), SystemLogUtils.fetchPreviousSessionLogs(), deviceInfo(requireContext()))
         Observable.fromCallable {
             resolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(output) }
                 ?: error("Unable to open debug log destination")
@@ -247,11 +247,41 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 internal fun logRowText(item: AppLog.LoggedItem): String =
     AppLog.redactSecrets(item.message + (item.throwable?.let { "\n$it" } ?: ""))
 
+/**
+ * What a bug report needs to tell devices apart, and nothing about the account: app build, Android
+ * version, device model, CPU ABIs, language and navigation mode (gestures change insets).
+ */
+internal fun deviceInfo(context: Context): String {
+    val navigationMode = when (
+        runCatching { android.provider.Settings.Secure.getInt(context.contentResolver, "navigation_mode") }.getOrNull()
+    ) {
+        0 -> "3-button"
+        1 -> "2-button"
+        2 -> "gestures"
+        else -> "unknown"
+    }
+    val metrics = context.resources.displayMetrics
+    return listOf(
+        "App: ${context.getString(R.string.manticord_build_label)} (${context.packageName})",
+        "Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})",
+        "Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (${android.os.Build.DEVICE})",
+        "ABIs: ${android.os.Build.SUPPORTED_ABIS.joinToString()}",
+        "Screen: ${metrics.widthPixels}x${metrics.heightPixels} @ ${metrics.densityDpi}dpi, font scale ${context.resources.configuration.fontScale}",
+        "Locale: ${java.util.Locale.getDefault().toLanguageTag()}",
+        "Navigation: $navigationMode",
+    ).joinToString(separator = System.lineSeparator())
+}
+
 internal fun debugLogExport(
     logs: List<AppLog.LoggedItem>,
     previousSessionLogs: String = "",
+    deviceInfo: String = "",
 ): String = buildString {
     appendLine("Microcord debug log")
+    if (deviceInfo.isNotBlank()) {
+        appendLine(deviceInfo)
+        appendLine()
+    }
     logs.forEach { item ->
         appendLine(logRowText(item))
     }

@@ -89,4 +89,11 @@ class WidgetDebuggingRowTextTest {
         assertTrue(debugLogExport(listOf(system)).contains("OpenGLRenderer warning"))
     }
 
+    @Test
+    fun `device info sits between the title and the log rows`() {
+        val exported = debugLogExport(listOf(item("row", null)), deviceInfo = "Device: Test Phone")
+
+        assertTrue(exported.startsWith("Microcord debug log\nDevice: Test Phone\n\nrow"))
+    }
+
 }
