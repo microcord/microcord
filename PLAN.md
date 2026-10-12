@@ -161,6 +161,7 @@ coverage and passing builds do not establish complete behavioral parity.
 | Diagnostics | Redact tokens, cookies, passwords, MFA/captcha values and message content, including exception text |
 | Resource compatibility | Restore first-party attributes; let dependencies own their attributes. Retain decoded-layout compatibility repairs and the inherited lint baseline |
 | Observer errors | Preserve the DEX-proven `ObservationDeck` exception/log-level behavior; do not remove it based on incomplete JADX output |
+| Minimum API safety | `NewApi` lint is fatal for `:app` and `:plugin-api` (CI step before the debug build), because one call newer than minSdk 23 crashed Android 6 at launch. Desugaring does not rewrite `CompletableFuture`, so plugin startup uses the `streamsupport-cfuture` backport; `java.time` and streams are desugared and fine |
 
 Exact dependency versions belong in the version catalog, not in historical
 installation logs. Reference-specific behavioral deviations remain documented

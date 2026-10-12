@@ -8,6 +8,7 @@ import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
 import java.text.SimpleDateFormat
+import java.time.OffsetDateTime
 import java.util.Locale
 import java.util.TimeZone
 
@@ -21,18 +22,9 @@ data class ModelMuteConfig(
     constructor(muteConfig: MuteConfig?) : this(muteConfig?.endTime)
 
     companion object {
-        private val formats = arrayOf(
-            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-            "yyyy-MM-dd'T'HH:mm:ssXXX",
-        )
-
-        private fun parseUtc(value: String): Long = formats.firstNotNullOfOrNull { pattern ->
-            runCatching {
-                SimpleDateFormat(pattern, Locale.ROOT).apply {
-                    timeZone = TimeZone.getTimeZone("UTC")
-                }.parse(value)?.time
-            }.getOrNull()
-        } ?: 0L
+        /** java.time rather than SimpleDateFormat: its `XXX` offset pattern does not exist before API 24. */
+        private fun parseUtc(value: String): Long =
+            runCatching { OffsetDateTime.parse(value).toInstant().toEpochMilli() }.getOrDefault(0L)
 
         private fun formatUtc(value: Long): String =
             SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT).apply {

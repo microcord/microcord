@@ -17,6 +17,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // Shipped inside the app, so it must stay within minSdk too; see app/build.gradle.kts.
+    lint {
+        checkOnly += setOf("NewApi")
+        fatal += "NewApi"
+    }
 }
 
 kotlin {

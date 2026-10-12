@@ -7,6 +7,7 @@ import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.RectF
 import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Animatable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -35,7 +36,8 @@ class ProfileCropActivity : UCropActivity() {
     // uCrop is a dependency layout and does not publish a generated view binding.
     private lateinit var crop: UCropView
     private var cropBitmap: Bitmap? = null
-    private var animatedPreview: AnimatedImageDrawable? = null
+    // Animatable rather than AnimatedImageDrawable (API 28) so stop() is callable on older phones.
+    private var animatedPreview: Animatable? = null
     private var previewSubscription: Subscription? = null
     private var saveSubscription: Subscription? = null
     private var saving = false
@@ -48,7 +50,7 @@ class ProfileCropActivity : UCropActivity() {
                 return
             }
             cropBitmap = bitmap
-            loadAnimatedPreview(bitmap.width, bitmap.height)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) loadAnimatedPreview(bitmap.width, bitmap.height)
         }
     }
 

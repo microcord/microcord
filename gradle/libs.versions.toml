@@ -50,6 +50,7 @@ work = "2.11.2"
 kronos = "0.0.1-alpha11"
 playServicesAdsIdentifier = "18.3.0"
 desugarJdkLibs = "2.1.5"
+streamsupportCfuture = "1.7.4"
 inferAnnotation = "0.18.0"
 androidxTestCore = "1.7.0"
 androidxTestRunner = "1.7.0"
@@ -126,6 +127,8 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime", versio
 kronos-android = { group = "com.lyft.kronos", name = "kronos-android", version.ref = "kronos" }
 play-services-ads-identifier = { group = "com.google.android.gms", name = "play-services-ads-identifier", version.ref = "playServicesAdsIdentifier" }
 desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
+# CompletableFuture is API 24 and core library desugaring does not rewrite it; minSdk is 23.
+streamsupport-cfuture = { group = "net.sourceforge.streamsupport", name = "streamsupport-cfuture", version.ref = "streamsupportCfuture" }
 infer-annotation = { group = "com.facebook.infer.annotation", name = "infer-annotation", version.ref = "inferAnnotation" }
 androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }

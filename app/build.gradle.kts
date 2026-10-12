@@ -114,6 +114,12 @@ android {
     }
     lint {
         baseline = file("lint-baseline.xml")
+        // A framework call newer than minSdk crashes older phones the first time it runs; one in
+        // App.onCreate (PriorityQueue(Comparator), API 26) made the app unlaunchable on Android 7.
+        // Core library desugaring is taken into account, so only calls it does not cover are flagged.
+        // Run with `scripts/build.sh :app:lintDebug :plugin-api:lintDebug`; CI runs it before the debug build.
+        checkOnly += setOf("NewApi")
+        fatal += "NewApi"
     }
     testOptions {
         // Android framework stubs return defaults instead of throwing, so plain JUnit tests can
@@ -201,6 +207,7 @@ dependencies {
     implementation(project(":plugin-api"))
     compileOnly(libs.infer.annotation)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+    implementation(libs.streamsupport.cfuture)
     implementation(libs.apng)
     implementation(libs.photoeditor)
     implementation(libs.androidsvg)

@@ -8,9 +8,7 @@ import com.discord.api.guildjoinrequest.GuildJoinRequest
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.user.User
 import java.io.Serializable
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
+import java.time.OffsetDateTime
 
 class ModelInvite private constructor(
     var channel: Channel?,
@@ -210,19 +208,8 @@ class ModelInvite private constructor(
         fun createForTesting(channel: Channel?) = ModelInvite(channel, null, null)
         fun getInviteStoreKey(code: String, eventId: Long?) = eventId?.let { "$code?event=$it" } ?: code
 
-        private fun parseUtcDate(value: String): Long {
-            val normalized = value.replace(Regex("\\.(\\d+)(Z|[+-]\\d{2}:\\d{2})$")) { match ->
-                ".${match.groupValues[1].padEnd(3, '0').take(3)}${match.groupValues[2]}"
-            }
-            val formats = arrayOf("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", "yyyy-MM-dd'T'HH:mm:ssXXX")
-            for (format in formats) {
-                runCatching {
-                    return SimpleDateFormat(format, Locale.US).apply {
-                        timeZone = TimeZone.getTimeZone("UTC")
-                    }.parse(normalized)?.time ?: 0L
-                }
-            }
-            return 0L
-        }
+        /** java.time rather than SimpleDateFormat: its `XXX` offset pattern does not exist before API 24. */
+        private fun parseUtcDate(value: String): Long =
+            runCatching { OffsetDateTime.parse(value).toInstant().toEpochMilli() }.getOrDefault(0L)
     }
 }

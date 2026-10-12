@@ -142,6 +142,8 @@ class WidgetSettingsNotifications : AppFragment(R.layout.widget_settings_notific
             R.id.settings_notifications_share_online to UserSettings.notifyFriendsOnComeOnline,
             R.id.settings_notifications_share_profile to UserSettings.notifyFriendsOnProfileUpdate,
         ).forEach { (id, setting) ->
+            // Lint mistakes setting.get() for MatchGroupCollection.get(String) (API 26); no regex here.
+            @Suppress("NewApi")
             view.findViewById<CheckedSetting>(id).bind(setting.get(), setting::set)
         }
 

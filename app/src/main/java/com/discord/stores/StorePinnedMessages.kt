@@ -182,7 +182,7 @@ class StorePinnedMessages(
     @StoreThread fun handlePreLogout() { if (pins.isNotEmpty()) { pins.clear(); markChanged() } }
 
     private companion object {
-        const val PINNED_AT_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"
+        const val PINNED_AT_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
     }
 
     override fun snapshotData() {

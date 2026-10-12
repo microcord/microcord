@@ -134,7 +134,7 @@ class PluginDependencyResolverTest {
 
     @Test
     fun `requirements load first and priority orders ready plugins`() {
-        val plan = PluginDependencyResolver.resolve(
+        val plan = resolveAtAppVersionOne(
             listOf(
                 candidate("feature", priority = 100, requirements = listOf(requirement("library"))),
                 candidate("library", priority = -100),
@@ -148,7 +148,7 @@ class PluginDependencyResolverTest {
 
     @Test
     fun `blocking plugins promote only their requirement chain`() {
-        val plan = PluginDependencyResolver.resolve(
+        val plan = resolveAtAppVersionOne(
             listOf(
                 candidate("base"),
                 candidate("library", requirements = listOf(requirement("base"))),
@@ -174,7 +174,7 @@ class PluginDependencyResolverTest {
 
     @Test
     fun `missing disabled and incompatible requirements block dependents`() {
-        val plan = PluginDependencyResolver.resolve(
+        val plan = resolveAtAppVersionOne(
             listOf(
                 candidate("disabled", enabled = false),
                 candidate("needs-disabled", requirements = listOf(requirement("disabled"))),
@@ -198,7 +198,7 @@ class PluginDependencyResolverTest {
 
     @Test
     fun `cycles block their members and then their dependents`() {
-        val plan = PluginDependencyResolver.resolve(
+        val plan = resolveAtAppVersionOne(
             listOf(
                 candidate("a", requirements = listOf(requirement("b"))),
                 candidate("b", requirements = listOf(requirement("a"))),
@@ -212,6 +212,13 @@ class PluginDependencyResolverTest {
         assertEquals(PluginBlockReason.RequirementBlocked("a"), plan.blocked["dependent"])
         assertEquals(listOf("healthy"), plan.plugins.map { it.manifest.id })
     }
+
+    /**
+     * The fixtures target app version 1. The real version code is the commit timestamp now, so the
+     * default would mark every fixture incompatible.
+     */
+    private fun resolveAtAppVersionOne(candidates: List<PluginCandidate>) =
+        PluginDependencyResolver.resolve(candidates, manticordVersion = 1)
 
     private fun candidate(
         id: String,

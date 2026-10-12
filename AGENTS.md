@@ -313,6 +313,10 @@ to avoid and expensive to diagnose, because none of them looks wrong when you re
   after deserialisation. Use `get()` and document it as a deliberate divergence.
 - **Store state must be mutated on the dispatcher thread.** Route through `dispatcher.schedule { }`.
   Violating this caused a fatal crash in `App.onCreate`.
+- **A framework call newer than minSdk (23) crashes older phones the first time it runs.** Core library
+  desugaring covers `java.time`, streams and `Optional`, but not everything (`CompletableFuture`,
+  `PriorityQueue(Comparator)`, `SimpleDateFormat` `X`, `View.startDragAndDrop`). Run
+  `scripts/build.sh :app:lintDebug :plugin-api:lintDebug`; `NewApi` is fatal there and in CI.
 - **Hiding a UI entry point is not gating it.** If a screen must not ship, gate the screen itself,
   not the menu row that opens it.
 

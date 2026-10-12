@@ -8,7 +8,7 @@ import dev.mantikafasi.manticord.plugins.api.PluginManifest
 import dev.mantikafasi.manticord.plugins.api.PluginSettings
 import rx.Observable
 import rx.subjects.BehaviorSubject
-import java.util.concurrent.CompletableFuture
+import java8.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit

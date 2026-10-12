@@ -35,6 +35,7 @@ import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.tabs.TabLayout
 import kotlin.math.abs
+import androidx.core.view.ViewCompat
 
 class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_header_customization) {
     private var surface = Surface.DM
@@ -283,7 +284,8 @@ class WidgetSettingsHeaderCustomization : AppFragment(R.layout.widget_settings_h
                     true
                 }
                 MotionEvent.ACTION_MOVE -> if (abs(event.x - downX) > dp(8) || abs(event.y - downY) > dp(8)) {
-                    dragged.startDragAndDrop(
+                    ViewCompat.startDragAndDrop(
+                        dragged,
                         ClipData.newPlainText("header-action", action.name),
                         View.DragShadowBuilder(dragged),
                         action,

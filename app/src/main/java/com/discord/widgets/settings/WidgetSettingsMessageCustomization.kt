@@ -34,6 +34,7 @@ import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.views.ReactionView
 import com.google.android.material.snackbar.Snackbar
 import kotlin.math.abs
+import androidx.core.view.ViewCompat
 
 class WidgetSettingsMessageCustomization : AppFragment(R.layout.widget_settings_message_customization) {
     private val entries = MessageCustomization.get().toMutableList()
@@ -177,7 +178,8 @@ class WidgetSettingsMessageCustomization : AppFragment(R.layout.widget_settings_
                     true
                 }
                 MotionEvent.ACTION_MOVE -> if (abs(event.x - downX) > dp(8) || abs(event.y - downY) > dp(8)) {
-                    dragged.startDragAndDrop(
+                    ViewCompat.startDragAndDrop(
+                        dragged,
                         ClipData.newPlainText("message-section", section.name),
                         View.DragShadowBuilder(dragged),
                         section,

@@ -31,6 +31,9 @@ internal sealed class PluginBlockReason {
 }
 
 internal object PluginDependencyResolver {
+    /** `PriorityQueue`'s own default; the constructor taking only a comparator is API 24+. */
+    private const val INITIAL_QUEUE_CAPACITY = 11
+
     fun resolve(
         candidates: List<PluginCandidate>,
         manticordVersion: Int = BuildConfig.VERSION_CODE,
@@ -89,7 +92,8 @@ internal object PluginDependencyResolver {
             }
         }
 
-        val ready = PriorityQueue<String> { left, right ->
+        // The capacity form: PriorityQueue(Comparator) only exists from Android 7 (API 24), and minSdk is 23.
+        val ready = PriorityQueue<String>(INITIAL_QUEUE_CAPACITY) { left, right ->
             val priority = active.getValue(right).manifest.priority.compareTo(active.getValue(left).manifest.priority)
             if (priority != 0) priority else left.compareTo(right)
         }

@@ -33,6 +33,7 @@ import dev.mantikafasi.manticord.plugins.api.PluginComposerZone
 import dev.mantikafasi.manticord.plugins.api.pluginChannelContext
 import dev.mantikafasi.manticord.plugins.api.pluginComposerContext
 import kotlin.math.abs
+import androidx.core.view.ViewCompat
 
 class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_settings_chat_input_customization) {
     private val entries = ChatInputCustomization.get().toMutableList()
@@ -228,7 +229,8 @@ class WidgetSettingsChatInputCustomization : AppFragment(R.layout.widget_setting
                         true
                     }
                     MotionEvent.ACTION_MOVE -> if (abs(event.x - downX) > dp(8) || abs(event.y - downY) > dp(8)) {
-                        dragged.startDragAndDrop(
+                        ViewCompat.startDragAndDrop(
+                            dragged,
                             ClipData.newPlainText("chat-input-button", button.name),
                             View.DragShadowBuilder(dragged),
                             button,
