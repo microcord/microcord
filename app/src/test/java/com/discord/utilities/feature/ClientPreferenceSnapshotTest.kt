@@ -20,7 +20,7 @@ class ClientPreferenceSnapshotTest {
         val defaults = source.getValue("default")
         SharedPreferencesProvider.setInstanceForTesting(defaults, source.getValue("durable"))
         listOf<(Boolean) -> Unit>(
-            FeatureFlags::setVoiceMessagesEnabled, FeatureFlags::setTapTapEnabled, FeatureFlags::setTapTapReplyOwnEnabled,
+            FeatureFlags::setVoiceMessagesEnabled, FeatureFlags::setTapTapEnabled, FeatureFlags::setTapTapReplyOwnEnabled, FeatureFlags::setNoReplyPingEnabled,
             FeatureFlags::setFetchUncachedUsersEnabled, FeatureFlags::setViewProfileImagesEnabled,
             FeatureFlags::setDisableServerProfilesEnabled,
             FeatureFlags::setChatboxCustomizationsEnabled, FeatureFlags::setHeaderCustomizationsEnabled,
@@ -32,7 +32,7 @@ class ClientPreferenceSnapshotTest {
             FeatureFlags::setProfileFramesEnabled, FeatureFlags::setNitroSpoofEnabled,
             FeatureFlags::setSilentTypingEnabled, FeatureFlags::setCapitalizeSentencesEnabled,
         ).forEachIndexed { index, setter -> setter(index % 2 == 0) }
-        assertEquals(22, defaults.values.size)
+        assertEquals(23, defaults.values.size)
         ChatInputCustomization.save(ChatInputCustomization.Button.entries.mapIndexed { index, button ->
             ChatInputCustomization.Entry(button, ChatInputCustomization.Zone.entries[index % 5])
         })

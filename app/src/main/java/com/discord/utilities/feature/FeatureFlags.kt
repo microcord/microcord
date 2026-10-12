@@ -9,6 +9,8 @@ object FeatureFlags {
     fun setTapTapEnabled(enabled: Boolean) = setEnabled(ClientSettings.tapTap, enabled)
     fun tapTapReplyOwnEnabled() = enabled(ClientSettings.tapTapReplyOwn)
     fun setTapTapReplyOwnEnabled(enabled: Boolean) = setEnabled(ClientSettings.tapTapReplyOwn, enabled)
+    fun noReplyPingEnabled() = enabled(ClientSettings.noReplyPing)
+    fun setNoReplyPingEnabled(enabled: Boolean) = setEnabled(ClientSettings.noReplyPing, enabled)
     fun fetchUncachedUsersEnabled() = enabled(ClientSettings.fetchUncachedUsers)
     fun setFetchUncachedUsersEnabled(enabled: Boolean) = setEnabled(ClientSettings.fetchUncachedUsers, enabled)
     fun viewProfileImagesEnabled() = enabled(ClientSettings.viewProfileImages)

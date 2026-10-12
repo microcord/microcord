@@ -56,6 +56,13 @@ class MessageActionsTest {
         assertFalse(MessageActions.evaluate(input()).getValue(MessageActions.Action.FORWARD).visible)
     }
 
+    @Test
+    fun noReplyPingFlagStartsRepliesWithTheMentionOff() {
+        assertTrue(MessageActionCoordinator.replyStartsMentioning(ownOrWebhook = false, noReplyPing = false))
+        assertFalse(MessageActionCoordinator.replyStartsMentioning(ownOrWebhook = false, noReplyPing = true))
+        assertFalse(MessageActionCoordinator.replyStartsMentioning(ownOrWebhook = true, noReplyPing = false))
+    }
+
     private fun input(
         isLocal: Boolean = false,
         canResend: Boolean = false,

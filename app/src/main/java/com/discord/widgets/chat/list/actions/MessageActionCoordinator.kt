@@ -4,6 +4,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.models.message.Message
+import com.discord.utilities.feature.FeatureFlags
 import java.nio.charset.StandardCharsets
 
 class MessageActionCoordinator(private val callbacks: Callbacks) {
@@ -76,13 +77,26 @@ class MessageActionCoordinator(private val callbacks: Callbacks) {
     fun reply(channel: Channel, message: Message, currentUserId: Long) {
         val ownOrWebhook = message.author?.id == currentUserId || message.webhookId != null
         val privateChannel = channel.type == Channel.DM || channel.type == Channel.GROUP_DM
-        callbacks.createPendingReply(channel, message, !ownOrWebhook, !ownOrWebhook && !privateChannel)
+        callbacks.createPendingReply(
+            channel,
+            message,
+            replyStartsMentioning(ownOrWebhook, FeatureFlags.noReplyPingEnabled()),
+            !ownOrWebhook && !privateChannel,
+        )
     }
 
     fun retry(message: Message) { if (message.canResend()) callbacks.retryLocal(message) }
     fun cancel(message: Message) { if (message.isLocal()) callbacks.cancelLocal(message) }
 
     companion object {
+        /**
+         * Whether a new reply starts with the author's @ on. Your own and webhook messages never ping;
+         * the "no reply auto ping" flag starts every reply with it off, and the @ON/@OFF toggle in the
+         * reply bar still switches it back on for that reply.
+         */
+        internal fun replyStartsMentioning(ownOrWebhook: Boolean, noReplyPing: Boolean) =
+            !ownOrWebhook && !noReplyPing
+
         fun reactionRoute(emoji: MessageReactionEmoji): String = encodePathSegment(
             if (emoji.id == null) requireNotNull(emoji.name) else "${requireNotNull(emoji.name)}:${emoji.id}",
         )

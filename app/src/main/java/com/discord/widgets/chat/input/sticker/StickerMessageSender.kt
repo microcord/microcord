@@ -13,6 +13,7 @@ import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.stores.StoreUser
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.file.DownloadUtils
 import com.discord.utilities.lifecycle.ApplicationProvider
 import com.discord.utilities.messagesend.MessageSendCoordinator
@@ -52,6 +53,7 @@ class StickerMessageSender(
                 originalMessage.id,
             ),
             originalMessage = originalMessage,
+            shouldMention = !FeatureFlags.noReplyPingEnabled(),
         ),
         location = MessageSendLocation.STICKER_REPLY,
     )
