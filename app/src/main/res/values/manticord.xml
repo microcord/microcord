@@ -212,4 +212,6 @@
     <string name="microcord_theme_reset_everything">Reset theme</string>
     <string name="microcord_theme_reset_everything_confirm">Remove every color, icon, image, font and sound change from this theme?</string>
     <string name="microcord_settings_search_hint">Search settings</string>
+    <string name="microcord_mark_all_as_read">Mark All as Read</string>
+    <string name="microcord_mark_dms_as_read">Mark DMs as Read</string>
 </resources>

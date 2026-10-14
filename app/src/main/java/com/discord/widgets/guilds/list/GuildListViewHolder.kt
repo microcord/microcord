@@ -90,6 +90,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
     class FriendsViewHolder(
         view: View,
         private val onClicked: (GuildListItem.FriendsItem) -> Unit,
+        private val onLongPressed: (GuildListItem.FriendsItem) -> Unit,
     ) : GuildListViewHolder(view) {
         private val avatar: ImageView = view.findViewById(R.id.guilds_item_profile_avatar)
         private val avatarWrap: FrameLayout = view.findViewById(R.id.guilds_item_profile_avatar_wrap)
@@ -98,6 +99,7 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
         fun configure(data: GuildListItem.FriendsItem) {
             selected.visibility = if (data.isSelected) View.VISIBLE else View.GONE
             itemView.setOnClickListener { onClicked(data) }
+            itemView.setOnLongClickListener { onLongPressed(data); true }
             if (data.isSelected) {
                 avatarWrap.setBackgroundResource(R.drawable.drawable_squircle_brand_500)
                 avatarWrap.backgroundTintList = null

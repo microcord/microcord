@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/colorBackgroundPrimary" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:id="@+id/private_channels_actions_header" android:text="@string/direct_messages" style="@style/UiKit.Settings.Item.Header"/>
+    <TextView android:id="@+id/private_channels_actions_mark_dms_read" android:text="@string/microcord_mark_dms_as_read" app:drawableStartCompat="?attr/ic_visibility" style="@style/UiKit.Settings.Item.Icon"/>
+    <TextView android:id="@+id/private_channels_actions_mark_all_read" android:text="@string/microcord_mark_all_as_read" app:drawableStartCompat="?attr/ic_visibility" style="@style/UiKit.Settings.Item.Icon"/>
+</LinearLayout>

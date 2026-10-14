@@ -10,8 +10,10 @@ import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.models.domain.ModelPayload
 import com.discord.api.channel.ChannelPinsUpdate
 import com.discord.api.notification.ReadStateFlags
+import com.discord.api.notification.ReadStateTypes
 import com.discord.models.domain.ModelReadState
 import com.discord.models.message.Message
+import com.discord.restapi.RestAPIParams
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.message.MessageUtils
@@ -68,7 +70,12 @@ class StoreMessageAck @JvmOverloads constructor(
     /** Posts the pin ack. Injected for the same reason as [ackRequest]. */
     private val pinAckRequest: (channelId: Long) -> Unit = {},
     /** Posts a bulk ack, already split into endpoint-sized chunks. */
-    private val bulkAckRequest: (List<List<Pair<Long, Long>>>) -> Unit = {},
+    private val bulkAckRequest: (List<List<BulkAckEntry>>) -> Unit = {},
+    /**
+     * Moves a guild's scheduled-event marker to its newest event and returns that id, or null when
+     * already read. Wired to `StoreGuildScheduledEvents.localAckGuildEvents`.
+     */
+    private val ackGuildEventsLocally: (guildId: Long) -> Long? = { null },
 ) : StoreV2() {
 
     /**
@@ -347,36 +354,40 @@ class StoreMessageAck @JvmOverloads constructor(
     }
 
     /**
-     * A selection transition releases mark-unread locks without moving the cursor or changing
-     * whether that cursor was viewed.
-     */
-    /**
-     * Marks every readable channel of [guildIds] read in as few requests as the endpoint allows.
+     * Marks everything in [guildIds] read in as few requests as the endpoint allows, as desktop's
+     * `markGuildsAsRead` does: every channel, every active joined thread, and the guild's
+     * scheduled events. Desktop also acks onboarding questions, which this app does not track.
      *
      * The ledger is written locally first so the badges clear at once, then the ids go out in
      * chunks; a forum is acked by "now" rather than by its last message, because its unread state
      * is really about posts that may not exist yet.
      */
     fun bulkAck(guildIds: Collection<Long>, isForumLike: (Long) -> Boolean) = dispatcher.schedule {
+        val joinedThreads = storeThreadsActiveJoined.getActiveJoinedThreadsInternal().values
+        val channelIds = guildIds.flatMap { guildId ->
+            storeChannels.getChannelsForGuildInternal(guildId).orEmpty().keys +
+                joinedThreads.filter { it.channel.guildId == guildId }.map { it.channel.id }
+        }
         val now = SnowflakeUtils.fromTimestamp(clock.currentTimeMillis())
-        val entries = mutableListOf<Pair<Long, Long>>()
-        guildIds.forEach { guildId ->
-            storeChannels.getChannelsForGuildInternal(guildId).orEmpty().keys.forEach { channelId ->
-                if (threadAckState(channelId).isThreadAndUnableToAck()) return@forEach
-                val messageId = if (isForumLike(channelId)) {
-                    now
-                } else {
-                    storeMessagesMostRecent.getMostRecentIdsInternal()[channelId] ?: return@forEach
-                }
-                val existing = acks[channelId]
-                if (existing != null && !MessageUtils.isNewer(existing.messageId, messageId)) return@forEach
-                updateAcks(channelId, Ack(messageId, viewed = true, isLockedAck = false))
-                cancelOutgoingAck(channelId)
-                entries += channelId to messageId
+        val entries = mutableListOf<BulkAckEntry>()
+        channelIds.forEach { channelId ->
+            if (threadAckState(channelId).isThreadAndUnableToAck()) return@forEach
+            val messageId = if (isForumLike(channelId)) {
+                now
+            } else {
+                storeMessagesMostRecent.getMostRecentIdsInternal()[channelId] ?: return@forEach
             }
+            val existing = acks[channelId]
+            if (existing != null && !MessageUtils.isNewer(existing.messageId, messageId)) return@forEach
+            updateAcks(channelId, Ack(messageId, viewed = true, isLockedAck = false))
+            cancelOutgoingAck(channelId)
+            entries += BulkAckEntry(channelId, messageId)
+        }
+        if (entries.isNotEmpty()) markChanged()
+        guildIds.forEach { guildId ->
+            ackGuildEventsLocally(guildId)?.let { entries += BulkAckEntry(guildId, it, ReadStateTypes.GUILD_EVENT) }
         }
         if (entries.isEmpty()) return@schedule
-        markChanged()
         bulkAckRequest(entries.chunked(BULK_ACK_CHUNK))
     }
 
@@ -780,3 +791,5 @@ class StoreMessageAck @JvmOverloads constructor(
         // reused unchanged: below the epoch both forms yield 0.
     }
 }
+
+typealias BulkAckEntry = RestAPIParams.BulkAck.ReadState

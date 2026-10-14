@@ -273,23 +273,29 @@ class StoreGuildScheduledEvents(
 
     /**
      * Marks the guild's events read up to the newest one. `ackType = 1` is the scheduled-event
-     * feature; the ack is skipped when the newest event is not newer than the last acked id.
+     * feature; nothing is sent when the newest event is not newer than the last acked id. The
+     * marker moves first, as desktop's local-then-request ack does.
      */
-    fun ackGuildEvents(guildId: Long) {
-        val mostRecent = guildScheduledEventsSnapshot[guildId]?.maxByOrNull { it.id } ?: return
-        val lastAcked = lastAckedGuildScheduledEventIds[guildId]
-        if (lastAcked != null && lastAcked >= mostRecent.id) return
-        val api = restApi() ?: return
-        api.postGuildFeatureAck(
-            guildId,
-            GUILD_FEATURE_ACK_SCHEDULED_EVENTS,
-            mostRecent.id,
-            RestAPIParams.GuildFeatureAck(false, 0),
-        )
+    fun ackGuildEvents(guildId: Long) = dispatcher.schedule {
+        val api = restApi() ?: return@schedule
+        val eventId = localAckGuildEvents(guildId) ?: return@schedule
+        api.postGuildFeatureAck(guildId, GUILD_FEATURE_ACK_SCHEDULED_EVENTS, eventId, RestAPIParams.GuildFeatureAck(false, 0))
             .restSubscribeOn(false)
-            .appSubscribe(errorTag = "REST: guildFeatureAck") {
-                dispatcher.schedule { lastAckedGuildScheduledEventIds[guildId] = mostRecent.id }
-            }
+            .appSubscribe(errorTag = "REST: guildFeatureAck") {}
+    }
+
+    /**
+     * Moves [guildId]'s event marker to the newest event and returns that id for the request, or
+     * null when the events are already read. Also the local half of a bulk ack.
+     */
+    @StoreThread
+    internal fun localAckGuildEvents(guildId: Long): Long? {
+        val mostRecent = guildScheduledEvents[guildId]?.maxOfOrNull { it.id } ?: return null
+        val lastAcked = lastAckedGuildScheduledEventIds[guildId]
+        if (lastAcked != null && lastAcked >= mostRecent) return null
+        lastAckedGuildScheduledEventIds[guildId] = mostRecent
+        markChanged()
+        return mostRecent
     }
 
     // endregion

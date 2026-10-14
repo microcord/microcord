@@ -170,6 +170,7 @@ import java.io.File
 import rx.Observable
 import rx.Scheduler
 import rx.subjects.BehaviorSubject
+import rx.subjects.PublishSubject
 import rx.schedulers.Schedulers
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
@@ -570,6 +571,21 @@ class StoreStream private constructor(
         guildSettings,
         api = { if (::restApi.isInitialized) restApi else null },
     )
+    /**
+     * Desktop's bulk-ack loop: every bulk ack joins one queue that sends a chunk, waits for the
+     * response, then pauses a second before the next, so marking a large folder read never bursts.
+     * A failed chunk is dropped rather than stopping the queue; RateLimitInterceptor retries 429s.
+     */
+    private val bulkAckQueue: PublishSubject<List<BulkAckEntry>> = PublishSubject.create<List<BulkAckEntry>>().also { queue ->
+        queue.onBackpressureBuffer()
+            .concatMap { chunk ->
+                val request = if (::restApi.isInitialized) restApi.bulkAck(RestAPIParams.BulkAck(chunk)) else Observable.empty()
+                request.subscribeOn(Schedulers.io()).onErrorResumeNext(Observable.empty()).map { Unit }
+                    .concatWith(Observable.timer(BULK_ACK_PAUSE_MS, TimeUnit.MILLISECONDS).map { Unit })
+            }
+            .subscribe({}, {})
+    }
+
     /** Mention counting and automatic acknowledgement feed the authoritative read-state ledger. */
     private val messageAck: StoreMessageAck = StoreMessageAck(
         dispatcher,
@@ -603,24 +619,8 @@ class StoreStream private constructor(
         },
         processMarkUnread = { channelId, messagesAfter -> mentions.processMarkUnread(channelId, messagesAfter) },
         getMentionCount = { mentions.getMentionCounts()[it] ?: 0 },
-        bulkAckRequest = { chunks ->
-            if (::restApi.isInitialized) {
-                // Sequential, so a rate limit parks the remaining chunks rather than every chunk
-                // racing into the same 429. RateLimitInterceptor does the waiting and retrying.
-                Observable.from(chunks)
-                    .concatMap { chunk ->
-                        restApi.bulkAck(
-                            RestAPIParams.BulkAck(
-                                chunk.map { (channelId, messageId) ->
-                                    RestAPIParams.BulkAck.ReadState(channelId, messageId)
-                                },
-                            ),
-                        )
-                    }
-                    .subscribeOn(Schedulers.io())
-                    .subscribe({}, {})
-            }
-        },
+        bulkAckRequest = { chunks -> chunks.forEach(bulkAckQueue::onNext) },
+        ackGuildEventsLocally = { guildScheduledEvents.localAckGuildEvents(it) },
         pinAckRequest = { channelId ->
             if (::restApi.isInitialized) {
                 restApi.ackPins(channelId).subscribeOn(Schedulers.io()).subscribe({}, {})
@@ -3868,6 +3868,9 @@ class StoreStream private constructor(
         private const val APP_STATE_BACKGROUND = "background"
         private const val GATEWAY_COLD_START = "COLD_START"
         private const val GATEWAY_NO_REASONS = "NO_REASONS"
+
+        /** Desktop's `timeoutPromise(1000)` between bulk-ack chunks. */
+        private const val BULK_ACK_PAUSE_MS = 1_000L
 
         /** Enough to ride out a burst; the interceptor caps each wait at a minute. */
     private const val RATE_LIMIT_MAX_RETRIES = 3

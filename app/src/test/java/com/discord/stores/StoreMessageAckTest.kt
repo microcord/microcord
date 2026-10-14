@@ -3,6 +3,7 @@ package com.discord.stores
 import com.discord.api.message.Message
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.api.notification.ReadStateFlags
+import com.discord.api.notification.ReadStateTypes
 import com.discord.models.domain.ModelPayload
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
@@ -98,6 +99,33 @@ class StoreMessageAckTest {
     }
 
     @Test
+    fun `bulk ack of the private channels id marks every dm read and no guild channel`() {
+        val fixture = Fixture()
+        fixture.ready(payload(partial = false, states = mapOf(10L to 100L, DM_ID to 100L), lastMessageId = 300L))
+
+        fixture.ackStore.bulkAck(listOf(StoreChannels.PRIVATE_CHANNELS_ID)) { false }
+        fixture.await { fixture.bulkRequests.isNotEmpty() }
+
+        assertEquals(300L, fixture.ackStore.getForChannel(DM_ID)?.messageId)
+        assertEquals(100L, fixture.ackStore.getForChannel(10)?.messageId)
+        assertEquals(listOf(listOf(listOf(BulkAckEntry(DM_ID, 300L)))), fixture.bulkRequests)
+    }
+
+    @Test
+    fun `guild bulk ack carries the guild event read state in the same request`() {
+        val fixture = Fixture(guildEventAcks = mapOf(1L to 900L))
+        fixture.ready(payload(partial = false, states = mapOf(10L to 100L, DM_ID to 100L), lastMessageId = 300L))
+
+        fixture.ackStore.bulkAck(listOf(1L)) { false }
+        fixture.await { fixture.bulkRequests.isNotEmpty() }
+
+        assertEquals(
+            listOf(listOf(listOf(BulkAckEntry(10L, 300L), BulkAckEntry(1L, 900L, ReadStateTypes.GUILD_EVENT)))),
+            fixture.bulkRequests,
+        )
+    }
+
+    @Test
     fun `mark unread posts exact manual and mention count fallback`() {
         val fixture = Fixture(markUnreadMentionCount = 2)
         fixture.ready(payload(partial = false, states = mapOf(10L to 300L), lastMessageId = 300L))
@@ -141,11 +169,12 @@ class StoreMessageAckTest {
         assertEquals(emptyMap<Long, StoreMessageAck.Ack>(), Fixture().ackStore.getAll())
     }
 
-    private class Fixture(markUnreadMentionCount: Int = 0) {
+    private class Fixture(markUnreadMentionCount: Int = 0, guildEventAcks: Map<Long, Long> = emptyMap()) {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
         val requests = mutableListOf<AckRequest>()
+        val bulkRequests = mutableListOf<List<List<BulkAckEntry>>>()
         val users = StoreUser(dispatcher = dispatcher, observationDeck = deck)
         val guilds = StoreGuilds(users, dispatcher, deck)
         val channels = StoreChannels(dispatcher, deck)
@@ -174,6 +203,8 @@ class StoreMessageAckTest {
                 )
             },
             processMarkUnread = { _, _ -> markUnreadMentionCount },
+            bulkAckRequest = { bulkRequests += it },
+            ackGuildEventsLocally = { guildEventAcks[it] },
         )
 
         init {

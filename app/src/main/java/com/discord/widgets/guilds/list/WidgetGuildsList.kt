@@ -215,6 +215,7 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
     }
 
     override fun onItemLongPressed(view: View, item: GuildListItem) {
+        if (item is GuildListItem.FriendsItem) return WidgetPrivateChannelsActions.show(parentFragmentManager)
         if (item !is GuildListItem.GuildItem && item !is GuildListItem.FolderItem) {
             viewModel.onItemLongPressed(item)
             return

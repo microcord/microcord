@@ -62,9 +62,11 @@ class WidgetGuildListAdapter(
         return when (viewType) {
             GuildListItem.TYPE_FRIENDS -> {
                 val itemView = inflate(R.layout.widget_guilds_list_item_profile)
-                GuildListViewHolder.FriendsViewHolder(itemView) {
-                    interactionListener.onItemClicked(itemView, it)
-                }
+                GuildListViewHolder.FriendsViewHolder(
+                    itemView,
+                    onClicked = { interactionListener.onItemClicked(itemView, it) },
+                    onLongPressed = { interactionListener.onItemLongPressed(itemView, it) },
+                )
             }
             GuildListItem.TYPE_DIVIDER ->
                 GuildListViewHolder.SimpleViewHolder(inflate(R.layout.widget_guilds_list_item_divider))
