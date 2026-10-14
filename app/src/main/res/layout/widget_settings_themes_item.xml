@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <ImageView android:id="@+id/settings_themes_item_preview" android:layout_width="72dp" android:layout_height="48dp" android:layout_marginStart="16dp" android:importantForAccessibility="no"/>
+    <com.discord.views.CheckedSetting android:id="@+id/settings_themes_item_switch" android:saveEnabled="false" android:layout_width="0dp" android:layout_weight="1" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+    <ImageView android:id="@+id/settings_themes_item_options" android:layout_width="48dp" android:layout_height="48dp" android:layout_marginEnd="4dp" android:padding="12dp" android:src="@drawable/ic_more_horizontal_24dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/microcord_themes_options" app:tint="?attr/colorInteractiveNormal"/>
+</LinearLayout>

@@ -162,6 +162,7 @@ coverage and passing builds do not establish complete behavioral parity.
 | Resource compatibility | Restore first-party attributes; let dependencies own their attributes. Retain decoded-layout compatibility repairs and the inherited lint baseline |
 | Observer errors | Preserve the DEX-proven `ObservationDeck` exception/log-level behavior; do not remove it based on incomplete JADX output |
 | Minimum API safety | `NewApi` lint is fatal for `:app` and `:plugin-api` (CI step before the debug build), because one call newer than minSdk 23 crashed Android 6 at launch. Desugaring does not rewrite `CompletableFuture`, so plugin startup uses the `streamsupport-cfuture` backport; `java.time` and streams are desugared and fine |
+| Custom themes | Runtime `ResourcesLoader` overlay (API 30+, no hooks): a generated resource table replaces palette colors and a placeholder overlay style that every themed context applies. Format is Aliucord theme JSON plus `attrs`/`microcord`; Aliucord's by-value color swaps are replayed through a table generated from the reference. Icon tints, fonts and sounds are table entries served by the loader's `AssetsProvider`; the background image is baked once and shown per Themer's transparency modes. Android 6-10 keep the built-in themes; see [docs/theming.md](docs/theming.md) |
 
 Exact dependency versions belong in the version catalog, not in historical
 installation logs. Reference-specific behavioral deviations remain documented
@@ -203,6 +204,8 @@ Endpoint contracts, deployment instructions and cache limits live in
    and unsupported captcha providers require their own confirmed integration work.
 5. **UI coverage:** finish static view-binding migration and validate RTL, large
    fonts, tablet/landscape layouts, accessibility and dynamic profile palettes.
+   Custom themes are checked on Android 16 only; icon tints, wallpapers, fonts
+   and sounds still need a device pass, and Android 11-13 is unverified.
 6. **Release checks:** reconcile the known channel-list MFA-row test expectation
    with the existing events separator before declaring that entire suite green.
 7. **Minimum Android version:** resolve the historical API 21 contract against the

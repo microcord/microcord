@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <LinearLayout android:paddingTop="16dp" android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+            <FrameLayout android:layout_width="match_parent" android:layout_height="200dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:background="?attr/colorBackgroundSecondary">
+                <ImageView android:id="@+id/theme_background_image" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:importantForAccessibility="no"/>
+                <TextView android:id="@+id/theme_background_empty" android:layout_gravity="center" android:text="@string/microcord_theme_background_none" android:textColor="?attr/colorTextMuted" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/UiKit.TextView"/>
+            </FrameLayout>
+            <TextView android:id="@+id/theme_background_choose" android:layout_marginTop="8dp" android:text="@string/microcord_theme_background_choose" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/theme_background_link_wrap" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:hint="@string/microcord_theme_background_link" style="@style/UiKit.TextInputLayout.Primary">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/theme_background_link" android:imeOptions="actionDone" android:inputType="textUri" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView android:id="@+id/theme_background_remove" android:text="@string/microcord_theme_background_remove" android:textColor="?attr/colorTextDanger" style="@style/UiKit.Settings.Item.Icon"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/theme_background_dim_label" style="@style/UiKit.Settings.Item.Header"/>
+            <SeekBar android:id="@+id/theme_background_dim" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_marginEnd="12dp" android:max="255" style="@style/UiKit.SeekBar"/>
+            <TextView android:id="@+id/theme_background_blur_label" style="@style/UiKit.Settings.Item.Header"/>
+            <SeekBar android:id="@+id/theme_background_blur" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_marginEnd="12dp" android:max="25" style="@style/UiKit.SeekBar"/>
+            <View android:layout_marginTop="16dp" style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/theme_background_show_header" android:text="@string/microcord_theme_background_show" style="@style/UiKit.Settings.Item.Header"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_background_auto" android:saveEnabled="false" app:cs_text="@string/microcord_theme_transparency_auto" app:cs_subtext="@string/microcord_theme_transparency_auto_help" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_background_none" android:saveEnabled="false" app:cs_text="@string/microcord_theme_transparency_none" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_background_chat" android:saveEnabled="false" app:cs_text="@string/microcord_theme_transparency_chat" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_background_chat_settings" android:saveEnabled="false" app:cs_text="@string/microcord_theme_transparency_chat_settings" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_background_full" android:saveEnabled="false" app:cs_text="@string/microcord_theme_transparency_full" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <TextView android:text="@string/microcord_theme_transparency_help" style="@style/UiKit.Settings.Item.SubText"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_background_see_through" android:saveEnabled="false" app:cs_text="@string/microcord_theme_see_through" app:cs_subtext="@string/microcord_theme_see_through_help" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

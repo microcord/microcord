@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <com.discord.views.SearchInputView android:id="@+id/theme_list_page_search" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_marginTop="8dp" android:layout_marginEnd="12dp" android:layout_marginBottom="8dp" app:siv_hint="@string/microcord_theme_search" app:siv_search_content_description="@string/microcord_theme_search"/>
+        <TextView android:id="@+id/theme_list_page_help" android:visibility="gone" style="@style/UiKit.Settings.Item.SubText"/>
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/theme_list_page_list" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:paddingBottom="16dp" android:scrollbars="vertical"/>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

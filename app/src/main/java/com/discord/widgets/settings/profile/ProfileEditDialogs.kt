@@ -7,7 +7,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.EditText
 import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.core.widget.doAfterTextChanged
@@ -20,6 +19,7 @@ import com.discord.app.AppBottomSheet
 import com.discord.app.AppDialog
 import com.discord.databinding.BottomSheetProfileAvatarSelectorBinding
 import com.discord.databinding.BottomSheetSimpleSelectorItemBinding
+import com.discord.databinding.ProfileColorPickerDialogBinding
 import com.discord.databinding.ProfileRecentAvatarItemBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
@@ -30,8 +30,6 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.views.SimpleRecyclerAdapter
 import com.google.android.material.button.MaterialButton
-import com.jaredrummler.android.colorpicker.ColorPanelView
-import com.jaredrummler.android.colorpicker.ColorPickerView
 
 class ProfileAvatarSelectorSheet : AppBottomSheet() {
     private var _binding: BottomSheetProfileAvatarSelectorBinding? = null
@@ -201,49 +199,51 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
         super.onViewCreated(view, savedInstanceState)
     }
 
+    private val allowAlpha get() = argumentsOrDefault.getBoolean(ARG_ALLOW_ALPHA)
+
     override fun onViewBound(view: View) {
         super.onViewBound(view)
+        val binding = ProfileColorPickerDialogBinding.bind(view)
         selectedColor = argumentsOrDefault.getInt(ARG_INITIAL_COLOR, Color.BLACK)
-        val picker = view.findViewById<ColorPickerView>(R.id.profile_color_picker)
-        val panel = view.findViewById<ColorPanelView>(R.id.profile_color_preview)
-        val hex = view.findViewById<EditText>(R.id.profile_color_hex)
+        val picker = binding.profileColorPicker
+        argumentsOrDefault.getString(ARG_TITLE)?.let { binding.profileColorTitle.text = it }
 
         restoredColor?.let { selectedColor = it }
-        picker.setAlphaSliderVisible(false)
+        picker.setAlphaSliderVisible(allowAlpha)
         picker.color = selectedColor
-        renderColor(panel, hex, selectedColor)
+        renderColor(binding, selectedColor)
         picker.setOnTouchListener { _, event ->
             if (event.actionMasked == MotionEvent.ACTION_MOVE || event.actionMasked == MotionEvent.ACTION_UP) {
                 picker.post {
                     selectedColor = picker.color
-                    renderColor(panel, hex, selectedColor)
+                    renderColor(binding, selectedColor)
                 }
             }
             false
         }
-        hex.doAfterTextChanged { value ->
+        binding.profileColorHex.doAfterTextChanged { value ->
             if (bindingHex) return@doAfterTextChanged
             val parsed = runCatching { Color.parseColor("#${value.toString()}") }.getOrNull() ?: return@doAfterTextChanged
             selectedColor = parsed
             picker.color = parsed
-            panel.color = parsed
+            binding.profileColorPreview.color = parsed
         }
         val target = argumentsOrDefault.getString(ARG_TARGET).orEmpty()
-        view.findViewById<TextView>(R.id.profile_color_use_default).setOnClickListener {
+        binding.profileColorUseDefault.setOnClickListener {
             parentFragmentManager.setFragmentResult(
                 REQUEST_KEY,
                 bundleOf(RESULT_HAS_COLOR to false, RESULT_TARGET to target),
             )
             dismiss()
         }
-        view.findViewById<Button>(R.id.profile_color_select).apply {
+        binding.profileColorSelect.apply {
             backgroundTintList = ColorStateList.valueOf(ColorCompat.getThemedColor(view.context, R.attr.color_brand))
             setOnClickListener {
                 parentFragmentManager.setFragmentResult(
                     REQUEST_KEY,
                     bundleOf(
                         RESULT_HAS_COLOR to true,
-                        RESULT_COLOR to (selectedColor and 0xFFFFFF),
+                        RESULT_COLOR to if (allowAlpha) selectedColor else selectedColor and 0xFFFFFF,
                         RESULT_TARGET to target,
                     ),
                 )
@@ -262,10 +262,11 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
         super.onSaveInstanceState(outState)
     }
 
-    private fun renderColor(panel: ColorPanelView, hex: EditText, color: Int) {
-        panel.color = color
+    private fun renderColor(binding: ProfileColorPickerDialogBinding, color: Int) {
+        binding.profileColorPreview.color = color
         bindingHex = true
-        hex.setText(String.format("%06X", color and 0xFFFFFF))
+        val hex = binding.profileColorHex
+        hex.setText(if (allowAlpha) String.format("%08X", color) else String.format("%06X", color and 0xFFFFFF))
         hex.setSelection(hex.length())
         bindingHex = false
     }
@@ -278,17 +279,30 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
         internal const val TAG = "ProfileColorPickerDialog"
         private const val ARG_INITIAL_COLOR = "initial_color"
         private const val ARG_TARGET = "target"
+        private const val ARG_TITLE = "title"
+        private const val ARG_ALLOW_ALPHA = "allow_alpha"
         private const val STATE_COLOR = "selected_color"
 
+        /**
+         * [target] comes back with the result, so one screen can tell its pickers apart. With
+         * [allowAlpha] the slider shows and [RESULT_COLOR] keeps the alpha byte; otherwise it is RGB.
+         */
         @JvmOverloads
         fun show(
             fragmentManager: FragmentManager,
             initialColor: Int,
             target: String = "",
+            title: String? = null,
+            allowAlpha: Boolean = false,
         ): ProfileColorPickerDialog =
             (fragmentManager.findFragmentByTag(TAG) as? ProfileColorPickerDialog)
                 ?: ProfileColorPickerDialog().apply {
-                    arguments = bundleOf(ARG_INITIAL_COLOR to initialColor, ARG_TARGET to target)
+                    arguments = bundleOf(
+                        ARG_INITIAL_COLOR to initialColor,
+                        ARG_TARGET to target,
+                        ARG_TITLE to title,
+                        ARG_ALLOW_ALPHA to allowAlpha,
+                    )
                     show(fragmentManager, TAG)
                 }
     }

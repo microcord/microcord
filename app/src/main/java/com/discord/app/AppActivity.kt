@@ -3,6 +3,7 @@ package com.discord.app
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
@@ -27,6 +28,8 @@ import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
+import com.discord.utilities.theme.ThemeRuntime
+import com.discord.utilities.theme.ThemeWallpaper
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.discord.R
 import com.discord.databinding.ActivityAppBinding
@@ -144,6 +147,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
 
     private var appliedLocale: String = ""
     private var appliedTheme: String = ""
+    private var appliedThemeGeneration = 0
 
     /** Action bar toolbar of the currently bound screen. */
     var toolbar: Toolbar? = null
@@ -179,6 +183,12 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         super.attachBaseContext(newBase.createConfigurationContext(configuration))
     }
 
+    /** Every (re)built activity theme gets the custom theme's overlay on top; see [ThemeRuntime]. */
+    override fun onApplyThemeResource(theme: Resources.Theme, resid: Int, first: Boolean) {
+        super.onApplyThemeResource(theme, resid, first)
+        ThemeRuntime.applyOverlay(theme)
+    }
+
     override fun applyOverrideConfiguration(overrideConfiguration: Configuration?) {
         // AppCompat overrides the whole configuration to carry the night mode; keep everything the
         // base context computed (locale and font scale) and let only the ui mode through.
@@ -200,6 +210,8 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
             finish()
             return
         }
+        appliedThemeGeneration = ThemeRuntime.generation
+        ThemeRuntime.onActivityCreated(this)
         val theme = runCatching { StoreStream.getUserSettingsSystem().getTheme() }.getOrDefault(ModelUserSettings.THEME_DARK)
         appliedTheme = theme
         setTheme(
@@ -220,6 +232,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         try {
             binding = ActivityAppBinding.inflate(layoutInflater)
             setContentView(binding.root)
+            ThemeWallpaper.decorate(this, binding.root)
             configureDeveloperShortcut()
             onBackPressedDispatcher.addCallback(backPressedCallback)
             pendingLaunchIntent = savedInstanceState?.pendingIntent() ?: intent
@@ -288,6 +301,11 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         // An intent tagged as a settings restart must not immediately restart again.
         if (mostRecentIntent.getBooleanExtra(AppScreenRouter.EXTRA_RECREATE, false)) {
             mostRecentIntent.removeExtra(AppScreenRouter.EXTRA_RECREATE)
+            return
+        }
+        ThemeRuntime.confirmHealthy(this)
+        if (appliedThemeGeneration != ThemeRuntime.generation) {
+            AppScreenRouter.recreate(this)
             return
         }
         val userSettings = StoreStream.getUserSettingsSystem()

@@ -9,6 +9,7 @@ import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.theme.ThemeRuntime
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
 import rx.Observable
 
@@ -31,9 +32,12 @@ class StoreUserSettingsSystem(
     ) {
         val locale: String get() = _locale ?: ModelUserSettings.getDefaultLocale()
 
-        /** Re-read on every activity creation, which a device dark-mode switch triggers. */
+        /**
+         * Re-read on every activity creation, which a device dark-mode switch triggers. An active
+         * custom theme decides its own base and ignores following the device.
+         */
         val resolvedTheme: String
-            get() = when {
+            get() = ThemeRuntime.activeBase ?: when {
                 !followSystem -> theme
                 Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK !=
                     Configuration.UI_MODE_NIGHT_YES -> ModelUserSettings.THEME_LIGHT

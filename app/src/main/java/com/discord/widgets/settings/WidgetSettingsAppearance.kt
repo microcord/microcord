@@ -10,14 +10,17 @@ import androidx.core.view.ViewCompat
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
+import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.databinding.WidgetSettingsAppearanceBinding
 import com.discord.models.domain.ModelUserSettings
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.ui
+import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
 import com.discord.views.RadioManager
+import com.discord.widgets.settings.themes.WidgetSettingsThemes
 import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.functions.Action1
@@ -76,6 +79,7 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
             },
         )
         binding.settingsAppearanceFontScalingReset.setOnClickListener { viewModel.resetFontScale() }
+        binding.settingsAppearanceCustomThemes.setOnClickListener { WidgetSettingsThemes.launch(requireContext()) }
 
         listOf(
             R.id.settings_appearance_theme_header,
@@ -93,30 +97,28 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
     private fun configureUI(viewState: SettingsAppearanceViewModel.ViewState) {
         if (viewState !is SettingsAppearanceViewModel.ViewState.Loaded) return
 
-        themeRadioManager.setChecked(
-            when (viewState.currentTheme) {
-                ModelUserSettings.THEME_LIGHT -> binding.settingsAppearanceThemeLightRadio
-                ModelUserSettings.THEME_MATERIAL_YOU -> binding.settingsAppearanceThemeMaterialYouRadio
-                ModelUserSettings.THEME_DARKER -> binding.settingsAppearanceThemeDarkerRadio
-                ModelUserSettings.THEME_MIDNIGHT -> binding.settingsAppearanceThemeOnyxRadio
-                else -> binding.settingsAppearanceThemeDarkRadio
-            },
-        )
-        binding.settingsAppearanceThemeLightRadio.setContainerClickListener { viewModel.onLightThemeTapped() }
-        binding.settingsAppearanceThemeDarkRadio.setContainerClickListener {
-            viewModel.onDarkThemeTapped()
+        // A custom theme replaces the built-in ones, so none of them is the one in use then.
+        val customThemeActive = ThemeRuntime.activeBase != null
+        val selectedRadio = when (viewState.currentTheme) {
+            ModelUserSettings.THEME_LIGHT -> binding.settingsAppearanceThemeLightRadio
+            ModelUserSettings.THEME_MATERIAL_YOU -> binding.settingsAppearanceThemeMaterialYouRadio
+            ModelUserSettings.THEME_DARKER -> binding.settingsAppearanceThemeDarkerRadio
+            ModelUserSettings.THEME_MIDNIGHT -> binding.settingsAppearanceThemeOnyxRadio
+            else -> binding.settingsAppearanceThemeDarkRadio
         }
-        binding.settingsAppearanceThemeDarkerRadio.setContainerClickListener {
-            viewModel.onDarkerThemeTapped()
-        }
-        binding.settingsAppearanceThemeOnyxRadio.setContainerClickListener {
-            viewModel.onOnyxThemeTapped()
-        }
+        themeRadioManager.setChecked(selectedRadio)
+        if (customThemeActive) selectedRadio.isChecked = false
+        binding.settingsAppearanceThemeLightRadio.setContainerClickListener { pickBuiltIn { viewModel.onLightThemeTapped() } }
+        binding.settingsAppearanceThemeDarkRadio.setContainerClickListener { pickBuiltIn { viewModel.onDarkThemeTapped() } }
+        binding.settingsAppearanceThemeDarkerRadio.setContainerClickListener { pickBuiltIn { viewModel.onDarkerThemeTapped() } }
+        binding.settingsAppearanceThemeOnyxRadio.setContainerClickListener { pickBuiltIn { viewModel.onOnyxThemeTapped() } }
         binding.settingsAppearanceThemeMaterialYouRadio.setContainerClickListener {
-            viewModel.onMaterialYouThemeTapped()
+            pickBuiltIn { viewModel.onMaterialYouThemeTapped() }
         }
         binding.settingsAppearanceThemeSystemSwitch.setOnCheckedListener(null)
         binding.settingsAppearanceThemeSystemSwitch.isChecked = viewState.followSystem
+        // A custom theme picks its own base; following the device resumes once it is turned off.
+        binding.settingsAppearanceThemeSystemSwitch.isEnabled = !customThemeActive
         binding.settingsAppearanceThemeSystemSwitch
             .setOnCheckedListener(Action1 { viewModel.onFollowSystemToggled(it) })
 
@@ -130,6 +132,21 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
 
         configureFontScalingUI(viewState.fontScale)
         setupPreviewMessage(viewState)
+    }
+
+    /**
+     * Picking a built-in theme turns any custom theme off first. Picking the theme the custom one
+     * was based on changes no setting, so the recreate that shows it is explicit.
+     */
+    private fun pickBuiltIn(pick: () -> Unit) {
+        val activity = appActivity
+        if (activity == null || ThemeRuntime.activeBase == null) {
+            pick()
+            return
+        }
+        ThemeRuntime.enable(activity, emptyList())
+        pick()
+        AppScreenRouter.recreate(activity)
     }
 
     private fun configureFontScalingUI(fontScale: Int) {

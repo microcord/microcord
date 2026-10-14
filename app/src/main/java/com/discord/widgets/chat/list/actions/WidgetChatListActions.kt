@@ -14,6 +14,7 @@ import androidx.fragment.app.commit
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.commands.ApplicationCommandIndexCommand
+import com.discord.utilities.theme.ThemeRuntime
 import com.discord.widgets.chat.input.applauncher.WidgetContextCommandsSheet
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
@@ -47,6 +48,7 @@ import com.discord.utilities.textprocessing.node.EditedMessageNode
 import com.discord.widgets.chat.managereactions.WidgetManageReactions
 import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.widgets.notice.WidgetNoticeDialog
+import com.discord.widgets.settings.themes.ThemeInstaller
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.share.ForwardingPolicy
 import com.discord.widgets.share.WidgetIncomingShare
@@ -198,6 +200,12 @@ class WidgetChatListActions : AppBottomSheet() {
         }
         bind(binding.dialogChatActionsCopyId, model.isDeveloper && !isLocal) {
             copy(message.id.toString(), R.string.copy_id)
+            dismiss()
+        }
+        // Aliucord's way to share a theme: a JSON file posted in a channel, installed from here.
+        val themeFile = message.attachments.orEmpty().firstOrNull { it.filename.endsWith(".json", ignoreCase = true) }
+        bind(binding.dialogChatActionsInstallTheme, themeFile != null && ThemeRuntime.isSupported) {
+            themeFile?.let { ThemeInstaller.install(requireContext(), it.url, it.filename.removeSuffix(".json")) }
             dismiss()
         }
         val messageCommands = StoreStream.getApplicationCommands()

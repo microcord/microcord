@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="88dp" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <LinearLayout android:paddingTop="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+            <ImageView android:id="@+id/theme_editor_preview" android:layout_width="match_parent" android:layout_height="180dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="16dp" android:importantForAccessibility="no"/>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/theme_editor_name_wrap" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:hint="@string/microcord_theme_name" style="@style/UiKit.TextInputLayout.Primary">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/theme_editor_name" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            <com.google.android.material.textfield.TextInputLayout android:id="@+id/theme_editor_author_wrap" android:layout_marginStart="16dp" android:layout_marginTop="8dp" android:layout_marginEnd="16dp" android:hint="@string/microcord_theme_author" style="@style/UiKit.TextInputLayout.Primary">
+                <com.google.android.material.textfield.TextInputEditText android:id="@+id/theme_editor_author" android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+            </com.google.android.material.textfield.TextInputLayout>
+            <TextView android:id="@+id/theme_editor_base_header" android:text="@string/microcord_theme_base" style="@style/UiKit.Settings.Item.Header"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_dark" android:saveEnabled="false" app:cs_text="@string/theme_ash" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_darker" android:saveEnabled="false" app:cs_text="@string/theme_dark" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_onyx" android:saveEnabled="false" app:cs_text="@string/theme_onyx" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_light" android:saveEnabled="false" app:cs_text="@string/theme_light" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/theme_editor_quick_header" android:text="@string/microcord_theme_quick_colors" style="@style/UiKit.Settings.Item.Header"/>
+            <LinearLayout android:id="@+id/theme_editor_quick_colors" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/theme_editor_customize_header" android:text="@string/microcord_theme_customize" style="@style/UiKit.Settings.Item.Header"/>
+            <LinearLayout android:id="@+id/theme_editor_pages" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.button.MaterialButton android:id="@+id/theme_editor_apply" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:layout_margin="16dp" android:text="@string/microcord_theme_apply" style="@style/UiKit.Material.Button"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

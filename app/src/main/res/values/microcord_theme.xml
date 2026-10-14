@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Custom themes (com.discord.utilities.theme.ThemeRuntime). Both stay empty here: a theme's
+        runtime resource table replaces the style's items and the sentinel's value. Only their ids
+        matter.
+    -->
+    <style name="ThemeOverlay.Microcord.Runtime" parent="" />
+    <color name="theme_runtime_sentinel">#00000000</color>
+</resources>

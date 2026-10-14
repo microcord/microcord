@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:orientation="horizontal" android:gravity="center_vertical" android:minHeight="56dp" android:paddingStart="16dp" android:paddingEnd="4dp" android:background="?attr/selectableItemBackground" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <View android:id="@+id/theme_editor_color_swatch" android:layout_width="28dp" android:layout_height="28dp" android:importantForAccessibility="no"/>
+    <ImageView android:id="@+id/theme_editor_color_icon" android:visibility="gone" android:layout_width="28dp" android:layout_height="28dp" android:scaleType="fitCenter" android:importantForAccessibility="no"/>
+    <LinearLayout android:orientation="vertical" android:paddingTop="8dp" android:paddingBottom="8dp" android:layout_marginStart="16dp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+        <TextView android:id="@+id/theme_editor_color_label" android:textSize="16sp" android:textColor="?attr/colorHeaderPrimary" android:fontFamily="?attr/font_primary_semibold" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <TextView android:id="@+id/theme_editor_color_detail" android:textSize="12sp" android:textColor="?attr/colorHeaderSecondary" android:fontFamily="?attr/font_monospace" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    </LinearLayout>
+    <ImageView android:id="@+id/theme_editor_color_reset" android:layout_width="48dp" android:layout_height="48dp" android:padding="12dp" android:src="@drawable/ic_close_grey_24dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/microcord_theme_reset_color" app:tint="?attr/colorInteractiveNormal"/>
+</LinearLayout>

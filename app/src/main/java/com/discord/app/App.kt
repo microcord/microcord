@@ -22,6 +22,7 @@ import com.discord.utilities.images.MGImagesConfig
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notices.NoticeBuilders
+import com.discord.utilities.theme.ThemeRuntime
 import com.discord.widgets.guilds.list.GuildsListStoreHooks
 import com.discord.widgets.notice.NoticePopupChannel
 import com.discord.utilities.systemlog.SystemLogUtils
@@ -80,6 +81,8 @@ class App : Application() {
         // Without this a foreground push is dropped instead of becoming the in-app banner.
         NoticePopupChannel.install()
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+        // Before any activity: activities inherit the application's resource loaders when created.
+        ThemeRuntime.install(this)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         BootLog.record(BootLogEvent.NATIVE_READY)
         StoreStream.initialize(this)

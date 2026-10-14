@@ -10,6 +10,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
+import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.discord.utilities.view.text.TextWatcher
 import rx.subjects.PublishSubject
@@ -47,6 +48,8 @@ abstract class AppDialog : DialogFragment, AppComponent {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
         super.onCreateDialog(savedInstanceState).apply {
+            // The dialog theme redefines surface colors, so the custom theme goes on top of it too.
+            ThemeRuntime.applyOverlay(context.theme)
             requestWindowFeature(Window.FEATURE_NO_TITLE)
             applyReducedMotionAnimations()
         }

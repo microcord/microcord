@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <ScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:id="@+id/settings_themes_notice" android:visibility="gone" android:accessibilityLiveRegion="polite" style="@style/UiKit.Settings.Item.SubText"/>
+            <TextView android:id="@+id/settings_themes_none_enabled" android:text="@string/microcord_themes_none_enabled" android:visibility="gone" style="@style/UiKit.Settings.Item.SubText"/>
+            <LinearLayout android:id="@+id/settings_themes_list" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            <TextView android:id="@+id/settings_themes_empty" android:text="@string/microcord_themes_empty" android:visibility="gone" style="@style/UiKit.Settings.Item.SubText"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/settings_themes_new" android:text="@string/microcord_theme_new" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/settings_themes_import_file" android:text="@string/microcord_themes_import_file" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+            <TextView android:id="@+id/settings_themes_import_clipboard" android:text="@string/microcord_themes_import_clipboard" android:drawableEnd="@drawable/ic_chevron_right_grey_12dp" style="@style/UiKit.Settings.Item.Icon"/>
+        </LinearLayout>
+    </ScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

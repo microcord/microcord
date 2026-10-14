@@ -15,6 +15,7 @@ import androidx.annotation.StringRes
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
 import com.discord.R
+import com.discord.utilities.theme.ThemeWallpaper
 import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.discord.i18n.i18nFormat
 import com.discord.utilities.view.ToastManager
@@ -76,6 +77,7 @@ abstract class AppFragment : Fragment, AppComponent, AppPermissionsRequests, App
         isRecreated = savedInstanceState != null
         drawUnderSystemBars(view)
         onViewBound(view)
+        ThemeWallpaper.decorate(this, view)
         onViewBoundOrOnResume()
         onViewBoundOrOnResumeInvoked = true
         BounceEdgeEffectFactory.installAll(view)

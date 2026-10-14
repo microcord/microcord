@@ -317,6 +317,9 @@ to avoid and expensive to diagnose, because none of them looks wrong when you re
   desugaring covers `java.time`, streams and `Optional`, but not everything (`CompletableFuture`,
   `PriorityQueue(Comparator)`, `SimpleDateFormat` `X`, `View.startDragAndDrop`). Run
   `scripts/build.sh :app:lintDebug :plugin-api:lintDebug`; `NewApi` is fatal there and in CI.
+- **A theme built outside `AppActivity`, `AppDialog` or `AppBottomSheet` misses custom themes.** A new
+  dialog/sheet base or a `ContextThemeWrapper` over an `AppTheme_*` style must call
+  `ThemeRuntime.applyOverlay` on its theme ([docs/theming.md](docs/theming.md)).
 - **Hiding a UI entry point is not gating it.** If a screen must not ship, gate the screen itself,
   not the menu row that opens it.
 

@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
+import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.google.android.material.R as MaterialR
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -78,6 +79,8 @@ abstract class AppBottomSheet(
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState)
+        // The sheet theme redefines surface colors, so the custom theme goes on top of it too.
+        ThemeRuntime.applyOverlay(dialog.context.theme)
         dialog.setCanceledOnTouchOutside(true)
         dialog.applyReducedMotionAnimations()
         if (shouldAvoidKeyboard) {
