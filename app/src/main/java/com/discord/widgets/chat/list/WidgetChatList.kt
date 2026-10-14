@@ -2,9 +2,17 @@ package com.discord.widgets.chat.list
 
 import android.os.Bundle
 import android.view.View
+import androidx.core.view.ancestors
+import androidx.core.view.doOnAttach
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.panels.OverlappingPanelsLayout
 import com.discord.stores.StoreStream
+import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.EmbedEntry
+import com.discord.widgets.chat.list.entries.MessageEntry
+import com.discord.widgets.chat.list.entries.StickerEntry
 import com.discord.widgets.forums.WidgetForumPostTagsSheet
 import com.discord.api.channel.Channel
 import com.discord.models.message.Message
@@ -41,6 +49,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
     private var adapter: WidgetChatListAdapter? = null
     private var recycler: RecyclerView? = null
     private var defaultItemAnimator: RecyclerView.ItemAnimator? = null
+    private var panels: OverlappingPanelsLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +62,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
         recycler = list
         val existing = adapter
         if (existing == null) createAdapter(list) else configureExistingAdapter(existing, list)
+        attachSwipeToReply(list)
         // The picker is shown from a chat row, so its result lands here rather than in the row.
         WidgetForumPostTagsSheet.registerForResult(this) { tags ->
             val draft = StoreStream.getThreadDraft()
@@ -78,11 +88,48 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
     }
 
     override fun onDestroyView() {
+        panels?.childClaimsLeftSwipe = null
+        panels = null
         recycler?.layoutManager = null
         recycler?.adapter = null
         adapter?.dispose()
         recycler = null
         super.onDestroyView()
+    }
+
+    private fun attachSwipeToReply(list: RecyclerView) {
+        val swipe = SwipeToReply(requireContext(), messageAt = { holder -> messageAt(holder.bindingAdapterPosition) }) { message ->
+            val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return@SwipeToReply
+            messageActionCoordinator().reply(channel, message, StoreStream.getUsers().getMe().id)
+        }
+        ItemTouchHelper(swipe).attachToRecyclerView(list)
+        // The home panels would take a leftward swipe to open the member list; one that starts on a
+        // message replies instead. They are only reachable once the list is attached.
+        list.doOnAttach { panels = it.ancestors.filterIsInstance<OverlappingPanelsLayout>().firstOrNull()?.also(::claimLeftSwipes) }
+    }
+
+    private fun claimLeftSwipes(panels: OverlappingPanelsLayout) {
+        val list = recycler ?: return
+        panels.childClaimsLeftSwipe = { event ->
+            val location = IntArray(2)
+            list.getLocationOnScreen(location)
+            list.findChildViewUnder(event.rawX - location[0], event.rawY - location[1])
+                ?.let { list.getChildViewHolder(it) }
+                ?.let { holder -> messageAt(holder.bindingAdapterPosition) }
+                ?.let(SwipeToReply::canReply) == true
+        }
+    }
+
+    /** The message a chat row belongs to; null for rows that are not part of one. */
+    private fun messageAt(position: Int): Message? {
+        val entry = adapter?.takeIf { position in 0 until it.itemCount }?.getItem(position) ?: return null
+        return when (entry) {
+            is MessageEntry -> entry.message
+            is AttachmentEntry -> entry.message
+            is EmbedEntry -> entry.message
+            is StickerEntry -> entry.message
+            else -> null
+        }
     }
 
     fun disableItemAnimations() {

@@ -286,6 +286,13 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
 
     fun getSelectedPanel(): Panel = selectedPanel
     fun setChildGestureRegions(regions: List<Rect>) { childGestureRegions = regions }
+
+    /**
+     * Asked, with the gesture's down event, whether a leftward swipe on the center panel belongs to
+     * a child instead of opening the end panel. Swipe to reply claims swipes that start on a message.
+     */
+    var childClaimsLeftSwipe: ((MotionEvent) -> Boolean)? = null
+    private var leftSwipeClaimed = false
     fun registerStartPanelStateListeners(vararg listeners: PanelStateListener) { startPanelStateListeners += listeners }
     fun registerEndPanelStateListeners(vararg listeners: PanelStateListener) { endPanelStateListeners += listeners }
 
@@ -297,6 +304,7 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
                 centerPanelDiffX = (centerPanel?.x ?: 0f) - event.rawX
                 xFromInterceptActionDown = event.x
                 yFromInterceptActionDown = event.y
+                leftSwipeClaimed = selectedPanel == Panel.CENTER && childClaimsLeftSwipe?.invoke(event) == true
                 isHomeSystemGesture = Build.VERSION.SDK_INT >= 29 &&
                     abs(event.y - resources.displayMetrics.heightPixels) < homeGestureFromBottomThreshold
                 velocityTracker?.recycle()
@@ -307,7 +315,9 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
                 if (isScrollingHorizontally) return true
                 val dx = event.x - xFromInterceptActionDown
                 val dy = event.y - yFromInterceptActionDown
-                if (abs(dx) > scrollingSlopPx && abs(dx) > abs(dy) && !touchingChildGestureRegion(event)) {
+                if (abs(dx) > scrollingSlopPx && abs(dx) > abs(dy) && !touchingChildGestureRegion(event) &&
+                    !(dx < 0 && leftSwipeClaimed)
+                ) {
                     isScrollingHorizontally = true
                     return true
                 }

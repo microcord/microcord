@@ -82,6 +82,7 @@ object ClientSettings {
 
     val voiceMessages = register(BooleanSetting("feature_voice_messages", true))
     val tapTap = register(BooleanSetting("feature_tap_tap"))
+    val swipeToReply = register(BooleanSetting("feature_swipe_to_reply"))
     val tapTapReplyOwn = register(BooleanSetting("feature_tap_tap_reply_own"))
     val noReplyPing = register(BooleanSetting("feature_no_reply_ping"))
     val fetchUncachedUsers = register(BooleanSetting("feature_fetch_uncached_users"))

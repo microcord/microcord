@@ -7,6 +7,8 @@ object FeatureFlags {
     fun setVoiceMessagesEnabled(enabled: Boolean) = setEnabled(ClientSettings.voiceMessages, enabled)
     fun tapTapEnabled() = enabled(ClientSettings.tapTap)
     fun setTapTapEnabled(enabled: Boolean) = setEnabled(ClientSettings.tapTap, enabled)
+    fun swipeToReplyEnabled() = enabled(ClientSettings.swipeToReply)
+    fun setSwipeToReplyEnabled(enabled: Boolean) = setEnabled(ClientSettings.swipeToReply, enabled)
     fun tapTapReplyOwnEnabled() = enabled(ClientSettings.tapTapReplyOwn)
     fun setTapTapReplyOwnEnabled(enabled: Boolean) = setEnabled(ClientSettings.tapTapReplyOwn, enabled)
     fun noReplyPingEnabled() = enabled(ClientSettings.noReplyPing)
