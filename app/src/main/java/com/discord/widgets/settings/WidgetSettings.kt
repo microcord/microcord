@@ -8,7 +8,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.commit
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
@@ -82,25 +81,10 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             append(getString(R.string.manticord_build_label))
         }
 
-        bindRoute(binding.account, ::WidgetSettingsAccount)
+        for ((rowId, page) in routes) {
+            view.findViewById<View>(rowId).setOnClickListener { SettingsNavigation.push(this, page()) }
+        }
         binding.profile.setOnClickListener { WidgetEditUserOrGuildMemberProfile.launch(requireContext()) }
-        bindRoute(binding.authorizedApps, ::WidgetSettingsAuthorizedApps)
-        bindRoute(binding.sessions, ::WidgetSettingsSessions)
-        bindRoute(binding.textImagesSettings, ::WidgetSettingsMedia)
-        bindRoute(binding.appearance, ::WidgetSettingsAppearance)
-        bindRoute(binding.language, ::WidgetSettingsLanguage)
-        bindRoute(binding.accessibility, ::WidgetSettingsAccessibility)
-        bindRoute(binding.behavior, ::WidgetSettingsBehavior)
-        bindRoute(binding.activityStatus, ::WidgetSettingsActivityStatus)
-        bindRoute(binding.featureFlags, ::WidgetSettingsFeatureFlags)
-        bindRoute(binding.plugins, ::WidgetSettingsPlugins)
-        bindRoute(binding.updates, ::WidgetSettingsUpdates)
-        bindRoute(binding.notifications, ::WidgetSettingsNotifications)
-        bindRoute(binding.privacy, ::WidgetSettingsPrivacy)
-        bindRoute(binding.developerOptions, ::WidgetSettingsDeveloper)
-        // Voice persists every setting `StoreMediaSettings` backs; the OpenSL ES section and the
-        // microphone test are hidden inside it because `StoreStream` publishes no media engine yet.
-        bindRoute(binding.voice, ::WidgetSettingsVoice)
 
         // Not a bindRoute: the scanner is a fullscreen screen with its own toolbar and status bar
         // colour, so it is launched through the screen router rather than pushed into this tab.
@@ -158,6 +142,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.menu.menu_settings,
             onSelected = { item ->
                 when (item.itemId) {
+                    R.id.menu_settings_search -> SettingsNavigation.push(this, WidgetSettingsSearch())
                     R.id.menu_settings_debugging -> WidgetDebugging.launch(requireContext())
                     R.id.menu_settings_switch_accounts -> WidgetSwitchAccounts.show(parentFragmentManager)
                     R.id.menu_settings_log_out -> showLogoutDialog(requireContext())
@@ -247,42 +232,35 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
         }
     }
 
-    private fun bindRoute(row: View, destination: () -> Fragment) {
-        row.setOnClickListener {
-            val fragment = destination()
-            parentFragmentManager.commit {
-                replace(this@WidgetSettings.id, fragment)
-                addToBackStack(fragment::class.java.name)
-            }
-        }
-    }
-
     companion object {
         private const val SUPPORT_URL = "https://support.discord.com"
         private const val SUPPORT_SERVER_URL = "https://discord.gg/YE8deBEVyd"
         private const val ACKNOWLEDGEMENTS_URL = "https://discord.com/acknowledgements"
 
-        /** Rows whose destination screen exists; everything else is hidden by [hideUnavailableRows]. */
-        internal val implementedRouteIds = setOf(
-            R.id.account,
-            R.id.profile,
-            R.id.authorized_apps,
-            R.id.sessions,
-            R.id.text_images_settings,
-            R.id.appearance,
-            R.id.language,
-            R.id.accessibility,
-            R.id.behavior,
-            R.id.activity_status,
-            R.id.feature_flags,
-            R.id.plugins,
-            R.id.updates,
-            R.id.notifications,
-            R.id.privacy,
-            R.id.qr_scanner,
-            R.id.voice,
-            R.id.developer_options,
+        /** Rows that push a settings page into this tab, by row id. [WidgetSettingsSearch] indexes these pages. */
+        internal val routes: Map<Int, () -> Fragment> = mapOf(
+            R.id.account to ::WidgetSettingsAccount,
+            R.id.privacy to ::WidgetSettingsPrivacy,
+            R.id.authorized_apps to ::WidgetSettingsAuthorizedApps,
+            R.id.sessions to ::WidgetSettingsSessions,
+            // Voice persists every setting `StoreMediaSettings` backs; the OpenSL ES section and the
+            // microphone test are hidden inside it because `StoreStream` publishes no media engine yet.
+            R.id.voice to ::WidgetSettingsVoice,
+            R.id.notifications to ::WidgetSettingsNotifications,
+            R.id.text_images_settings to ::WidgetSettingsMedia,
+            R.id.appearance to ::WidgetSettingsAppearance,
+            R.id.accessibility to ::WidgetSettingsAccessibility,
+            R.id.behavior to ::WidgetSettingsBehavior,
+            R.id.language to ::WidgetSettingsLanguage,
+            R.id.activity_status to ::WidgetSettingsActivityStatus,
+            R.id.feature_flags to ::WidgetSettingsFeatureFlags,
+            R.id.plugins to ::WidgetSettingsPlugins,
+            R.id.developer_options to ::WidgetSettingsDeveloper,
+            R.id.updates to ::WidgetSettingsUpdates,
         )
+
+        /** Rows whose destination screen exists; everything else is hidden by [hideUnavailableRows]. */
+        internal val implementedRouteIds = routes.keys + setOf(R.id.profile, R.id.qr_scanner)
 
         /**
          * Host overrides, kept because `WidgetTabsHost` assigns them so the settings tab can push

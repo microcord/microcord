@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:background="?attr/selectableItemBackground" style="@style/UiKit.ViewGroup.LinearLayout">
+    <TextView android:id="@+id/settings_search_item_title" android:background="@null" style="@style/UiKit.Settings.Item.Label"/>
+    <TextView android:id="@+id/settings_search_item_page" android:background="@null" style="@style/UiKit.Settings.Item.SubText.Attached"/>
+</LinearLayout>

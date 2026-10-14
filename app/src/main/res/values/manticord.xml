@@ -211,4 +211,5 @@
     <string name="microcord_theme_file_reset">Use default</string>
     <string name="microcord_theme_reset_everything">Reset theme</string>
     <string name="microcord_theme_reset_everything_confirm">Remove every color, icon, image, font and sound change from this theme?</string>
+    <string name="microcord_settings_search_hint">Search settings</string>
 </resources>

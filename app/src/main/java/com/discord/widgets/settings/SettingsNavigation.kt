@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.commit
 import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -28,6 +29,12 @@ internal object SettingsNavigation {
             },
             priority = BackPressHandlerRegistry.DEFAULT_PRIORITY - 1,
         )
+    }
+
+    /** Pushes [page] into the container [from] lives in, so Back returns to [from]. */
+    fun push(from: Fragment, page: Fragment) = from.parentFragmentManager.commit {
+        replace(from.id, page)
+        addToBackStack(page::class.java.name)
     }
 
     fun launch(context: Context, screen: Class<out Fragment>, extras: Intent = Intent()) =
