@@ -19,6 +19,7 @@ import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.Preloaded
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.DmSpamFilterV2
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.ExplicitContentRedaction
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.GuildFolder
+import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.SwipeRightToLeftMode
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.Theme
 import java.util.Locale
 
@@ -207,6 +208,17 @@ object UserSettings {
         bool(true, { it.voiceAndVideo.run { hasStreamNotificationsEnabled() to streamNotificationsEnabled.value } }) {
             voiceAndVideoBuilder.streamNotificationsEnabled = it
         }
+
+    /** Whether swiping a message right to left replies; unset means reply, as RN resolves it. */
+    val swipeToReply = setting({
+        it.appearance.swipeRightToLeftMode != SwipeRightToLeftMode.SWIPE_RIGHT_TO_LEFT_MODE_SWIPE_RIGHT_TO_LEFT_CHANNEL_DETAILS
+    }) { reply ->
+        appearanceBuilder.swipeRightToLeftMode = if (reply) {
+            SwipeRightToLeftMode.SWIPE_RIGHT_TO_LEFT_MODE_SWIPE_RIGHT_TO_LEFT_REPLY
+        } else {
+            SwipeRightToLeftMode.SWIPE_RIGHT_TO_LEFT_MODE_SWIPE_RIGHT_TO_LEFT_CHANNEL_DETAILS
+        }
+    }
 
     val developerMode = setting({ it.appearance.developerMode }) { appearanceBuilder.developerMode = it }
 

@@ -100,7 +100,13 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
     private fun attachSwipeToReply(list: RecyclerView) {
         val swipe = SwipeToReply(requireContext(), messageAt = { holder -> messageAt(holder.bindingAdapterPosition) }) { message ->
             val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return@SwipeToReply
-            messageActionCoordinator().reply(channel, message, StoreStream.getUsers().getMe().id)
+            val replies = StoreStream.getPendingReplies()
+            // As in the official client, swiping the message already being replied to cancels the reply.
+            if (replies.getPendingReply(channel.id)?.originalMessage?.id == message.id) {
+                replies.onDeletePendingReply(channel.id)
+            } else {
+                messageActionCoordinator().reply(channel, message, StoreStream.getUsers().getMe().id)
+            }
         }
         ItemTouchHelper(swipe).attachToRecyclerView(list)
         // The home panels would take a leftward swipe to open the member list; one that starts on a

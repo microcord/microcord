@@ -73,10 +73,6 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.noReplyPingEnabled()
             setOnCheckedListener(FeatureFlags::setNoReplyPingEnabled)
         }
-        binding.settingsFeatureSwipeToReply.apply {
-            isChecked = FeatureFlags.swipeToReplyEnabled()
-            setOnCheckedListener(FeatureFlags::setSwipeToReplyEnabled)
-        }
         binding.settingsFeatureTapTapReplyOwn.apply {
             visibility = if (FeatureFlags.tapTapEnabled()) View.VISIBLE else View.GONE
             isChecked = FeatureFlags.tapTapReplyOwnEnabled()
