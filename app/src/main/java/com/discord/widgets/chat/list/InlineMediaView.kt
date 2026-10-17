@@ -200,7 +200,7 @@ class InlineMediaView @JvmOverloads constructor(
                 InlineMediaView::class.java,
                 subscriptionHandler = subscriptions::add,
             ) { configureVolume(player, it > 0f) }
-            player.events.onBackpressureBuffer().ui(this).appSubscribe(
+            player.events.ui(this).appSubscribe(
                 InlineMediaView::class.java,
                 subscriptionHandler = subscriptions::add,
                 errorHandler = { resetViews(params) },

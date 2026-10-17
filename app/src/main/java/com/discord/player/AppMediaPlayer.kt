@@ -73,7 +73,12 @@ class AppMediaPlayer(
     private var positionPollingSubscription: Subscription? = null
     private var mediaSource: MediaSource? = null
 
-    val events: Observable<Event> = eventSubject
+    /**
+     * Buffered because a PublishSubject errors a subscriber that falls behind, and every listener
+     * hops to the main thread through `observeOn`'s 16-slot queue: a main thread stalled for a few
+     * seconds (a slow phone joining a call) with position ticks queued crashed the app.
+     */
+    val events: Observable<Event> = eventSubject.onBackpressureBuffer()
     val volume: Observable<Float> = volumeSubject
 
     init {
