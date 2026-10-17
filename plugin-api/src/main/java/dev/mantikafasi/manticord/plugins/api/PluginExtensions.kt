@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import rx.Observable
 import java.io.File
 
@@ -500,6 +501,44 @@ fun pluginMessageContribution(
     )
 }
 
+/**
+ * The native views of one message row. A message's attachments, embeds and stickers are separate
+ * rows and are not included.
+ */
+interface PluginMessageViews {
+    val root: View
+    val content: TextView
+    val author: TextView?
+    val timestamp: TextView?
+}
+
+/**
+ * Restyles the native message row. [decorate] runs on the main thread on every bind of every message
+ * row while registered, so keep it cheap: no allocation, I/O or lookups beyond a hash map.
+ *
+ * Rows are recycled. Before each bind the host restores what decorators usually change: `alpha` and
+ * `background` on [PluginMessageViews.root], and `alpha`, text colors and paint flags (such as
+ * strike-through) on every text view. Undo any other change yourself when a row shows a message you
+ * do not decorate.
+ */
+interface PluginMessageDecorator : PluginContribution {
+    val decorate: (PluginMessageViews, PluginMessageContext) -> Unit
+}
+
+class PluginMessageDecoratorBuilder internal constructor() {
+    var priority: Int = 0
+}
+
+fun pluginMessageDecorator(
+    id: String,
+    decorate: (PluginMessageViews, PluginMessageContext) -> Unit,
+    configure: PluginMessageDecoratorBuilder.() -> Unit = {},
+): PluginMessageDecorator {
+    require(id.isNotBlank()) { "message decorator ID must not be blank" }
+    val builder = PluginMessageDecoratorBuilder().apply(configure)
+    return PluginMessageDecoratorValue(id, builder.priority, decorate)
+}
+
 class PluginContextMenuItemBuilder internal constructor() {
     var priority: Int = 0
     var destructive: Boolean = false
@@ -559,6 +598,7 @@ interface PluginUi {
     fun registerContextMenuItem(item: PluginContextMenuItem): PluginRegistration
     fun registerMessage(contribution: PluginMessageContribution): PluginRegistration
     fun registerMessageInterceptor(interceptor: PluginMessageInterceptor): PluginRegistration
+    fun registerMessageDecorator(decorator: PluginMessageDecorator): PluginRegistration
 }
 
 fun interface PluginSettingsPage {
@@ -748,3 +788,9 @@ private data class PluginMessageContributionValue(
     override val bind: (View, PluginMessageContext) -> Unit,
     override val isVisible: (PluginMessageContext) -> Boolean,
 ) : PluginMessageContribution
+
+private data class PluginMessageDecoratorValue(
+    override val id: String,
+    override val priority: Int,
+    override val decorate: (PluginMessageViews, PluginMessageContext) -> Unit,
+) : PluginMessageDecorator

@@ -407,6 +407,45 @@ StoreStream.getMessages()
 The observable includes optimistic local messages and subsequent Gateway updates. Plugins own their
 Rx subscription and should unsubscribe it from their `stop()` method when they create one.
 
+### Message Deletes And Updates
+
+Two more interceptors, registered with the same `registerMessageInterceptor(...)`, run on the store
+thread for Gateway events about messages this client has loaded:
+
+- `pluginMessageDeleteInterceptor(id, onDelete)` runs before a deleted message leaves the chat.
+  Return null to let it go, or a message to keep in its place. Pins, replies and mentions still drop
+  it. Deletes made from this client are not intercepted, and a kept message disappears once the
+  channel is reloaded from the server, so persist anything you need.
+- `pluginMessageUpdateInterceptor(id, onUpdate)` receives the version before the update and the
+  merged result, and returns the message to store. Updates also arrive when embeds resolve, so
+  compare `content` or `editedTimestamp` to find edits.
+
+Both run inside the message store: keep them to a map lookup and an allocation or two, and do I/O on
+your own background thread. With none registered the host skips the lookups entirely.
+
+### Message Decorators
+
+`registerMessageDecorator(...)` restyles native message rows. `decorate` receives the row's views
+(`root`, `content`, and the `author` and `timestamp` text views when present) on every bind, on the
+main thread, so it must stay cheap. Rows are recycled; before each bind the host restores `alpha`
+and `background` on `root`, and `alpha`, text colors and paint flags on the text views. Undo any other
+change yourself. Attachments, embeds and stickers are separate rows and are not decorated.
+
+```kotlin
+// Written on the store thread, read on the main thread.
+val deleted = Collections.synchronizedSet(HashSet<Long>())
+scope.ui.registerMessageInterceptor(
+    pluginMessageDeleteInterceptor("keep_deleted", onDelete = { message -> message.also { deleted += it.id } }),
+)
+scope.ui.registerMessageDecorator(
+    pluginMessageDecorator("deleted_red", decorate = { views, message ->
+        if (message.messageId in deleted) views.content.setTextColor(0xFFF04747.toInt())
+    }),
+)
+```
+
+The chat list rebinds after a plugin keeps a deleted message, so its decoration shows at once.
+
 ### Slash Commands
 
 `registerSlashCommand(...)` adds a local command to the existing application-command store. Commands

@@ -11,8 +11,11 @@ import dev.mantikafasi.manticord.plugins.api.PluginSlashCommand
 import dev.mantikafasi.manticord.plugins.api.PluginContextMenuItem
 import dev.mantikafasi.manticord.plugins.api.PluginMessageContribution
 import dev.mantikafasi.manticord.plugins.api.PluginMessageInterceptionType
+import dev.mantikafasi.manticord.plugins.api.PluginMessageDecorator
 import dev.mantikafasi.manticord.plugins.api.PluginMessageInterceptor
+import dev.mantikafasi.manticord.plugins.api.HostMessageDeleteInterceptor
 import dev.mantikafasi.manticord.plugins.api.HostMessageInterceptor
+import dev.mantikafasi.manticord.plugins.api.HostMessageUpdateInterceptor
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 import dev.mantikafasi.manticord.plugins.api.PluginResources
 import dev.mantikafasi.manticord.plugins.api.PluginScope
@@ -125,6 +128,7 @@ internal object PluginUiRegistry {
     private val contextMenuItems = ContributionRegistry<PluginContextMenuItem>("context menu item")
     private val messages = ContributionRegistry<PluginMessageContribution>("message")
     private val messageInterceptors = ContributionRegistry<PluginMessageInterceptor>("message interceptor")
+    private val messageDecorators = ContributionRegistry<PluginMessageDecorator>("message decorator")
 
     fun headers() = headers.snapshot()
     fun composers() = composers.snapshot()
@@ -135,6 +139,29 @@ internal object PluginUiRegistry {
     fun contextMenuItems() = contextMenuItems.snapshot()
     fun messages() = messages.snapshot()
     fun messageInterceptors() = messageInterceptors.snapshot()
+    fun messageDecorators() = messageDecorators.snapshot()
+
+    fun hasMessageDeleteInterceptors(): Boolean =
+        messageInterceptors.snapshot().any { it.contribution is HostMessageDeleteInterceptor }
+
+    fun hasMessageUpdateInterceptors(): Boolean =
+        messageInterceptors.snapshot().any { it.contribution is HostMessageUpdateInterceptor }
+
+    /** The message to keep in place of a deleted one, or null when every interceptor lets it go. */
+    fun interceptMessageDelete(message: Message): Message? {
+        var kept: Message? = null
+        messageInterceptors.snapshot().forEach { owned ->
+            val interceptor = owned.contribution as? HostMessageDeleteInterceptor ?: return@forEach
+            runCatching { interceptor.onDelete(kept ?: message) }.getOrNull()?.let { kept = it }
+        }
+        return kept
+    }
+
+    fun interceptMessageUpdate(old: Message, new: Message): Message =
+        messageInterceptors.snapshot().fold(new) { current, owned ->
+            val interceptor = owned.contribution as? HostMessageUpdateInterceptor ?: return@fold current
+            runCatching { interceptor.onUpdate(old, current) }.getOrDefault(current)
+        }
 
     fun hasMessageInterceptors(type: PluginMessageInterceptionType): Boolean =
         messageInterceptors.snapshot().any { type in it.contribution.types && it.contribution is HostMessageInterceptor }
@@ -181,7 +208,15 @@ internal object PluginUiRegistry {
             add(PluginContentInfo("Message ${it.contribution.placement.name.lowercase()}", it.contribution.title))
         }
         messageInterceptors().filter { it.owner == owner }.forEach {
-            add(PluginContentInfo("Message interceptor", it.contribution.types.joinToString { type -> type.name.lowercase() }))
+            val types = when (it.contribution) {
+                is HostMessageDeleteInterceptor -> "delete"
+                is HostMessageUpdateInterceptor -> "update"
+                else -> it.contribution.types.joinToString { type -> type.name.lowercase() }
+            }
+            add(PluginContentInfo("Message interceptor", types))
+        }
+        messageDecorators().filter { it.owner == owner }.forEach {
+            add(PluginContentInfo("Message decorator", it.contribution.id))
         }
     }
 
@@ -191,7 +226,12 @@ internal object PluginUiRegistry {
     fun addProfileListener(listener: () -> Unit) = profiles.addListener(listener)
     fun addProfileTabListener(listener: () -> Unit) = profileTabs.addListener(listener)
     fun addSlashCommandListener(listener: () -> Unit) = slashCommands.addListener(listener)
-    fun addMessageListener(listener: () -> Unit) = messages.addListener(listener)
+    /** Fires when message contributions or decorators change, so the chat list rebinds. */
+    fun addMessageListener(listener: () -> Unit): PluginRegistration {
+        val contributions = messages.addListener(listener)
+        val decorators = messageDecorators.addListener(listener)
+        return registration { contributions.unregister(); decorators.unregister() }
+    }
 
     fun notifyHeaderChanged() = headers.notifyChanged()
     fun notifyComposersChanged() = composers.notifyChanged()
@@ -211,6 +251,8 @@ internal object PluginUiRegistry {
         messages.register(owner, contribution)
     fun registerMessageInterceptor(owner: String, interceptor: PluginMessageInterceptor) =
         messageInterceptors.register(owner, interceptor)
+    fun registerMessageDecorator(owner: String, decorator: PluginMessageDecorator) =
+        messageDecorators.register(owner, decorator)
 
     fun removeOwner(owner: String) {
         headers.removeOwner(owner)
@@ -222,6 +264,7 @@ internal object PluginUiRegistry {
         contextMenuItems.removeOwner(owner)
         messages.removeOwner(owner)
         messageInterceptors.removeOwner(owner)
+        messageDecorators.removeOwner(owner)
     }
 }
 
@@ -323,6 +366,11 @@ internal class PluginScopeImpl(
         override fun registerMessageInterceptor(interceptor: PluginMessageInterceptor): PluginRegistration {
             check(!closed.get()) { "plugin scope is closed" }
             return track(PluginUiRegistry.registerMessageInterceptor(pluginId, interceptor))
+        }
+
+        override fun registerMessageDecorator(decorator: PluginMessageDecorator): PluginRegistration {
+            check(!closed.get()) { "plugin scope is closed" }
+            return track(PluginUiRegistry.registerMessageDecorator(pluginId, decorator))
         }
     }
     override val storage: PluginStorage = object : PluginStorage {

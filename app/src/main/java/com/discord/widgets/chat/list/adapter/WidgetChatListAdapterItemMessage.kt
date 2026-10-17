@@ -28,6 +28,7 @@ import com.discord.databinding.WidgetChatListAdapterItemFailedBinding
 import com.discord.databinding.WidgetChatListAdapterItemMinimalBinding
 import com.discord.databinding.WidgetChatListAdapterItemTextBinding
 import com.discord.plugins.PluginMessageHost
+import dev.mantikafasi.manticord.plugins.api.PluginMessageViews
 import dev.mantikafasi.manticord.plugins.api.pluginMessageContext
 import com.discord.api.permission.Permission
 import com.discord.i18n.Hook
@@ -120,6 +121,12 @@ class WidgetChatListAdapterItemMessage(
         else -> error("Unsupported message layout $layout")
     }
     private val pluginMessageHost = PluginMessageHost()
+    private val pluginMessageViews = object : PluginMessageViews {
+        override val root: View get() = itemView
+        override val content: TextView get() = itemText
+        override val author: TextView? get() = itemName
+        override val timestamp: TextView? get() = itemTimestamp
+    }
 
     private val itemText: SimpleDraweeSpanTextView =
         itemView.findViewById(R.id.chat_list_adapter_item_text)
@@ -228,6 +235,7 @@ class WidgetChatListAdapterItemMessage(
 
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
+        pluginMessageHost.restoreDecorations()
         val entry = data as MessageEntry
 
         val message = entry.message
@@ -270,19 +278,21 @@ class WidgetChatListAdapterItemMessage(
         configureAlertText(message)
         configureThreadSpine(message, isThreadStarterMessage)
         configureCommunicationDisabled(entry.author, entry.permissionsForChannel)
+        val pluginContext = pluginMessageContext(
+            messageId = message.id,
+            channelId = message.channelId,
+            guildId = message.guildId,
+            authorId = message.author?.id,
+            content = message.content.orEmpty(),
+            isAuthorBot = message.author?.bot == true,
+        )
         pluginMessageHost.bind(
             pluginContainers.header,
             pluginContainers.content,
             pluginContainers.standalone,
-            pluginMessageContext(
-                messageId = message.id,
-                channelId = message.channelId,
-                guildId = message.guildId,
-                authorId = message.author?.id,
-                content = message.content.orEmpty(),
-                isAuthorBot = message.author?.bot == true,
-            ),
+            pluginContext,
         )
+        pluginMessageHost.decorate(pluginMessageViews, pluginContext)
         applyMessageCustomization()
     }
 

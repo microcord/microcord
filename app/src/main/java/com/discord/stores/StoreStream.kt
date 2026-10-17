@@ -2283,7 +2283,17 @@ class StoreStream private constructor(
         dispatchSubscribe(events.messageUpdate, "streamMessageUpdate") { message ->
             val incoming = DomainMessage(message)
             users.handleMessageCreateOrUpdate(incoming)
+            val previous = if (PluginUiRegistry.hasMessageUpdateInterceptors()) {
+                messages.getMessage(message.channelId, message.id)
+            } else {
+                null
+            }
             messages.handleMessageUpdate(message)
+            if (previous != null) {
+                messages.handleMessageUpdate(message.channelId, message.id) {
+                    PluginUiRegistry.interceptMessageUpdate(previous, it)
+                }
+            }
             if (PluginUiRegistry.hasMessageInterceptors(PluginMessageInterceptionType.RECEIVE)) {
                 messages.handleMessageUpdate(message.channelId, message.id) {
                     PluginUiRegistry.interceptMessage(PluginMessageInterceptionType.RECEIVE, it)
@@ -2299,7 +2309,7 @@ class StoreStream private constructor(
             applicationInteractions.handleMessageUpdate(message)
         }
         dispatchSubscribe(events.messageDelete, "streamMessageDelete") { deleted ->
-            messages.handleMessageDelete(deleted)
+            handleMessageDeleteInternal(deleted)
             pinnedMessages.handleMessageDeleteBulk(deleted.channelId, deleted.messageIds.orEmpty())
             savedMessages.handleMessageDelete(deleted.channelId, deleted.messageIds.orEmpty())
             pendingReplies.handleMessageDelete(deleted)
@@ -2526,6 +2536,25 @@ class StoreStream private constructor(
         emojiCustom.handleGuildMemberAdd(member)
         mentions.handleGuildMemberAdd(member)
         voiceChannelSelected.handleGuildMemberAdd(member.user.id)
+    }
+
+    /** Removes deleted messages from the chat, except those a plugin keeps in their place. */
+    @StoreThread
+    private fun handleMessageDeleteInternal(deleted: ModelMessageDelete) {
+        val ids = deleted.messageIds.orEmpty()
+        if (!PluginUiRegistry.hasMessageDeleteInterceptors()) {
+            messages.handleMessageDeleteBulk(deleted.channelId, ids)
+            return
+        }
+        val kept = ids.filter { id ->
+            val message = messages.getMessage(deleted.channelId, id) ?: return@filter false
+            val replacement = PluginUiRegistry.interceptMessageDelete(message) ?: return@filter false
+            messages.handleMessageUpdate(deleted.channelId, id) { replacement }
+            true
+        }
+        messages.handleMessageDeleteBulk(deleted.channelId, ids - kept.toSet())
+        // A kept message usually looks unchanged to the list's diff, so rebind for decorators.
+        if (kept.isNotEmpty()) PluginUiRegistry.notifyMessagesChanged()
     }
 
     @StoreThread
