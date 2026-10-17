@@ -79,7 +79,7 @@ object AppUpdater {
         states.onNext(State(Phase.CHECKING, state.update))
         Observable.fromCallable {
             http.newCall(Request.Builder().url(UPDATE_FEED_URL).build()).execute().use { response ->
-                readJson(response, AppUpdate::class.java, 16_384).validate()
+                readJson(response, AppUpdate::class.java, 16_384).forAbis(Build.SUPPORTED_ABIS.toList()).validate()
             }
         }.subscribeOn(Schedulers.io()).ui().subscribe({ update ->
             if (automatic) preferences(app).edit().putLong("next_check", System.currentTimeMillis() + SIX_HOURS).apply()
@@ -98,7 +98,7 @@ object AppUpdater {
     fun loadChanges(update: AppUpdate): Observable<AppUpdateChanges> = Observable.defer {
         update.validate()
         val from = BuildConfig.UPDATE_COMMIT_SHA
-        val url = requireNotNull(update.apkUrl).removeSuffix(".apk") + "/changes.json?from=$from"
+        val url = update.changesUrl + "?from=$from"
         val call = http.newCall(Request.Builder().url(url).build())
         Observable.fromCallable {
             call.execute().use { readJson(it, AppUpdateChanges::class.java, 128 * 1024).validate(update, from) }

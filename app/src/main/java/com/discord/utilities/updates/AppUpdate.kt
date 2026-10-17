@@ -6,6 +6,10 @@ import java.net.URI
 import java.security.MessageDigest
 
 const val UPDATE_FEED_URL = "https://microcord.mantikafasi.dev/latest.json"
+private const val UPDATE_ORIGIN = "https://microcord.mantikafasi.dev"
+
+/** The architectures releases publish their own APKs for. */
+val UPDATE_ABIS = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
 
 /** Nullable wire fields let validation distinguish historical releases from malformed metadata. */
 data class AppUpdate(
@@ -18,15 +22,34 @@ data class AppUpdate(
     val versionCode: Long? = null,
     val versionName: String? = null,
     val packageName: String? = null,
+    /** Per-architecture APKs of the same build, keyed by ABI; absent on releases from before the split. */
+    val apks: Map<String, Apk>? = null,
 ) {
+    data class Apk(val apkUrl: String?, val sha256: String?, val size: Long?)
+
     val hasBuildMetadata get() = commitSha != null
+
+    /** Where this release's changelog lives; independent of which APK is downloaded. */
+    val changesUrl get() = "$UPDATE_ORIGIN/releases/$release/changes.json"
+
+    /**
+     * This update with the APK for the first of [supportedAbis] the release has a split for, so a
+     * phone downloads only its own native libraries. Unchanged when there is none: the universal
+     * APK installs everywhere.
+     */
+    fun forAbis(supportedAbis: List<String>): AppUpdate {
+        val abi = supportedAbis.firstOrNull { it in UPDATE_ABIS && apks?.get(it) != null } ?: return copy(apks = null)
+        val apk = requireNotNull(apks?.get(abi))
+        return copy(apkUrl = apk.apkUrl, sha256 = apk.sha256, size = apk.size, apks = null)
+    }
 
     fun validate(): AppUpdate = apply {
         require(release != null && Regex("build-[1-9][0-9]{0,9}").matches(release))
         val uri = URI(requireNotNull(apkUrl))
         require(uri.scheme == "https" && uri.host == "microcord.mantikafasi.dev" &&
             uri.port in listOf(-1, 443) && uri.rawUserInfo == null && uri.rawQuery == null &&
-            uri.rawFragment == null && uri.rawPath == "/releases/$release.apk")
+            uri.rawFragment == null &&
+            (uri.rawPath == "/releases/$release.apk" || UPDATE_ABIS.any { uri.rawPath == "/releases/$release-$it.apk" }))
         require(sha256 != null && Regex("[0-9a-f]{64}").matches(sha256))
         require(size != null && size in 1..1_073_741_824L)
         if (listOf(commitSha, commitTimestamp, versionCode, versionName, packageName).any { it != null }) {

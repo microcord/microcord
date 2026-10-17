@@ -17,7 +17,14 @@ status and remaining work.
 
 ## Download
 
-**[Download the latest APK](https://microcord.mantikafasi.dev/latest.apk)**
+**[Download the latest APK](https://microcord.mantikafasi.dev/latest-arm64-v8a.apk)** for almost every
+phone (64-bit ARM).
+
+If that one will not install, your phone is older 32-bit hardware: use the
+[universal APK](https://microcord.mantikafasi.dev/latest.apk), which works on every phone but is larger.
+[32-bit ARM](https://microcord.mantikafasi.dev/latest-armeabi-v7a.apk),
+[x86_64](https://microcord.mantikafasi.dev/latest-x86_64.apk) and
+[x86](https://microcord.mantikafasi.dev/latest-x86.apk) builds are also available.
 
 - Requires **Android 6.0 (API 23) or newer**.
 - Install the APK with Android's package installer. Updates can be installed over
@@ -26,7 +33,7 @@ status and remaining work.
   app. This identifier is not final and may change during development.
 
 The **Updates** screen can check for new builds, show release notes and commit
-history, download an update and open the installer. Automatic checks run when
+history, download an update for the phone's own architecture and open the installer. Automatic checks run when
 the app enters the foreground, at most once every six hours per installed build.
 Downloads do not start automatically.
 

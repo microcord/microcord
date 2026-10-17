@@ -87,6 +87,27 @@ class AppUpdateTest {
         assertFalse(acceptsUpdatePackage(update, 1, update.packageName, update.versionCode!!, false))
     }
 
+    @Test fun `a phone takes its own architecture's APK and falls back to the universal one`() {
+        val arm64 = AppUpdate.Apk("https://microcord.mantikafasi.dev/releases/build-42-arm64-v8a.apk", "c".repeat(64), 7)
+        val feed = Gson().fromJson(
+            Gson().toJson(update.copy(apks = mapOf("arm64-v8a" to arm64, "x86" to arm64.copy(apkUrl = "x")))),
+            AppUpdate::class.java,
+        )
+        val chosen = feed.forAbis(listOf("arm64-v8a", "armeabi-v7a")).validate()
+        assertEquals(arm64.apkUrl, chosen.apkUrl)
+        assertEquals(7L, chosen.size)
+        assertEquals("https://microcord.mantikafasi.dev/releases/build-42/changes.json", chosen.changesUrl)
+        // No split for this phone, or a feed from before splits: the universal APK.
+        assertEquals(update, feed.forAbis(listOf("armeabi-v7a")).validate())
+        assertEquals(update, update.forAbis(listOf("arm64-v8a")))
+        // A split URL must still name this release and a known architecture.
+        listOf("build-43-arm64-v8a", "build-42-mips", "build-42-arm64-v8a/x").forEach { path ->
+            assertThrows(Exception::class.java) {
+                update.copy(apkUrl = "https://microcord.mantikafasi.dev/releases/$path.apk").validate()
+            }
+        }
+    }
+
     @Test fun `release changes are bound to the installed and published source revisions`() {
         val from = "a".repeat(40)
         val changes = AppUpdateChanges(update.release, from, update.commitSha, "## Fixed\n- A bug", false,

@@ -38,6 +38,8 @@ val commitTimestamp = providers.exec {
 val updateVersionCode = (commitTimestamp - 1_577_836_800L).also {
     require(it in 1L..Int.MAX_VALUE.toLong()) { "Commit timestamp is outside the Android versionCode range" }
 }.toInt()
+val releaseAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+val releaseRequested = gradle.startParameter.taskNames.any { it.substringAfterLast(':').contains("Release") }
 
 android {
     namespace = "com.discord"
@@ -131,7 +133,13 @@ android {
 
     splits {
         abi {
-            isEnable = false
+            // Release builds publish one APK per architecture beside the universal one, so a phone
+            // downloads only its own native libraries (about 30% smaller than the universal APK).
+            // Debug builds keep the single app-debug.apk that CI artifacts and installs expect.
+            isEnable = releaseRequested
+            reset()
+            include(*releaseAbis.toTypedArray())
+            isUniversalApk = true
         }
     }
 }
@@ -153,9 +161,10 @@ androidComponents {
         val sourceSha = commitHash
         val sourceTimestamp = commitTimestamp
         val expectedVersionCode = updateVersionCode
+        val expectedApkCount = releaseAbis.size + 1
         tasks.register("generateReleaseUpdateManifest") {
             group = "build"
-            description = "Generate updater metadata for the exact signed release APK"
+            description = "Generate updater metadata for the exact signed universal release APK"
             dependsOn("assembleRelease")
             inputs.dir(apkDirectory)
             inputs.property("commitSha", sourceSha)
@@ -167,10 +176,15 @@ androidComponents {
                 val artifacts = requireNotNull(artifactsLoader.load(apkDirectory.get())) {
                     "Release APK output metadata is missing"
                 }
-                val output = artifacts.elements.single()
+                // The per-architecture splits share the universal APK's build identity; the Worker
+                // takes their digests from the release assets themselves.
+                require(artifacts.elements.size == expectedApkCount) {
+                    "Expected the universal APK and one APK per architecture; build with a Release task"
+                }
+                val output = artifacts.elements.single { element -> element.filters.isEmpty() }
                 val apk = File(output.outputFile).canonicalFile
-                require(apk.parentFile == directory && apk.name == "app-release.apk" && apk.isFile) {
-                    "Expected exactly one produced app-release.apk"
+                require(apk.parentFile == directory && apk.name == "app-universal-release.apk" && apk.isFile) {
+                    "Expected exactly one produced app-universal-release.apk"
                 }
                 require(artifacts.applicationId == "dev.mantikafasi.manticord" &&
                     output.versionCode == expectedVersionCode && !output.versionName.isNullOrBlank()) {
