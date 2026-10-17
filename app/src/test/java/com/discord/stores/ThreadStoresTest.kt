@@ -89,7 +89,17 @@ class ThreadStoresTest {
             threadsActive.handleThreadListSync(ModelThreadListSync(1, listOf(thread(13, parentId = 10))))
         }
         assertEquals(listOf(false, true), synced)
-        assertEquals(setOf(11L, 13L), fixture.threadsActive.getAllActiveThreadsById().keys)
+        // A guild-wide sync replaces the whole list; 11 and 31 are no longer active.
+        assertEquals(setOf(13L), fixture.threadsActive.getAllActiveThreadsById().keys)
+
+        // A channel sync replaces only that channel's threads; posts it omits were auto-archived.
+        fixture.dispatch {
+            threadsActive.handleThreadCreateOrUpdate(thread(31, parentId = 30))
+            threadsActive.handleThreadCreateOrUpdate(thread(32, parentId = 30))
+            threadsActive.handleThreadListSync(ModelThreadListSync(1, listOf(thread(33, parentId = 30)), channelIds = listOf(30)))
+        }
+        assertEquals(setOf(13L, 33L), fixture.threadsActive.getAllActiveThreadsById().keys)
+        assertEquals(setOf(33L), fixture.threadsActive.getAllForumThreadsById().keys)
 
         fixture.dispatch { threadsActive.handleGuildDelete(1) }
         assertEquals(emptySet<Long>(), fixture.threadsActive.getAllActiveThreadsById().keys)

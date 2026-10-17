@@ -133,15 +133,13 @@ class StoreThreadsActive(
     @StoreThread
     fun handleThreadListSync(payload: ModelThreadListSync) {
         val guildThreads = threadsByGuild.getOrPut(payload.guildId) { HashMap() }
-        payload.threads.forEach { thread ->
-            if (thread.isThread()) {
-                guildThreads[thread.id] = thread
-                threadsById[thread.id] = thread
-            }
-            if (thread.isGuildForumPost(storeChannels.getChannelInternal(thread.guildId, thread.parentId))) {
-                forumThreadsById[thread.id] = thread
-            }
-        }
+        // The sync replaces the listed channels' threads (the whole guild without `channel_ids`), as
+        // RN's ActiveThreadsStore does. Otherwise a post the server auto-archived while nobody was
+        // watching stays listed, since no THREAD_UPDATE ever reports it.
+        val channelIds = payload.channelIds?.toSet()
+        if (channelIds == null) guildThreads.clear() else guildThreads.values.removeAll { it.parentId in channelIds }
+        payload.threads.forEach { thread -> if (thread.isThread()) guildThreads[thread.id] = thread }
+        rebuildThreadByIdMaps()
         threadSyncedGuilds.add(payload.guildId)
         markChanged()
     }
