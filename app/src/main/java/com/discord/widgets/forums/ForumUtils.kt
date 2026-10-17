@@ -18,9 +18,8 @@ import com.discord.utilities.permissions.PermissionUtils
 import rx.Observable
 
 object ForumUtils {
-    fun canCreatePost(permissions: Long?): Boolean =
-        PermissionUtils.can(Permission.SEND_MESSAGES, permissions) &&
-            PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions)
+    /** Posting in a forum is gated by Send Messages alone, as in the reference; Create Public Threads does not apply. */
+    fun canCreatePost(permissions: Long?): Boolean = PermissionUtils.can(Permission.SEND_MESSAGES, permissions)
 
     /**
      * The viewer's own sort, layout and tag matching for a channel.

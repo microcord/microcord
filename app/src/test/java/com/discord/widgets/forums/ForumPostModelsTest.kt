@@ -44,10 +44,10 @@ class ForumPostModelsTest {
     }
 
     @Test
-    fun creatingPostRequiresSendAndPublicThreadPermissions() {
-        assertTrue(ForumUtils.canCreatePost(Permission.SEND_MESSAGES or Permission.CREATE_PUBLIC_THREADS))
-        assertFalse(ForumUtils.canCreatePost(Permission.SEND_MESSAGES))
+    fun creatingPostRequiresOnlySendMessages() {
+        assertTrue(ForumUtils.canCreatePost(Permission.SEND_MESSAGES))
         assertFalse(ForumUtils.canCreatePost(Permission.CREATE_PUBLIC_THREADS))
+        assertFalse(ForumUtils.canCreatePost(null))
     }
 
     @Test
