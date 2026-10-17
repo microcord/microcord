@@ -107,7 +107,9 @@ object ForumUtils {
         hasActiveThreads: Boolean,
         archivedThreads: ArchivedThreadsStore = StoreStream.getArchivedThreads(),
     ): Observable<ArchivedThreadsStore.ThreadListingState> = if (hasActiveThreads) {
-        archivedThreads.observeGuildForumThreadListing(channelId)
+        // A few active posts never fill the screen, so the scroll-end fetch would never fire and
+        // older posts would stay hidden; load their first page up front as RN does.
+        archivedThreads.loadIfNeededAndObserveGuildForumThreadListing(channelId)
     } else {
         archivedThreads.loadAndObserveGuildForumThreadListing(channelId)
     }

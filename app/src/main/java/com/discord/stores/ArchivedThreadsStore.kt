@@ -212,6 +212,12 @@ class ArchivedThreadsStore(
         return observeGuildForumThreadListing(channelId)
     }
 
+    /** Fetches the first page of older posts unless this forum's listing was already requested. */
+    fun loadIfNeededAndObserveGuildForumThreadListing(channelId: Long): Observable<ThreadListingState> {
+        if (listingsSnapshot[channelId to ThreadListingType.GUILD_FORUM_THREADS] == null) fetchGuildForumThreadListing(channelId)
+        return observeGuildForumThreadListing(channelId)
+    }
+
     fun observeGuildForumThreadListing(channelId: Long): Observable<ThreadListingState> =
         observeListing(channelId, ThreadListingType.GUILD_FORUM_THREADS)
 
