@@ -18,6 +18,14 @@ const manifest = {
   versionName: "1.0", sha256: "a".repeat(64), size: 8, packageName: "dev.mantikafasi.manticord",
 };
 const fromSha = "c".repeat(40);
+const legacyOrigin = "https://updates.example.workers.dev";
+const apkBytes = [80, 75, 3, 4, 65, 80, 75, 33];
+
+function upstreamApk(headers = {}) {
+  return new Response(new Uint8Array(apkBytes), {
+    headers: { "Content-Type": "application/octet-stream", "Content-Length": String(apkBytes.length), ...headers },
+  });
+}
 const changesPath = `/releases/build-42/changes.json?from=${fromSha}`;
 
 function ahead(from = fromSha, to = manifest.commitSha) {
@@ -46,7 +54,11 @@ beforeEach(() => {
   responses = [];
   cached = new Map();
   globalThis.caches = { default: {
-    async match(request) { return cached.get(request.url)?.clone(); },
+    // A fresh body per match, as the real cache gives: cancelling a cloned (teed) stream never settles in Node.
+    async match(request) {
+      const entry = cached.get(request.url);
+      return entry && new Response(await entry.clone().arrayBuffer(), entry);
+    },
     async put(request, response) { cached.set(request.url, response.clone()); },
   } };
   mock.method(globalThis, "fetch", async (url, options) => {
@@ -59,8 +71,8 @@ beforeEach(() => {
 });
 afterEach(() => { mock.restoreAll(); delete globalThis.caches; });
 
-function request(path = "/latest.json", options = {}) {
-  return worker.fetch(new Request(`${origin}${path}`, options), env);
+function request(path = "/latest.json", options = {}, base = origin) {
+  return worker.fetch(new Request(`${base}${path}`, options), env);
 }
 
 test("missing manifest preserves the legacy feed without inventing commit metadata from a branch", async () => {
@@ -129,9 +141,9 @@ test("valid manifest exposes full build identity and caches only slim validated 
   assert.equal(calls[1].options.redirect, "manual");
   assert.ok(calls[1].options.signal instanceof AbortSignal);
   const { apkUrl, ...cacheFields } = expected;
-  assert.deepEqual([...cached.keys()], [`${origin}/_release-cache/v3/latest`]);
+  assert.deepEqual([...cached.keys()], [`${origin}/_release-cache/v4/latest`]);
   assert.deepEqual(await cached.values().next().value.clone().json(), {
-    ...cacheFields, assetId: 7, notes: release.body, notesTruncated: false,
+    ...cacheFields, assetId: 7, abis: {}, notes: release.body, notesTruncated: false,
   });
   assert.deepEqual(await (await request()).json(), expected);
   assert.equal(await (await request("/latest.json", { method: "HEAD" })).text(), "");
@@ -283,7 +295,7 @@ test("historical build-163 downloads remain pinned after the latest feed has a m
   assert.equal(calls[2].url, `${api}/releases/tags/build-163`);
   assert.equal(calls[3].url, `${api}/releases/assets/42`);
   assert.equal(calls[3].options.method, "HEAD");
-  responses.push(new Response(new Uint8Array([80, 75, 3, 4]), { headers: { "Content-Type": "application/octet-stream" } }));
+  responses.push(upstreamApk());
   assert.equal((await request("/releases/build-163.apk")).status, 200);
   assert.equal(calls[4].url, `${api}/releases/assets/42`);
   assert.equal(calls.length, 5);
@@ -292,11 +304,12 @@ test("historical build-163 downloads remain pinned after the latest feed has a m
 test("old cache schema cannot bypass manifest lookup and cached feeds still require the secret", async () => {
   cached.set(`${origin}/_release-cache/latest`, Response.json({ release: "build-99", assetId: 99 }));
   cached.set(`${origin}/_release-cache/v2/latest`, Response.json({ release: "build-99", assetId: 99 }));
+  cached.set(`${origin}/_release-cache/v3/latest`, Response.json({ release: "build-99", assetId: 99 }));
   responses.push(Response.json(withManifest()), new Response(JSON.stringify(manifest)));
   assert.equal((await (await request()).json()).commitSha, manifest.commitSha);
   assert.equal(calls.length, 2);
   assert.equal((await worker.fetch(new Request(`${origin}/latest.json`), {})).status, 503);
-  assert.equal((await request("/_release-cache/v3/latest")).status, 404);
+  assert.equal((await request("/_release-cache/v4/latest")).status, 404);
   assert.equal(calls.length, 2);
 });
 
@@ -305,7 +318,7 @@ test("download resolves only the requested tag and redirects without forwarding 
   responses.push(Response.json(release), new Response(null, { status: 302, headers: { Location: signedUrl } }));
   const response = await request("/releases/build-42.apk", {
     headers: { Authorization: "untrusted", Cookie: "untrusted", Range: "bytes=4-" },
-  });
+  }, legacyOrigin);
   assert.equal(response.status, 302);
   assert.equal(response.headers.get("Location"), signedUrl);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
@@ -329,7 +342,7 @@ test("binary and range responses stream with only approved headers", async () =>
         "Set-Cookie": "private", "X-Private-Header": "private",
       },
     }));
-    const response = await request("/releases/build-42.apk", { headers: { Range: "bytes=0-3", "If-Range": "test-etag" } });
+    const response = await request("/releases/build-42.apk", { headers: { Range: "bytes=0-3", "If-Range": "test-etag" } }, legacyOrigin);
     assert.equal(response.status, status);
     assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [80, 75, 3, 4]);
     assert.equal(response.headers.get("Content-Type"), "application/vnd.android.package-archive");
@@ -438,8 +451,8 @@ test("changes compare the exact installed SHA to the validated published SHA and
   const feed = await (await request()).json();
   assert.equal(feed.notes, undefined);
   assert.equal(feed.commits, undefined);
-  responses.push(new Response("APK", { headers: { "Content-Type": "application/octet-stream" } }));
-  assert.equal(await (await request("/releases/build-42.apk")).text(), "APK");
+  responses.push(upstreamApk());
+  assert.deepEqual([...new Uint8Array(await (await request("/releases/build-42.apk")).arrayBuffer())], apkBytes);
   assert.equal(calls.at(-1).url, `${api}/releases/assets/7`);
 });
 
@@ -468,7 +481,7 @@ test("comparison cache separates both SHAs and origins but reuses immutable pair
   assert.equal(calls.length, 12);
 
   // Metadata expiry refreshes owner-edited notes without refetching an immutable comparison.
-  cached.delete(`${origin}/_release-cache/v3/build-42`);
+  cached.delete(`${origin}/_release-cache/v4/build-42`);
   responses.push(Response.json({ ...withManifest(), body: "Edited notes" }), new Response(JSON.stringify(manifest)));
   assert.equal((await (await request(changesPath)).json()).notes, "Edited notes");
   assert.equal(calls.length, 14);
@@ -498,12 +511,12 @@ test("notes are bounded in UTF-16 and cached only after release and manifest val
     const changes = await (await request(changesPath)).json();
     assert.equal(changes.notes, typeof body === "string" ? body.slice(0, 4000) : "");
     assert.equal(changes.notesTruncated, typeof body === "string" && body.length > 4000);
-    const entry = cached.get(`${origin}/_release-cache/v3/build-42`);
+    const entry = cached.get(`${origin}/_release-cache/v4/build-42`);
     assert.equal(entry.headers.get("Cache-Control"), "public, max-age=60");
     assert.equal((await entry.clone().json()).notes, changes.notes);
   }
   cached.clear();
-  cached.set(`${origin}/_release-cache/v2/build-42`, Response.json({ release: "build-42", notes: "DO NOT EXPOSE" }));
+  cached.set(`${origin}/_release-cache/v3/build-42`, Response.json({ release: "build-42", notes: "DO NOT EXPOSE" }));
   responses.push(Response.json(release));
   assert.equal((await (await request(changesPath)).json()).notes, release.body);
   cached.clear();
@@ -617,8 +630,9 @@ test("unknown bases, throttling, server/parse/timeout failures and redirects nev
     assert.deepEqual(changes.commits, []);
     assert.equal(calls.length, count + 3);
     for (const entry of cached.values()) assert.doesNotMatch(await entry.clone().text(), /DO NOT EXPOSE|evil\.example|local-test-only/);
-    responses.push(new Response("APK", { headers: { "Content-Type": "application/octet-stream" } }));
-    assert.equal(await (await request("/releases/build-42.apk")).text(), "APK");
+    cached.delete(`${origin}/_apk-cache/v1/build-42/universal/${"a".repeat(64)}`);
+    responses.push(upstreamApk());
+    assert.deepEqual([...new Uint8Array(await (await request("/releases/build-42.apk")).arrayBuffer())], apkBytes);
   }
   assert.deepEqual(warnings, []);
 });
@@ -714,3 +728,99 @@ test("comparison cache failures do not prevent release notes from being returned
   assert.equal(changes.comparison, "unavailable");
   assert.deepEqual(changes.commits, []);
 });
+
+const split = abi => ({ id: 70 + ABIS.indexOf(abi), name: `app-${abi}-release.apk`, state: "uploaded", size: 8, digest: `sha256:${String(ABIS.indexOf(abi)).repeat(64)}` });
+const ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"];
+const splitRelease = { ...release, assets: [...release.assets, ...ABIS.map(split)] };
+
+test("APKs are cached at the edge so repeat downloads never reach GHES", async () => {
+  const media = "https://media.git.hoodnet.work/asset?signature=temporary-test-value";
+  responses.push(Response.json(release), new Response(null, { status: 302, headers: { Location: media } }), upstreamApk());
+  const first = await request("/releases/build-42.apk", { headers: { Cookie: "untrusted" } });
+  assert.equal(first.status, 200);
+  assert.deepEqual([...new Uint8Array(await first.arrayBuffer())], apkBytes);
+  assert.equal(first.headers.get("Content-Disposition"), 'attachment; filename="microcord-build-42.apk"');
+  assert.equal(first.headers.get("ETag"), `"${"a".repeat(64)}"`);
+  // The media fetch carries no GitHub or caller credentials and follows no further redirects.
+  assert.equal(calls[2].url, media);
+  assert.equal(calls[2].options.headers, undefined);
+  assert.equal(calls[2].options.redirect, "manual");
+  const entry = cached.get(`${origin}/_apk-cache/v1/build-42/universal/${"a".repeat(64)}`);
+  assert.equal(entry.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+  assert.equal(entry.headers.get("Content-Length"), "8");
+  for (let i = 0; i < 3; i++) {
+    const again = await request("/releases/build-42.apk");
+    assert.deepEqual([...new Uint8Array(await again.arrayBuffer())], apkBytes);
+  }
+  assert.equal((await request("/releases/build-42.apk", { method: "HEAD" })).status, 200);
+  assert.equal(calls.length, 3);
+});
+
+test("cached ranges are asked of the edge only while the client's validator still matches", async () => {
+  const ranges = [];
+  const match = globalThis.caches.default.match;
+  mock.method(globalThis.caches.default, "match", async key => {
+    if (key.url.includes("_apk-cache")) ranges.push(key.headers.get("Range"));
+    return match(key);
+  });
+  responses.push(Response.json(release), upstreamApk());
+  await request("/releases/build-42.apk", { headers: { Range: "bytes=4-" } });
+  await request("/releases/build-42.apk", { headers: { Range: "bytes=4-", "If-Range": `"${"a".repeat(64)}"` } });
+  await request("/releases/build-42.apk", { headers: { Range: "bytes=4-", "If-Range": '"stale"' } });
+  assert.deepEqual(ranges, ["bytes=4-", "bytes=4-", "bytes=4-", null]);
+});
+
+test("a short, ranged or non-APK upstream body is never cached", async () => {
+  for (const upstream of [
+    new Response("short", { headers: { "Content-Type": "application/octet-stream", "Content-Length": "5" } }),
+    upstreamApk({ "Content-Type": "text/html" }),
+    new Response(new Uint8Array(apkBytes), { status: 206, headers: { "Content-Type": "application/octet-stream", "Content-Length": "8" } }),
+  ]) {
+    cached.clear();
+    // The failed fill falls back to the redirect, which costs a second asset lookup.
+    responses.push(Response.json(release), upstream,
+      new Response(null, { status: 302, headers: { Location: "https://media.git.hoodnet.work/asset" } }));
+    const response = await request("/releases/build-42.apk");
+    assert.equal(response.status, 302);
+    assert.deepEqual([...cached.keys()], [`${origin}/_release-cache/v4/build-42`]);
+  }
+});
+
+test("releases list their per-architecture APKs, which download and redirect by architecture", async () => {
+  responses.push(Response.json(withManifestOf(splitRelease)), new Response(JSON.stringify(manifest)));
+  const feed = await (await request()).json();
+  assert.equal(feed.apkUrl, `${origin}/releases/build-42.apk`);
+  assert.deepEqual(feed.apks["arm64-v8a"], {
+    apkUrl: `${origin}/releases/build-42-arm64-v8a.apk`, sha256: "0".repeat(64), size: 8,
+  });
+  assert.deepEqual(Object.keys(feed.apks), ABIS);
+  const latest = await request("/latest-arm64-v8a.apk");
+  assert.equal(latest.headers.get("Location"), `${origin}/releases/build-42-arm64-v8a.apk`);
+  assert.equal((await request("/latest.apk")).headers.get("Location"), `${origin}/releases/build-42.apk`);
+  responses.push(Response.json(splitRelease), upstreamApk());
+  const apk = await request("/releases/build-42-x86.apk");
+  assert.equal(apk.status, 200);
+  assert.equal(apk.headers.get("Content-Disposition"), 'attachment; filename="microcord-build-42-x86.apk"');
+  assert.equal(calls.at(-1).url, `${api}/releases/assets/73`);
+  assert.ok(cached.has(`${origin}/_apk-cache/v1/build-42/x86/${"3".repeat(64)}`));
+  for (const path of ["/latest-mips.apk", "/releases/build-42-mips.apk", "/releases/build-42-arm64-v8a/changes.json"]) {
+    assert.equal((await request(path)).status, 404);
+  }
+});
+
+test("releases from before the split fall back to the universal APK", async () => {
+  responses.push(Response.json(release));
+  assert.equal((await request("/latest-arm64-v8a.apk")).headers.get("Location"), `${origin}/releases/build-42.apk`);
+  assert.equal((await (await request()).json()).apks, undefined);
+  responses.push(Response.json(release));
+  const missing = await request("/releases/build-42-arm64-v8a.apk");
+  assert.equal(missing.status, 404);
+  // A split with a broken digest fails the whole release closed, like a broken universal APK.
+  responses.push(Response.json({ ...release, assets: [...release.assets, { ...split("x86"), digest: null }] }));
+  assert.equal((await request("/releases/build-42.apk", {}, legacyOrigin)).status, 503);
+});
+
+function withManifestOf(base) {
+  const body = JSON.stringify(manifest);
+  return { ...base, assets: [...base.assets, { id: 8, name: "update-manifest.json", state: "uploaded", size: Buffer.byteLength(body) }] };
+}

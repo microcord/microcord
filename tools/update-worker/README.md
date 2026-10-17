@@ -1,7 +1,7 @@
 # Manticord Release Downloads
 
-Cloudflare Worker exposing published, non-prerelease `build-N` releases' `app-release.apk`
-assets and validated build metadata from `git.hoodnet.work/firecord/microcord`. The repository
+Cloudflare Worker exposing published, non-prerelease `build-N` releases' APKs (the universal
+`app-release.apk` and the per-architecture `app-<abi>-release.apk` splits) and validated build metadata from `git.hoodnet.work/firecord/microcord`. The repository
 and other assets remain private. Selected APKs, bounded published release notes and commit titles
 between the installed and published build SHAs are intentionally public. Keep credentials and
 private information out of release notes and commit titles. Draft/prerelease notes, author data,
@@ -29,10 +29,16 @@ or the Android app. Local `.env*` and `.dev.vars*` files are ignored. The Worker
 
 - `GET /latest.json`: `release`, `publishedAt`, `apkUrl`, `sha256`, `size`, plus `commitSha`,
   `commitTimestamp`, `versionCode`, `versionName`, `packageName` when a valid manifest is attached.
+  When the release has per-architecture APKs, `apks` maps each ABI (`arm64-v8a`, `armeabi-v7a`,
+  `x86_64`, `x86`) to its own `apkUrl`, `sha256` and `size`. The app downloads the first one its
+  `Build.SUPPORTED_ABIS` lists, and the universal APK otherwise; older clients ignore `apks`.
 - `GET /latest.apk`: redirects to the latest published release's version-pinned APK URL.
   The redirect is not cached; release selection uses the same 60-second metadata cache as
   `latest.json`. Share https://microcord.mantikafasi.dev/latest.apk as the stable download link.
-- `GET /releases/build-163.apk`: that exact published release's APK, not whichever is latest.
+- `GET /latest-arm64-v8a.apk` (and the other ABIs): redirects to the latest release's APK for that
+  architecture, or to its universal APK when the release predates the split.
+- `GET /releases/build-163.apk`: that exact published release's universal APK, not whichever is latest.
+- `GET /releases/build-218-arm64-v8a.apk` (and the other ABIs): that release's APK for one architecture.
 - `GET /releases/build-166/changes.json?from=<installed SHA>`: notes and commit titles for that
   exact published APK. Requires exactly one `from` parameter containing a full 40-hex installed
   commit SHA (case-insensitive, returned lowercase). No repository, branch or other inputs.
@@ -45,6 +51,14 @@ redirects restricted to the observed `https://media.git.hoodnet.work` origin, or
 binary 200/206 response. Redirects are not cached; upstream credentials/cookies are never
 forwarded to the user or to the download host. Single byte ranges are forwarded for resuming.
 No APK buffering, storage bucket, database or custom URL-signing service is needed.
+
+APK bytes are kept in each Cloudflare data center's edge cache, keyed by tag, architecture and
+asset digest (internal schema `apk-cache/v1`, `immutable`). The first GET in a data center streams
+the whole asset from GHES (following the media redirect without credentials) straight into the
+cache, then answers from it; later downloads there, including resumed ranges, never reach GHES.
+A body whose status, type or length does not match the release asset is not cached. HEAD misses,
+failed fills and the `workers.dev` fallback (which has no edge cache) use the redirect/stream
+path above. The cache is per data center and may be evicted; each data center refills once.
 
 `release` is a GitHub tag, **not Android versionCode**. Historical `build-163` has no manifest:
 its feed retains the original five fields and its versioned APK remains downloadable. All five
@@ -123,8 +137,11 @@ bash scripts/build.sh :app:assembleRelease :app:generateReleaseUpdateManifest
 ```
 
 Task `:app:generateReleaseUpdateManifest` depends on release assembly and consumes AGP's APK
-artifact/output metadata. It requires the single produced `app-release.apk`, checks the package
-and version, and streams SHA-256 over that final signed APK without loading it into memory.
+artifact/output metadata. Release builds produce `app-universal-release.apk` plus one APK per architecture; the task requires
+all five, checks the package and version, and streams SHA-256 over the universal APK without
+loading it into memory. The workflow publishes the universal APK as `app-release.apk` beside the
+splits. The splits share the universal APK's build identity, so the manifest describes only the
+universal APK; the Worker takes the splits' digests and sizes from GitHub's release assets.
 Output: `app/build/outputs/update/release/update-manifest.json`.
 
 The UTF-8 JSON object contains:

@@ -1,6 +1,10 @@
 const API = "https://git.hoodnet.work/api/v3/repos/microcord/microcord";
 const DOWNLOAD_ORIGIN = "https://media.git.hoodnet.work";
 const APK_NAME = "app-release.apk";
+const ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"];
+const ABI_PATTERN = "arm64-v8a|armeabi-v7a|x86_64|x86";
+// Release APKs are immutable per tag and digest; the edge keeps them so downloads don't hit GHES.
+const APK_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const MANIFEST_NAME = "update-manifest.json";
 const MAX_MANIFEST_BYTES = 16 * 1024;
 const MAX_COMPARE_BYTES = 4 * 1024 * 1024;
@@ -98,8 +102,16 @@ async function readManifest(asset, token, metadata) {
   };
 }
 
+function apkDigest(asset) {
+  const digest = /^sha256:([a-f0-9]{64})$/i.exec(asset.digest);
+  if (!digest || !Number.isSafeInteger(asset.id) || asset.id <= 0 || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
+    throw new Error("Invalid release metadata");
+  }
+  return digest[1].toLowerCase();
+}
+
 async function releaseMetadata(tag, token, origin) {
-  const cacheKey = new Request(`${origin}/_release-cache/v3/${tag ?? "latest"}`);
+  const cacheKey = new Request(`${origin}/_release-cache/v4/${tag ?? "latest"}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
@@ -119,19 +131,24 @@ async function releaseMetadata(tag, token, origin) {
       !RELEASE_TAG.test(release.tag_name) || (tag && release.tag_name !== tag)) return null;
   const apk = release.assets?.find(asset => asset.name === APK_NAME && asset.state === "uploaded");
   if (!apk) return null;
-  const digest = /^sha256:([a-f0-9]{64})$/i.exec(apk.digest);
-  if (!digest || !Number.isSafeInteger(apk.id) || apk.id <= 0 ||
-      !Number.isSafeInteger(apk.size) || apk.size <= 0 ||
-      typeof release.published_at !== "string" || !Number.isFinite(Date.parse(release.published_at))) {
+  const digest = apkDigest(apk);
+  if (typeof release.published_at !== "string" || !Number.isFinite(Date.parse(release.published_at))) {
     throw new Error("Invalid release metadata");
+  }
+  // Per-architecture splits of the same build; releases from before the split have none.
+  const abis = {};
+  for (const abi of ABIS) {
+    const split = release.assets.find(asset => asset.name === `app-${abi}-release.apk` && asset.state === "uploaded");
+    if (split) abis[abi] = { assetId: split.id, sha256: apkDigest(split), size: split.size };
   }
   // Release notes are intentionally public; cache only bounded notes and validated APK metadata.
   const metadata = {
     release: release.tag_name,
     publishedAt: release.published_at,
     assetId: apk.id,
-    sha256: digest[1].toLowerCase(),
+    sha256: digest,
     size: apk.size,
+    abis,
     notes: typeof release.body === "string" ? release.body.slice(0, 4000) : "",
     notesTruncated: typeof release.body === "string" && release.body.length > 4000,
   };
@@ -208,11 +225,11 @@ async function compareCommits(fromSha, toSha, token, origin) {
   return result;
 }
 
-async function handle(request, env) {
+async function handle(request, env, ctx) {
   const url = new URL(request.url);
   const latest = url.pathname === "/latest.json";
-  const latestApk = url.pathname === "/latest.apk";
-  const download = /^\/releases\/(build-[1-9]\d{0,9})\.apk$/.exec(url.pathname);
+  const latestApk = new RegExp(`^/latest(?:-(${ABI_PATTERN}))?\\.apk$`).exec(url.pathname);
+  const download = new RegExp(`^/releases/(build-[1-9]\\d{0,9})(?:-(${ABI_PATTERN}))?\\.apk$`).exec(url.pathname);
   const changes = /^\/releases\/(build-[1-9]\d{0,9})\/changes\.json$/.exec(url.pathname);
   const from = url.searchParams.get("from");
   if ((!latest && !latestApk && !download && !changes) ||
@@ -230,10 +247,14 @@ async function handle(request, env) {
   const release = await releaseMetadata(download?.[1] ?? changes?.[1], env.GITHUB_TOKEN, url.origin);
   if (!release) return error(404, "No published APK available");
 
-  if (latestApk) return new Response(null, { status: 302, headers: {
-    Location: `${url.origin}/releases/${release.release}.apk`,
-    "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
-  } });
+  if (latestApk) {
+    // A release from before the split has no APK for the architecture; the universal one installs everywhere.
+    const abi = latestApk[1] && release.abis?.[latestApk[1]] ? `-${latestApk[1]}` : "";
+    return new Response(null, { status: 302, headers: {
+      Location: `${url.origin}/releases/${release.release}${abi}.apk`,
+      "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+    } });
+  }
 
   if (changes) {
     const fromSha = from.toLowerCase();
@@ -255,7 +276,7 @@ async function handle(request, env) {
   }
 
   if (latest) {
-    return Response.json({
+    const feed = {
       release: release.release,
       publishedAt: release.publishedAt,
       apkUrl: `${url.origin}/releases/${release.release}.apk`,
@@ -266,13 +287,27 @@ async function handle(request, env) {
       versionCode: release.versionCode,
       versionName: release.versionName,
       packageName: release.packageName,
-    }, { headers: { "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" } });
+    };
+    const abis = Object.entries(release.abis ?? {});
+    if (abis.length) {
+      feed.apks = Object.fromEntries(abis.map(([abi, apk]) => [abi, {
+        apkUrl: `${url.origin}/releases/${release.release}-${abi}.apk`, sha256: apk.sha256, size: apk.size,
+      }]));
+    }
+    return Response.json(feed, { headers: { "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" } });
   }
+
+  const abi = download[2];
+  const apk = abi ? release.abis?.[abi] : release;
+  if (!apk) return error(404, "No APK for this architecture in that release");
+  const filename = `microcord-${release.release}${abi ? `-${abi}` : ""}.apk`;
+  const cached = await cachedApk(request, url, release.release, abi, apk, env.GITHUB_TOKEN);
+  if (cached) return apkResponse(cached, filename);
 
   const headers = githubHeaders(env.GITHUB_TOKEN, "application/octet-stream");
   if (range) headers.Range = range;
   if (range && request.headers.has("If-Range")) headers["If-Range"] = request.headers.get("If-Range");
-  const response = await fetch(`${API}/releases/assets/${release.assetId}`, {
+  const response = await fetch(`${API}/releases/assets/${apk.assetId}`, {
     method: request.method,
     headers,
     redirect: "manual",
@@ -291,30 +326,91 @@ async function handle(request, env) {
   }
   if (response.status === 404) return error(404, "APK is no longer available");
   if (response.status === 416) return error(416, "Requested range is not available");
-  const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
-  if (![200, 206].includes(response.status) ||
-      !["application/octet-stream", "application/vnd.android.package-archive"].includes(contentType)) {
+  if (![200, 206].includes(response.status) || !isApkType(response)) {
     await response.body?.cancel();
     throw new Error("APK download failed");
   }
+  // Do not buffer APKs or attach a short timeout to a potentially long-running download.
+  return apkResponse(response, filename);
+}
+
+function isApkType(response) {
+  const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+  return ["application/octet-stream", "application/vnd.android.package-archive"].includes(contentType);
+}
+
+function apkResponse(response, filename) {
   const outgoing = new Headers({
     "Content-Type": "application/vnd.android.package-archive",
-    "Content-Disposition": `attachment; filename="manticord-${release.release}.apk"`,
+    "Content-Disposition": `attachment; filename="${filename}"`,
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   });
   for (const name of ["Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"]) {
     if (response.headers.has(name)) outgoing.set(name, response.headers.get(name));
   }
-  // Do not buffer APKs or attach a short timeout to a potentially long-running download.
   return new Response(response.body, { status: response.status, headers: outgoing });
 }
 
+/**
+ * The APK from this data center's edge cache, filling it on a GET miss so later downloads here never
+ * reach GHES. Keyed by tag, architecture and digest, so a republished asset is never served stale.
+ *
+ * `null` when the cache cannot be used: workers.dev has none, a HEAD miss should not pull a whole
+ * APK, and a failed fill leaves nothing behind. The caller then falls back to redirecting to GHES.
+ */
+async function cachedApk(request, url, tag, abi, apk, token) {
+  if (url.hostname.endsWith(".workers.dev")) return null;
+  const key = `${url.origin}/_apk-cache/v1/${tag}/${abi ?? "universal"}/${apk.sha256}`;
+  const lookup = () => {
+    const headers = new Headers();
+    const range = request.headers.get("Range");
+    const ifRange = request.headers.get("If-Range");
+    // A different If-Range validator means the client holds part of other bytes: send them all.
+    if (range && (!ifRange || ifRange === `"${apk.sha256}"`)) headers.set("Range", range);
+    return caches.default.match(new Request(key, { headers }));
+  };
+  try {
+    const hit = await lookup();
+    if (hit || request.method !== "GET") return hit ?? null;
+    if (!await fillApkCache(key, apk, token)) return null;
+    return await lookup() ?? null;
+  } catch (cause) {
+    console.warn("APK cache unavailable", cause?.name ?? "Error");
+    return null;
+  }
+}
+
+/** Streams the whole APK from GHES into the edge cache; the bytes never pass through this Worker's memory. */
+async function fillApkCache(key, apk, token) {
+  let response = await fetch(`${API}/releases/assets/${apk.assetId}`, {
+    headers: githubHeaders(token, "application/octet-stream"),
+    redirect: "manual",
+  });
+  if (response.status === 302) {
+    await response.body?.cancel();
+    // Never reuse authenticated API headers on the media host.
+    response = await fetch(downloadLocation(response).href, { redirect: "manual", credentials: "omit" });
+  }
+  if (response.status !== 200 || !isApkType(response) || response.headers.get("Content-Length") !== String(apk.size)) {
+    await response.body?.cancel();
+    return false;
+  }
+  await caches.default.put(new Request(key), new Response(response.body, { headers: {
+    "Content-Type": "application/vnd.android.package-archive",
+    "Content-Length": String(apk.size),
+    "ETag": `"${apk.sha256}"`,
+    "Accept-Ranges": "bytes",
+    "Cache-Control": APK_CACHE_CONTROL,
+  } }));
+  return true;
+}
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     let response;
     try {
-      response = await handle(request, env);
+      response = await handle(request, env, ctx);
     } catch (cause) {
       // Upstream errors can contain private URLs or credentials; do not relay or log them.
       const kind = ["TypeError", "SyntaxError", "TimeoutError", "AbortError"].includes(cause?.name) ? cause.name : "Error";
