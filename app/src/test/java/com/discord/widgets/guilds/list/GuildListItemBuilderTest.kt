@@ -1,11 +1,13 @@
 package com.discord.widgets.guilds.list
 
 import com.discord.api.channel.Channel
+import com.discord.api.guild.GuildFeature
 import com.discord.api.notification.AccountNotificationSettings
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreGuildsSorted
+import com.discord.utilities.SnowflakeUtils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -302,6 +304,41 @@ class GuildListItemBuilderTest {
         assertFalse(items.filterIsInstance<GuildListItem.GuildItem>().single().isUnread)
     }
 
+    /** Under opt-in, a channel the viewer never chose only lights the server when it pings them (RN `canBeUnread`). */
+    @Test fun optInGuildIgnoresUnreadsInChannelsNotOptedInto() {
+        val community = Guild(id = 1L, name = "Guild 1", features = setOf(GuildFeature.COMMUNITY))
+        val settings = ModelNotificationSettings(
+            guildId = 1L,
+            flags = GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(channelId = 90L, flags = ChannelNotificationSettingsFlags.OPT_IN_ENABLED),
+            ),
+        )
+        val now = SnowflakeUtils.fromTimestamp(System.currentTimeMillis())
+        fun dot(unread: Long, mentions: Map<Long, Int> = emptyMap(), recentlyRead: Set<Long> = emptySet()) = GuildListItemBuilder.buildItems(
+            storeState(
+                recentlyReadChannelIds = recentlyRead,
+                sortedGuilds = listOf(StoreGuildsSorted.Entry.SingletonGuild(community)),
+                unreadGuildIds = setOf(1L),
+                unreadChannelIds = setOf(unread),
+                mentionCounts = mentions,
+                channelIds = mapOf(1L to listOf(11L, 12L)),
+                channels = mapOf(
+                    11L to channel(11L, 1L, Channel.GUILD_TEXT).copy(lastMessageId = now),
+                    12L to channel(12L, 1L, Channel.GUILD_TEXT).copy(lastMessageId = now, parentId = 90L),
+                ),
+                guildSettings = mapOf(1L to settings),
+            ),
+        ).filterIsInstance<GuildListItem.GuildItem>().single().isUnread
+
+        assertFalse(dot(11L))
+        assertTrue(dot(11L, mapOf(11L to 1)))
+        // A channel read in the last 3 days still counts.
+        assertTrue(dot(11L, recentlyRead = setOf(11L)))
+        // Opting into a category opts in its channels.
+        assertTrue(dot(12L))
+    }
+
     private fun singleton(guildId: Long) = StoreGuildsSorted.Entry.SingletonGuild(guild(guildId))
 
     private fun folder(id: Long, guildIds: List<Long>) =
@@ -339,7 +376,9 @@ class GuildListItemBuilderTest {
         privateChannels: Map<Long, Channel> = emptyMap(),
         isNewUser: Boolean = false,
         accountNotificationSettings: AccountNotificationSettings = AccountNotificationSettings(),
+        recentlyReadChannelIds: Set<Long> = emptySet(),
     ) = WidgetGuildsListViewModel.StoreState(
+        recentlyReadChannelIds = recentlyReadChannelIds,
         selectedGuildId = selectedGuildId,
         selectedVoiceChannelId = 0L,
         guildSettings = guildSettings,

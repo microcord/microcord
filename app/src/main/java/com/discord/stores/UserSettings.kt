@@ -22,6 +22,7 @@ import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.Preloaded
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.SwipeRightToLeftMode
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings.Theme
 import java.util.Locale
+import rx.Observable
 
 /**
  * The settings the app reads. An unset wrapper means the user has never chosen, so every setting
@@ -219,6 +220,15 @@ object UserSettings {
             SwipeRightToLeftMode.SWIPE_RIGHT_TO_LEFT_MODE_SWIPE_RIGHT_TO_LEFT_CHANNEL_DETAILS
         }
     }
+
+    /** When each guild's opt-in Recents were last dismissed, in epoch millis. This client never dismisses them. */
+    fun observeGuildRecentsDismissedAt(): Observable<Map<Long, Long>> = store.observeSettings()
+        .map { proto ->
+            proto.guilds.guildsMap.filterValues { it.hasGuildRecentsDismissedAt() }
+                .mapValues { (_, guild) -> guild.guildRecentsDismissedAt.run { seconds * 1000 + nanos / 1_000_000 } }
+        }
+        .distinctUntilChanged()
+        .doOnSubscribe { store.loadIfNecessary() }
 
     val developerMode = setting({ it.appearance.developerMode }) { appearanceBuilder.developerMode = it }
 

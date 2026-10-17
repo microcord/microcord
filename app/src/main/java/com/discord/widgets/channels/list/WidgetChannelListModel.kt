@@ -154,6 +154,8 @@ data class WidgetChannelListModel(
         val channelPermissions: Map<Long, Long>,
         val ableToInstantInvite: Boolean,
         val unelevated: Boolean,
+        /** Read lately, so listed under opt-in although not opted into ([StoreReadStates.observeRecentlyReadChannelIds]). */
+        val recentlyReadChannelIds: Set<Long> = emptySet(),
     )
 
     /** Thread inputs, grouped so [get] stays inside rx's 9-argument `combineLatest` limit. */
@@ -501,7 +503,8 @@ data class WidgetChannelListModel(
             StoreStream.getUserGuildSettings().observeHideMutedChannels(guildId),
             StoreStream.getPermissions().observePermissionsForGuild(guildId),
             StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
-        ) { me, guild, roles, settings, hideMuted, guildPermissions, channelPermissions ->
+            StoreStream.getReadStates().observeRecentlyReadChannelIds(),
+        ) { me, guild, roles, settings, hideMuted, guildPermissions, channelPermissions, recentlyRead ->
             GuildInfo(
                 guild = guild,
                 // The @everyone role always carries the guild's own id.
@@ -519,6 +522,7 @@ data class WidgetChannelListModel(
                 unelevated = guild != null &&
                     (Permission.ELEVATED and (guildPermissions ?: Permission.NONE)) != 0L &&
                     !PermissionUtils.isElevated(me.mfaEnabled, guild.mfaLevel),
+                recentlyReadChannelIds = recentlyRead,
             )
         }.distinctUntilChanged()
 
@@ -846,8 +850,10 @@ data class WidgetChannelListModel(
                                 !(!isCategoryMuted && !isMuted && unread)
                             val mutedAway = isMuted && guild.hideMutedChannels
                             // Under opt-in the list is only what the viewer asked for, so a
-                            // channel they never opted into is hidden however loud it is.
-                            val notOptedIn = isOptInEnabled(guild) && !isOptedIn(textChannel, guild)
+                            // channel they never opted into is hidden unless it pings them or they
+                            // read it lately. RN lists those under a Recents section instead.
+                            val notOptedIn = isOptInEnabled(guild) && !isOptedIn(textChannel, guild) &&
+                                mentionCount <= 0 && id !in guild.recentlyReadChannelIds
                             val result = !inFocus &&
                                 areAllChildThreadsRead(id) &&
                                 (collapsedAway || mutedAway || notOptedIn)

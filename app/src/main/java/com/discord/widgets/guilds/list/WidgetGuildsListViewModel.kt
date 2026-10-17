@@ -401,6 +401,8 @@ class WidgetGuildsListViewModel(
         val allChannelPermissions: Map<Long, Long>,
         val isLeftPanelOpened: Boolean,
         val isOnHomeTab: Boolean,
+        /** Read lately, so counted under opt-in although not opted into ([StoreReadStates.observeRecentlyReadChannelIds]). */
+        val recentlyReadChannelIds: Set<Long> = emptySet(),
     )
 
     companion object {
@@ -458,6 +460,7 @@ class WidgetGuildsListViewModel(
                 allChannelPermissions = permissions,
                 isLeftPanelOpened = isLeftPanelOpened,
                 isOnHomeTab = isOnHomeTab,
+                recentlyReadChannelIds = second.recentlyReadChannelIds,
             )
         }.leadingEdgeThrottle(100L, TimeUnit.MILLISECONDS)
 
@@ -508,8 +511,9 @@ class WidgetGuildsListViewModel(
             ) { accountSettings, lowImportanceChannels, joinedThreads ->
                 Triple(accountSettings, lowImportanceChannels, joinedThreads.keys)
             },
+            StoreStream.getReadStates().observeRecentlyReadChannelIds(),
         ) { guildJoinRequests, pendingGuilds, guildIds, stageEvents, scheduledEvents, channels,
-            unreadChannelIds, notifications ->
+            unreadChannelIds, notifications, recentlyRead ->
             SecondChunk(
                 guildJoinRequests = guildJoinRequests,
                 pendingGuilds = pendingGuilds,
@@ -521,6 +525,7 @@ class WidgetGuildsListViewModel(
                 accountNotificationSettings = notifications.first,
                 lowImportanceMentionChannels = notifications.second,
                 joinedThreadIds = notifications.third,
+                recentlyReadChannelIds = recentlyRead,
             )
         }
 
@@ -548,6 +553,7 @@ class WidgetGuildsListViewModel(
             val accountNotificationSettings: AccountNotificationSettings,
             val lowImportanceMentionChannels: Set<Long>,
             val joinedThreadIds: Set<Long>,
+            val recentlyReadChannelIds: Set<Long>,
         )
     }
 }

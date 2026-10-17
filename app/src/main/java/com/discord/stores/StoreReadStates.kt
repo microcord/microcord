@@ -11,6 +11,7 @@ import com.discord.models.application.Unread
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.stores.StoreMessageAck.Ack
 import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
+import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.persister.Persister
@@ -64,6 +65,24 @@ class StoreReadStates(private val clock: Clock) : Store() {
         markAsRead.onNext(false)
         StoreStream.getMessageAck().ack(channelId, false, false)
     }
+
+    /**
+     * Channels read in the last 3 days and since their guild's Recents were last dismissed. Under
+     * opt-in these stay listed and can be unread although the viewer never opted in (RN
+     * `ReadState.hasRecentlyVisitedAndRead`).
+     */
+    fun observeRecentlyReadChannelIds(): Observable<Set<Long>> = Observable.combineLatest(
+        StoreStream.getMessageAck().observeAll(),
+        StoreStream.getChannels().observeGuildAndPrivateChannels(),
+        UserSettings.observeGuildRecentsDismissedAt(),
+    ) { acks, channels, dismissedAt ->
+        val cutoff = System.currentTimeMillis() - RECENTLY_READ_MS
+        acks.filter { (channelId, ack) ->
+            val readAt = SnowflakeUtils.toTimestamp(ack.messageId)
+            val guildId = channels[channelId]?.guildId ?: return@filter false
+            readAt > cutoff && readAt > (dismissedAt[guildId] ?: 0L)
+        }.keys
+    }.distinctUntilChanged()
 
     fun observeUnreadCountForChannel(channelId: Long, since: UtcDateTime? = null): Observable<Int> =
         Observable.combineLatest(
@@ -215,6 +234,7 @@ class StoreReadStates(private val clock: Clock) : Store() {
     companion object {
         const val UNREAD_MARKER_CACHE_KEY = "UNREAD_MESSAGE_MARKER_V3"
         private const val DISCORD_EPOCH = 1_420_070_400_000L
+        private const val RECENTLY_READ_MS = 3 * 24 * 60 * 60 * 1000L
 
         internal fun markerFor(channelId: Long, ackAtSwitch: Ack?, liveAck: Ack?, mostRecentMessageId: Long) =
             Unread.Marker(

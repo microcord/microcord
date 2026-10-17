@@ -3,6 +3,7 @@ package com.discord.widgets.guilds.list
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isStageVoiceChannel
+import com.discord.api.guild.GuildFeature
 import com.discord.api.notification.UnreadSetting
 import com.discord.api.permission.Permission
 import com.discord.models.domain.ModelNotificationSettings
@@ -312,7 +313,8 @@ internal object GuildListItemBuilder {
     private fun hasCountableUnread(guild: Guild, storeState: StoreState): Boolean {
         val guildChannelIds = storeState.channelIds[guild.id] ?: return false
         val settings = storeState.guildSettings[guild.id]
-        val optInEnabled = settings?.isOptInChannelsEnabled == true
+        // Opt-in only applies to community guilds, as in the channel list.
+        val optInEnabled = settings?.isOptInChannelsEnabled == true && GuildFeature.COMMUNITY in guild.features
         return guildChannelIds.any { channelId ->
             if (channelId !in storeState.unreadChannelIds) return@any false
             val channel = storeState.channels[channelId] ?: return@any false
@@ -332,6 +334,11 @@ internal object GuildListItemBuilder {
             // Under opt-in a stale channel stops counting: the list is meant to be what the
             // viewer chose, and week-old traffic in everything else would keep the dot lit.
             if (optInEnabled && isDecayed(channel)) return@any false
+            // Nor does a channel the viewer never opted into, unless it pings them or they read it
+            // lately; the list hides the rest, so they would light a dot nobody can trace (RN `canBeUnread`).
+            if (optInEnabled && mentions == 0 && !channel.isThread() && !isOptedIn(channel, settings) &&
+                channelId !in storeState.recentlyReadChannelIds
+            ) return@any false
             // Only a computed permission can rule a channel out; an absent one means permissions
             // have not been calculated yet, and a missing dot is worse than a late one.
             val computed = storeState.allChannelPermissions[channelId]
@@ -349,6 +356,11 @@ internal object GuildListItemBuilder {
     private const val RESOURCE_CHANNEL_FLAG = 1L shl 7
 
     /** Matches the reference's seven-day `decayedReadStateCutoff`. */
+    /** A category the viewer opted into carries its channels with it. */
+    private fun isOptedIn(channel: Channel, settings: ModelNotificationSettings?): Boolean =
+        settings?.getChannelOverride(channel.id)?.isOptedIn == true ||
+            channel.parentId != 0L && settings?.getChannelOverride(channel.parentId)?.isOptedIn == true
+
     private fun isDecayed(channel: Channel?): Boolean {
         val lastMessageId = channel?.lastMessageId ?: return false
         if (lastMessageId == 0L) return false

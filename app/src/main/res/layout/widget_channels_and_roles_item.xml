@@ -6,7 +6,7 @@
         <TextView android:id="@+id/title" android:maxLines="1" android:ellipsize="end" style="@style/UiKit.TextView.Semibold"/>
         <TextView android:id="@+id/subtitle" android:visibility="gone" android:layout_marginTop="2dp" android:maxLines="2" android:ellipsize="end" style="@style/UiKit.TextView.Subtext"/>
     </LinearLayout>
-    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/checkbox" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center"/>
+    <com.google.android.material.checkbox.MaterialCheckBox android:id="@+id/checkbox" android:buttonTint="?attr/colorCompoundButton" android:layout_width="48dp" android:layout_height="48dp" android:gravity="center"/>
     </LinearLayout>
     <View android:id="@+id/divider" android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="56dp" android:background="?attr/colorBackgroundModifierAccent"/>
 </LinearLayout>
