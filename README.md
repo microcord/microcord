@@ -47,6 +47,12 @@ full verification.
 
 ## Build from Source
 
+> **Building from the GitHub mirror?** [github.com/microcord/microcord](https://github.com/microcord/microcord)
+> is a source-only mirror of [git.hoodnet.work/microcord/microcord](https://git.hoodnet.work/microcord/microcord).
+> It leaves out the files recovered from Discord (native libraries, assets, images, fonts, sounds
+> and most resource XML), the signing key and the Firebase config, so it does not build on its own.
+> The upstream repository has everything.
+
 ### Requirements
 
 - A Git checkout, including the checked-in resources and `third_party` artifacts.
