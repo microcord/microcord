@@ -2,6 +2,8 @@ package com.discord.widgets.settings.profile
 
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.InsetDrawable
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
@@ -22,6 +24,7 @@ import com.discord.databinding.BottomSheetSimpleSelectorItemBinding
 import com.discord.databinding.ProfileColorPickerDialogBinding
 import com.discord.databinding.ProfileRecentAvatarItemBinding
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rest.RestAPI
@@ -254,7 +257,13 @@ class ProfileColorPickerDialog : AppDialog(R.layout.profile_color_picker_dialog)
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        dialog?.window?.apply {
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            // The picker sizes its width from its height, so a wrap_content window came out narrow
+            // (more so with the alpha slider) and squeezed the Select button off the button row.
+            setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
+            setBackgroundDrawable(InsetDrawable(ColorDrawable(Color.TRANSPARENT), dpToPixels(16)))
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
