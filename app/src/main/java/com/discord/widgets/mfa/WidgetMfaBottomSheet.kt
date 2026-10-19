@@ -4,11 +4,10 @@ import android.content.DialogInterface
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.annotation.MainThread
 import androidx.fragment.app.FragmentManager
 import com.discord.R
+import com.discord.databinding.WidgetMfaBottomSheetBinding
 import com.discord.api.auth.mfa.FinishMfaRequestBody
 import com.discord.api.auth.mfa.MfaChallenge
 import com.discord.api.auth.mfa.MfaMethod
@@ -22,9 +21,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.extensions.getTextOrEmpty
-import com.discord.views.LoadingButton
 import com.discord.widgets.mfa.WidgetMfaMethodSheet.Companion.addMethodRow
-import com.google.android.material.textfield.TextInputLayout
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
@@ -38,12 +35,7 @@ private const val ARG_CHALLENGE_ID = "INTENT_EXTRA_MFA_CHALLENGE_ID"
  */
 class WidgetMfaBottomSheet : AppBottomSheet() {
 
-    private lateinit var title: TextView
-    private lateinit var body: TextView
-    private lateinit var methodList: LinearLayout
-    private lateinit var codeWrap: TextInputLayout
-    private lateinit var switchMethod: TextView
-    private lateinit var confirm: LoadingButton
+    private lateinit var binding: WidgetMfaBottomSheetBinding
 
     private val challengeId: String by lazy { argumentsOrDefault.getString(ARG_CHALLENGE_ID, "") }
     private val challenge: MfaChallenge? by lazy { challenges[challengeId] }
@@ -60,17 +52,14 @@ class WidgetMfaBottomSheet : AppBottomSheet() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        title = view.findViewById(R.id.mfa_title)
-        body = view.findViewById(R.id.mfa_body)
-        methodList = view.findViewById(R.id.mfa_method_list)
-        codeWrap = view.findViewById(R.id.mfa_code_wrap)
-        switchMethod = view.findViewById(R.id.mfa_switch_method)
-        confirm = view.findViewById(R.id.mfa_confirm)
+        binding = WidgetMfaBottomSheetBinding.bind(view)
+        // Fully open and resized for the keyboard, so the code field's Confirm button stays visible.
+        setBottomSheetCollapsedStateDisabled()
 
         val challenge = challenge ?: return deliverAndDismiss(null)
-        switchMethod.setOnClickListener { showChooser() }
-        confirm.setOnClickListener { submit() }
-        codeWrap.editText?.setOnEditorActionListener { _, _, _ -> submit(); true }
+        binding.mfaSwitchMethod.setOnClickListener { showChooser() }
+        binding.mfaConfirm.setOnClickListener { submit() }
+        binding.mfaCodeWrap.editText?.setOnEditorActionListener { _, _, _ -> submit(); true }
 
         // One offered method is not a choice; go straight to it.
         challenge.methods.singleOrNull()?.let(::select) ?: showChooser()
@@ -89,36 +78,36 @@ class WidgetMfaBottomSheet : AppBottomSheet() {
     private fun showChooser() {
         val challenge = challenge ?: return
         selected = null
-        title.setText(R.string.mfa_v2_choose)
-        body.visibility = View.VISIBLE
-        body.setText(R.string.mfa_v2_choose_description)
-        codeWrap.visibility = View.GONE
-        confirm.visibility = View.GONE
-        switchMethod.visibility = View.GONE
-        methodList.visibility = View.VISIBLE
-        methodList.removeAllViews()
+        binding.mfaTitle.setText(R.string.mfa_v2_choose)
+        binding.mfaBody.visibility = View.VISIBLE
+        binding.mfaBody.setText(R.string.mfa_v2_choose_description)
+        binding.mfaCodeWrap.visibility = View.GONE
+        binding.mfaConfirm.visibility = View.GONE
+        binding.mfaSwitchMethod.visibility = View.GONE
+        binding.mfaMethodList.visibility = View.VISIBLE
+        binding.mfaMethodList.removeAllViews()
         challenge.methods.forEach { method ->
-            methodList.addMethodRow(method.type) { select(method) }
+            binding.mfaMethodList.addMethodRow(method.type) { select(method) }
         }
     }
 
     private fun select(method: MfaMethod) {
         selected = method
-        methodList.visibility = View.GONE
-        codeWrap.visibility = View.VISIBLE
-        confirm.visibility = View.VISIBLE
-        confirm.setIsLoading(false)
-        switchMethod.visibility =
+        binding.mfaMethodList.visibility = View.GONE
+        binding.mfaCodeWrap.visibility = View.VISIBLE
+        binding.mfaConfirm.visibility = View.VISIBLE
+        binding.mfaConfirm.setIsLoading(false)
+        binding.mfaSwitchMethod.visibility =
             if ((challenge?.methods?.size ?: 0) > 1) View.VISIBLE else View.GONE
 
-        title.setText(method.type.titleResId())
+        binding.mfaTitle.setText(method.type.titleResId())
         // Only the SMS leg has anything to say under the title, and it says it once the code is sent.
-        body.visibility = if (method.type == MfaMethodType.SMS) View.VISIBLE else View.GONE
-        if (method.type == MfaMethodType.SMS) body.setText(R.string.two_fa_enter_sms_token_sending)
-        codeWrap.error = null
-        codeWrap.editText?.setText("")
-        codeWrap.hint = getString(method.type.hintResId())
-        codeWrap.editText?.inputType = if (method.type == MfaMethodType.PASSWORD) {
+        binding.mfaBody.visibility = if (method.type == MfaMethodType.SMS) View.VISIBLE else View.GONE
+        if (method.type == MfaMethodType.SMS) binding.mfaBody.setText(R.string.two_fa_enter_sms_token_sending)
+        binding.mfaCodeWrap.error = null
+        binding.mfaCodeWrap.editText?.setText("")
+        binding.mfaCodeWrap.hint = getString(method.type.hintResId())
+        binding.mfaCodeWrap.editText?.inputType = if (method.type == MfaMethodType.PASSWORD) {
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         } else {
             InputType.TYPE_CLASS_TEXT
@@ -134,7 +123,7 @@ class WidgetMfaBottomSheet : AppBottomSheet() {
             .ui(this)
             .appSubscribe(WidgetMfaBottomSheet::class.java) { sent ->
                 sent.phone?.let {
-                    body.text = FormatUtils.format(
+                    binding.mfaBody.text = FormatUtils.format(
                         getString(R.string.two_fa_enter_sms_token_sent),
                         "phoneNumber" to it,
                     )
@@ -145,11 +134,11 @@ class WidgetMfaBottomSheet : AppBottomSheet() {
     private fun submit() {
         val challenge = challenge ?: return
         val method = selected ?: return
-        val data = codeWrap.getTextOrEmpty()
+        val data = binding.mfaCodeWrap.getTextOrEmpty()
         if (data.isBlank()) return
 
-        confirm.setIsLoading(true)
-        codeWrap.error = null
+        binding.mfaConfirm.setIsLoading(true)
+        binding.mfaCodeWrap.error = null
         RestAPI.api.finishMFA(FinishMfaRequestBody(challenge.ticket, method.type, data))
             .restSubscribeOn()
             .ui(this)
@@ -157,9 +146,9 @@ class WidgetMfaBottomSheet : AppBottomSheet() {
                 errorClass = WidgetMfaBottomSheet::class.java,
                 errorHandler = { error ->
                     // Retried in place: bubbling this out would fail the request being verified.
-                    confirm.setIsLoading(false)
+                    binding.mfaConfirm.setIsLoading(false)
                     error.showErrorToasts = false
-                    codeWrap.error = error.message ?: error.displayString(requireContext())
+                    binding.mfaCodeWrap.error = error.message ?: error.displayString(requireContext())
                 },
             ) { verified ->
                 deliverAndDismiss(MfaElevation(verified.token))

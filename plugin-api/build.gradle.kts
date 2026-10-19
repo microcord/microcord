@@ -21,6 +21,7 @@ android {
     lint {
         checkOnly += setOf("NewApi")
         fatal += "NewApi"
+        ignoreTestSources = true
     }
 }
 

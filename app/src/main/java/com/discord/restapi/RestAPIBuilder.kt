@@ -149,6 +149,7 @@ class RestAPIBuilder(
         return Retrofit.Builder()
             .baseUrl(baseApiUrl + if (addVersion) "v$API_VERSION/" else "")
             .client(client)
+            .addCallAdapterFactory(UnitCallAdapterFactory())
             .addCallAdapterFactory(RxJavaCallAdapterFactory.create())
             .addConverterFactory(PayloadJsonConverterFactory(gson))
             .apply {

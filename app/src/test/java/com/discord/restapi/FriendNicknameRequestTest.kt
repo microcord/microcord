@@ -26,6 +26,21 @@ class FriendNicknameRequestTest {
     @After
     fun stopServer() = server.shutdown()
 
+    /** Every `Observable<Unit>` endpoint emits Unit for a 204, so Kotlin callbacks never see null. */
+    @Test
+    fun `a 204 on a Unit endpoint emits Unit`() {
+        server.enqueue(MockResponse().setResponseCode(204))
+        val values = mutableListOf<Unit>()
+        var failure: Throwable? = null
+
+        api.logoutAuthSessions(RestAPIParams.LogoutAuthSessions(listOf("hash")))
+            .subscribe({ value: Unit -> values += value }, { failure = it })
+
+        assertNull(failure)
+        assertEquals(listOf(Unit), values)
+        assertEquals("/api/v9/auth/sessions/logout", server.takeRequest().path)
+    }
+
     @Test
     fun `a 204 completes without an error`() {
         server.enqueue(MockResponse().setResponseCode(204))
