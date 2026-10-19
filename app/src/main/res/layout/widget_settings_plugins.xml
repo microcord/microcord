@@ -16,6 +16,12 @@
         style="@style/UiKit.CheckedSetting.Themed" />
 
     <TextView
+        android:id="@+id/plugins_browse"
+        android:text="@string/plugins_browse"
+        app:drawableEndCompat="@drawable/ic_chevron_right_primary_300_12dp"
+        style="@style/UiKit.Settings.Item.Chevron" />
+
+    <TextView
         android:id="@+id/plugins_metrics"
         android:paddingStart="16dp"
         android:paddingTop="8dp"

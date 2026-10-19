@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="12dp"
+    android:layout_marginTop="6dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginBottom="6dp"
+    app:cardBackgroundColor="?attr/colorBackgroundSecondary"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeColor="?attr/colorBackgroundModifierAccent"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/plugin_browser_item_title"
+                android:maxLines="1"
+                android:ellipsize="end"
+                style="@style/UiKit.TextView.Semibold" />
+
+            <TextView
+                android:id="@+id/plugin_browser_item_meta"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="?attr/colorTextMuted"
+                style="@style/UiKit.TextView.Subtext" />
+
+            <TextView
+                android:id="@+id/plugin_browser_item_description"
+                android:layout_marginTop="6dp"
+                android:textColor="?attr/colorTextNormal"
+                style="@style/UiKit.TextView.Subtext" />
+        </LinearLayout>
+
+        <com.discord.views.LoadingButton
+            android:id="@+id/plugin_browser_item_action"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:minWidth="96dp"
+            app:lb_background_color="@color/brand_500"
+            app:lb_progress_color="@color/white"
+            app:lb_text_color="@drawable/button_text_color_primary_100" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

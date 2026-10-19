@@ -3,6 +3,14 @@ package dev.mantikafasi.manticord.plugins.api
 import android.content.Context
 import rx.Completable
 
+/**
+ * The plugin API this Microcord build implements; a manifest's `manticordVersionMinimum` is checked
+ * against it. 1: the initial API. 2: message delete/update interceptors and message decorators.
+ * The manifest maximum is ignored: a plugin built for an older API still loads, and one that calls
+ * something removed fails its own start without affecting the app.
+ */
+const val PLUGIN_API_LEVEL = 2
+
 interface PluginRequirement {
     val pluginId: String
     val minimumVersionCode: Int

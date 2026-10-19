@@ -1,9 +1,9 @@
 package com.discord.plugins
 
+import dev.mantikafasi.manticord.plugins.api.PLUGIN_API_LEVEL
 import dev.mantikafasi.manticord.plugins.api.PluginLoadMode
 import dev.mantikafasi.manticord.plugins.api.PluginManifest
 import java.util.PriorityQueue
-import com.discord.BuildConfig
 
 internal data class PluginCandidate(
     val manifest: PluginManifest,
@@ -36,7 +36,7 @@ internal object PluginDependencyResolver {
 
     fun resolve(
         candidates: List<PluginCandidate>,
-        manticordVersion: Int = BuildConfig.VERSION_CODE,
+        manticordVersion: Int = PLUGIN_API_LEVEL,
     ): PluginLoadPlan {
         val groups = candidates.groupBy { it.manifest.id }
         val nodes = groups.mapNotNull { (id, matches) ->
@@ -48,9 +48,7 @@ internal object PluginDependencyResolver {
         nodes.forEach { (id, candidate) ->
             when {
                 !candidate.enabled -> blocked[id] = PluginBlockReason.Disabled
-                manticordVersion < candidate.manifest.manticordVersionMinimum ||
-                    (candidate.manifest.manticordVersionMaximumExclusive != null &&
-                        manticordVersion >= requireNotNull(candidate.manifest.manticordVersionMaximumExclusive)) ->
+                manticordVersion < candidate.manifest.manticordVersionMinimum ->
                     blocked[id] = PluginBlockReason.IncompatibleManticord(manticordVersion)
             }
         }

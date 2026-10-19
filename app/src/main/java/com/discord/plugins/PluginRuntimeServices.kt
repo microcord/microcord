@@ -372,6 +372,10 @@ internal class PluginScopeImpl(
             check(!closed.get()) { "plugin scope is closed" }
             return track(PluginUiRegistry.registerMessageDecorator(pluginId, decorator))
         }
+
+        override fun refreshMessages() {
+            if (!closed.get()) PluginUiRegistry.notifyMessagesChanged()
+        }
     }
     override val storage: PluginStorage = object : PluginStorage {
         private val directory = MessageDigest.getInstance("SHA-256")

@@ -23,7 +23,7 @@ publishing {
     repositories {
         maven {
             name = "GitHubEnterprise"
-            url = uri("https://maven.git.hoodnet.work/discord-android-rebuild/nullcord")
+            url = uri("https://maven.git.hoodnet.work/microcord/microcord")
             credentials {
                 username = providers.environmentVariable("GITHUB_ACTOR").orNull
                     ?: providers.gradleProperty("gpr.user").orNull

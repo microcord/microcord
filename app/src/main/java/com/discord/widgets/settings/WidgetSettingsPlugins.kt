@@ -1,5 +1,6 @@
 package com.discord.widgets.settings
 
+import dev.mantikafasi.manticord.plugins.api.PLUGIN_API_LEVEL
 import android.os.Bundle
 import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
@@ -24,7 +25,6 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.color.ColorCompat
 import rx.Observable
 import rx.schedulers.Schedulers
-import com.discord.BuildConfig
 
 class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
     private var _binding: WidgetSettingsPluginsBinding? = null
@@ -53,7 +53,18 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
                 render()
             }
         }
+        binding.pluginsBrowse.setOnClickListener {
+            parentFragmentManager.commit {
+                replace(id, WidgetSettingsPluginBrowser())
+                addToBackStack(WidgetSettingsPluginBrowser::class.java.name)
+            }
+        }
         render()
+    }
+
+    override fun onViewBoundOrOnResume() {
+        super.onViewBoundOrOnResume()
+        // Re-listed on resume, so a plugin just installed from the browser shows up.
         Observable.fromCallable { PluginRuntime.externalPlugins(requireContext().applicationContext) }
             .subscribeOn(Schedulers.io())
             .ui(this)
@@ -61,10 +72,6 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
                 externalPlugins = it
                 render()
             }
-    }
-
-    override fun onViewBoundOrOnResume() {
-        super.onViewBoundOrOnResume()
         PluginRuntime.observeSnapshots().ui(this).subscribe { render() }
         PluginRuntime.observeMetrics().ui(this).subscribe {
             loadMetrics = it
@@ -88,9 +95,7 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
                 val packageEnabled = PluginLoadingPolicy.isPackageEnabled(descriptor.packageName)
                 val signerApproved = PluginLoadingPolicy.approvedSigner(descriptor.packageName) ==
                     descriptor.signerSha256
-                val appCompatible = BuildConfig.VERSION_CODE >= descriptor.manifest.manticordVersionMinimum &&
-                    (descriptor.manifest.manticordVersionMaximumExclusive == null ||
-                        BuildConfig.VERSION_CODE < requireNotNull(descriptor.manifest.manticordVersionMaximumExclusive))
+                val appCompatible = PLUGIN_API_LEVEL >= descriptor.manifest.manticordVersionMinimum
                 add(
                     Row(
                         packageName = descriptor.packageName,

@@ -19,6 +19,7 @@ import dev.mantikafasi.manticord.plugins.api.pluginSlashCommand
 import dev.mantikafasi.manticord.plugins.api.pluginManifest
 import dev.mantikafasi.manticord.plugins.api.pluginRequirement
 import dev.mantikafasi.manticord.plugins.api.pluginSettings
+import dev.mantikafasi.manticord.plugins.api.PLUGIN_API_LEVEL
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertSame
@@ -213,12 +214,29 @@ class PluginDependencyResolverTest {
         assertEquals(listOf("healthy"), plan.plugins.map { it.manifest.id })
     }
 
-    /**
-     * The fixtures target app version 1. The real version code is the commit timestamp now, so the
-     * default would mark every fixture incompatible.
-     */
+    /** The fixtures target plugin API level 1. */
     private fun resolveAtAppVersionOne(candidates: List<PluginCandidate>) =
         PluginDependencyResolver.resolve(candidates, manticordVersion = 1)
+
+    /**
+     * A plugin built for an older API, with the default maximum of 2, still loads on a newer host;
+     * one needing a newer API than the host has does not.
+     */
+    @Test
+    fun `old plugins load on newer hosts and only the minimum is enforced`() {
+        val plan = PluginDependencyResolver.resolve(
+            listOf(
+                candidate("old", manticordMinimum = 1),
+                candidate("future", manticordMinimum = PLUGIN_API_LEVEL + 1),
+            ),
+            manticordVersion = PLUGIN_API_LEVEL + 5,
+        )
+        assertEquals(setOf("old", "future"), plan.plugins.map { it.manifest.id }.toSet())
+        assertEquals(
+            PluginBlockReason.IncompatibleManticord(PLUGIN_API_LEVEL),
+            PluginDependencyResolver.resolve(listOf(candidate("future", manticordMinimum = PLUGIN_API_LEVEL + 1))).blocked["future"],
+        )
+    }
 
     private fun candidate(
         id: String,

@@ -80,6 +80,11 @@ description, Microcord version range, requirements, priority, load mode, and res
 snippet consumes those placeholders; plugin Kotlin code does not declare a duplicate manifest.
 `usesResources` defaults to `false`.
 
+`manticordVersionMinimum` is checked against `PLUGIN_API_LEVEL`, the plugin API this Microcord build
+implements (2 since message delete/update interceptors and decorators). The maximum is ignored: a
+plugin built for an older API still loads, and if it calls something since removed, only its own
+start fails.
+
 ## Discovery
 
 Microcord performs one targeted `PackageManager` query for components matching the plugin intent. It
@@ -445,6 +450,7 @@ scope.ui.registerMessageDecorator(
 ```
 
 The chat list rebinds after a plugin keeps a deleted message, so its decoration shows at once.
+Call `scope.ui.refreshMessages()` to rebind visible rows after other plugin state they read changes.
 
 ### Slash Commands
 

@@ -599,6 +599,9 @@ interface PluginUi {
     fun registerMessage(contribution: PluginMessageContribution): PluginRegistration
     fun registerMessageInterceptor(interceptor: PluginMessageInterceptor): PluginRegistration
     fun registerMessageDecorator(decorator: PluginMessageDecorator): PluginRegistration
+
+    /** Rebinds the visible message rows, after plugin state their contributions or decorators read changed. */
+    fun refreshMessages()
 }
 
 fun interface PluginSettingsPage {

@@ -1,5 +1,6 @@
 package com.discord.plugins
 
+import dev.mantikafasi.manticord.plugins.api.PLUGIN_API_LEVEL
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
@@ -15,7 +16,6 @@ import dev.mantikafasi.manticord.plugins.api.PluginManifest
 import dev.mantikafasi.manticord.plugins.api.PluginResources
 import dev.mantikafasi.manticord.plugins.api.pluginManifest
 import dev.mantikafasi.manticord.plugins.api.pluginRequirement
-import com.discord.BuildConfig
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
@@ -70,9 +70,7 @@ internal class ExternalPluginSource : PluginSource {
                 PluginLoadingPolicy.approvedSigner(descriptor.packageName) == descriptor.signerSha256
             }
             .filter { descriptor ->
-                BuildConfig.VERSION_CODE >= descriptor.manifest.manticordVersionMinimum &&
-                    (descriptor.manifest.manticordVersionMaximumExclusive == null ||
-                        BuildConfig.VERSION_CODE < requireNotNull(descriptor.manifest.manticordVersionMaximumExclusive))
+                PLUGIN_API_LEVEL >= descriptor.manifest.manticordVersionMinimum
             }
             .map { descriptor -> PluginHandle(descriptor.manifest) { load(context, descriptor) } }
     }
