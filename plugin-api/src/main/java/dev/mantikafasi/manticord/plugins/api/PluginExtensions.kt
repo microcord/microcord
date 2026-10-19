@@ -361,6 +361,9 @@ interface PluginSlashCommand : PluginContribution {
     val options: List<PluginSlashCommandOption>
     val execute: (PluginSlashCommandContext) -> String
     val isVisible: (PluginChannelContext) -> Boolean
+
+    /** Set by [pluginAsyncSlashCommand]; [execute] is unused then. */
+    val executeAsync: ((PluginSlashCommandContext, (String?) -> Unit) -> Unit)? get() = null
 }
 
 class PluginSlashCommandBuilder internal constructor() {
@@ -405,6 +408,24 @@ fun pluginSlashCommand(
     return PluginSlashCommandValue(
         id, name, description, builder.options(), builder.priority, execute, builder.isVisible,
     )
+}
+
+/**
+ * A slash command whose result takes time, such as a network call. [execute] runs on a background
+ * thread and calls `respond` once, with the text to send or null to send nothing. The composer is
+ * cleared when the command is submitted.
+ */
+fun pluginAsyncSlashCommand(
+    id: String,
+    name: String,
+    description: String,
+    execute: (PluginSlashCommandContext, respond: (String?) -> Unit) -> Unit,
+    configure: PluginSlashCommandBuilder.() -> Unit = {},
+): PluginSlashCommand {
+    val command = pluginSlashCommand(id, name, description, { "" }, configure)
+    return object : PluginSlashCommand by command {
+        override val executeAsync = execute
+    }
 }
 
 enum class PluginContextMenuSurface {

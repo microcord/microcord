@@ -81,7 +81,7 @@ snippet consumes those placeholders; plugin Kotlin code does not declare a dupli
 `usesResources` defaults to `false`.
 
 `manticordVersionMinimum` is checked against `PLUGIN_API_LEVEL`, the plugin API this Microcord build
-implements (2 since message delete/update interceptors and decorators). The maximum is ignored: a
+implements (2 since message delete/update interceptors, decorators and async slash commands). The maximum is ignored: a
 plugin built for an older API still loads, and if it calls something since removed, only its own
 start fails.
 
@@ -462,6 +462,10 @@ context plus parsed arguments and return the message text to submit.
 Plugin commands participate in command discovery, query filtering, execution, built-in application
 counts, and frecency. They never create a second parser or send path. Higher priority wins duplicate
 plugin names; native command names remain reserved. Exceptions are contained and produce no message.
+
+The executor runs on the main thread, so it must not block. A command that needs a network call or other
+slow work uses `pluginAsyncSlashCommand(...)` instead: its executor runs on a background thread and calls
+`respond` once with the text to send, or null to send nothing. The composer clears when it is submitted.
 
 ## Plugin View And Resource Context
 

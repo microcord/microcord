@@ -121,6 +121,8 @@ class BuiltInCommand(
     descriptionRes: Int? = null,
     options: List<ApplicationCommandOption>,
     val action: BuiltInCommandAction? = null,
+    /** Produces its message text later, calling back with it or with null to send nothing. */
+    val executeAsync: ((Map<String, Any?>, (String?) -> Unit) -> Unit)? = null,
     // Trails the parameter list so callers can keep passing it as a lambda literal.
     execute: ((Map<String, Any?>) -> String)? = null,
 ) : ApplicationCommand(

@@ -5,7 +5,8 @@ import rx.Completable
 
 /**
  * The plugin API this Microcord build implements; a manifest's `manticordVersionMinimum` is checked
- * against it. 1: the initial API. 2: message delete/update interceptors and message decorators.
+ * against it. 1: the initial API. 2: message delete/update interceptors, message decorators and
+ * async slash commands.
  * The manifest maximum is ignored: a plugin built for an older API still loads, and one that calls
  * something removed fails its own start without affecting the app.
  */

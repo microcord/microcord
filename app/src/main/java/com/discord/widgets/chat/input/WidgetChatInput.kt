@@ -1356,7 +1356,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             Toast.makeText(requireContext(), R.string.invalid_attachments_failure, Toast.LENGTH_SHORT).show()
             return false
         }
-        val commandData = autocomplete?.getApplicationCommandData(attachments)
+        // Content passed in is final: it never runs as a command, even if the composer now holds one.
+        val commandData = if (contentOverride == null) autocomplete?.getApplicationCommandData(attachments) else null
         if (commandData != null) {
             if (!commandData.validInputs) {
                 val reason = if (commandData.hasUnusableAttachments) {
@@ -1373,6 +1374,14 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 if (action != null) {
                     runBuiltInAction(action, loaded.channel, commandData)
                     drafts.setTextChannelInput(loaded.channelId, null)
+                    return true
+                }
+                val executeAsync = (command as? BuiltInCommand)?.executeAsync
+                if (executeAsync != null) {
+                    drafts.setTextChannelInput(loaded.channelId, null)
+                    executeAsync(commandData.values.associate { it.name to it.value }) { result ->
+                        view?.post { if (!result.isNullOrEmpty() && isAdded) submit(emptyList(), contentOverride = result) }
+                    }
                     return true
                 }
                 content = command.execute?.invoke(commandData.values.associate { it.name to it.value })

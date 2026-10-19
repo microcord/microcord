@@ -1021,6 +1021,13 @@ class BuiltInCommands : BuiltInCommandsProvider {
                         choices = option.choices.map { CommandChoice(it, it) }.takeIf(List<CommandChoice>::isNotEmpty),
                     )
                 },
+                executeAsync = command.executeAsync?.let { async ->
+                    { options, respond ->
+                        Observable.fromCallable { async(pluginSlashCommandContext(context, options), respond) }
+                            .subscribeOn(Schedulers.io())
+                            .subscribe({}, { respond(null) })
+                    }
+                },
             ) { options ->
                 runCatching {
                     command.execute(
