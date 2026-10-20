@@ -173,7 +173,8 @@ class WidgetUserSheetViewModel(
 
             val actionVisibility: ActionVisibility = Companion.actionVisibility(
                 isMe = isMe,
-                isSystemUser = user.isSystemUser,
+                // A webhook is no account: nothing to message, call, befriend or manage.
+                isSystemUser = user.isSystemUser || user.isWebhook,
                 isBot = user.isBot,
                 channelType = channel?.type,
                 relationshipType = userRelationshipType,
@@ -360,7 +361,7 @@ class WidgetUserSheetViewModel(
                 connectionsViewState = createConnectionsViewState(
                     userProfile = storeState.userProfile,
                     isMe = isMe,
-                    isSystemUser = user.isSystemUser,
+                    isSystemUser = user.isSystemUser || user.isWebhook,
                 ),
                 userNoteFetchState = note,
                 userNote = userNote,
@@ -767,6 +768,8 @@ class WidgetUserSheetViewModel(
      * returned when asked for, and the note is a separate endpoint entirely.
      */
     fun fetchProfile() {
+        // Webhooks have no profile or note; both requests only 404.
+        if (StoreStream.getUsers().getUsers()[userId]?.isWebhook == true) return
         storeUserProfile.fetchProfile(
             userId,
             guildId.takeUnless { FeatureFlags.disableServerProfilesEnabled() },

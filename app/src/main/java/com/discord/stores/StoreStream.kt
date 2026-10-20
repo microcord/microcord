@@ -1604,6 +1604,7 @@ class StoreStream private constructor(
         PluginUiRegistry.addSlashCommandListener(applicationCommands::handleLocalCommandsChanged)
         messagesLoader.observeChunks().subscribe { chunk ->
             dispatcher.schedule {
+                users.handleMessagesLoaded(chunk.messages)
                 applicationInteractions.handleMessagesCreateOrLoad(chunk.messages)
                 messages.handleMessagesLoaded(chunk)
                 val threads = chunk.messages.mapNotNull(DomainMessage::thread)
@@ -1695,6 +1696,8 @@ class StoreStream private constructor(
             unreadSettingNotice.restore()
             messagesMostRecent.restore()
             messages.restore()
+            // Cached history renders before any load, so its authors must resolve too (profiles, mentions).
+            users.handleMessagesLoaded(messages.holder.getAll().values.flatten())
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
             navigation.updateAuthState(authentication.getAuthState())
@@ -1741,6 +1744,8 @@ class StoreStream private constructor(
             userSettings.handleUserSettingsProto(userSettingsProto.init())
             frecencyProto.init()
             messages.restore()
+            // Cached history renders before any load, so its authors must resolve too (profiles, mentions).
+            users.handleMessagesLoaded(messages.holder.getAll().values.flatten())
             guildFolders = userSettings.getGuildFolders()
             updateSortedGuilds()
             navigation.updateAuthState(authentication.getAuthState())

@@ -1094,6 +1094,9 @@ class WidgetUserSheet : AppBottomSheet() {
         val loading = state.userNoteFetchState is StoreUserNotes.UserNoteState.Loading
         val note = state.userNote.orEmpty()
         val row = binding.userSheetNoteText
+        val visibility = if (state.user.isWebhook) View.GONE else View.VISIBLE
+        binding.userSheetNoteHeader.visibility = visibility
+        row.visibility = visibility
         row.text = note
         row.isEnabled = !loading
         row.setOnClickListener {
