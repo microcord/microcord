@@ -618,17 +618,6 @@ class WidgetChatListAdapterItemEmbed(
     private fun shouldRenderMedia(): Boolean =
         userSettings.getIsEmbedMediaInlined() && userSettings.getIsRenderEmbedsEnabled()
 
-    private fun parseFields(fields: List<EmbedField>?, improvedMarkdown: Boolean): List<ParsedField>? =
-        fields?.map { field ->
-            val valueParser =
-                if (improvedMarkdown) UI_THREAD_FIELD_VALUE_IMPROVED_PARSER else UI_THREAD_VALUES_PARSER
-            ParsedField(
-                parsedName = UI_THREAD_TITLES_PARSER.parseText(field.name),
-                // A tab would indent the value into looking like a list item's continuation.
-                parsedValue = valueParser.parseText(field.value.replace("\t", "")),
-            )
-        }
-
     // endregion
 
     /**
@@ -861,7 +850,7 @@ private fun Parser<MessageRenderContext, Node<MessageRenderContext>, MessagePars
 }
 
 /** A media embed shows its image where a description would go. */
-private fun MessageEmbed.showsDescription(): Boolean = when (type) {
+internal fun MessageEmbed.showsDescription(): Boolean = when (type) {
     EmbedType.IMAGE, EmbedType.VIDEO, EmbedType.GIFV -> false
     else -> true
 }
@@ -871,7 +860,7 @@ private fun MessageEmbed.showsDescription(): Boolean = when (type) {
  * page being previewed, so it renders exactly as it arrived — a `*` in an article's summary is a
  * bullet character, not emphasis.
  */
-private fun MessageEmbed.parseDescription(
+internal fun MessageEmbed.parseDescription(
     text: String,
     improvedMarkdown: Boolean,
 ): MutableList<Node<MessageRenderContext>> = when {
@@ -880,10 +869,22 @@ private fun MessageEmbed.parseDescription(
     else -> UI_THREAD_VALUES_PARSER.parseText(text)
 }
 
-private fun MessageEmbed.parseTitle(text: String): MutableList<Node<MessageRenderContext>> = when {
+internal fun MessageEmbed.parseTitle(text: String): MutableList<Node<MessageRenderContext>> = when {
     type != EmbedType.RICH -> arrayListOf(TextNode(text))
     url.isNullOrEmpty() -> UI_THREAD_TITLES_PARSER.parseText(text)
     else -> UI_THREAD_TITLES_NO_LINKS_PARSER.parseText(text)
+}
+
+internal fun parseFields(
+    fields: List<EmbedField>?,
+    improvedMarkdown: Boolean,
+): List<WidgetChatListAdapterItemEmbed.ParsedField>? = fields?.map { field ->
+    val valueParser = if (improvedMarkdown) UI_THREAD_FIELD_VALUE_IMPROVED_PARSER else UI_THREAD_VALUES_PARSER
+    WidgetChatListAdapterItemEmbed.ParsedField(
+        parsedName = UI_THREAD_TITLES_PARSER.parseText(field.name),
+        // A tab would indent the value into looking like a list item's continuation.
+        parsedValue = valueParser.parseText(field.value.replace("\t", "")),
+    )
 }
 
 /**

@@ -8,7 +8,10 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.TextView
+import com.discord.models.message.Message
+import com.discord.simpleast.core.node.Node
+import com.discord.utilities.textprocessing.AstRenderer
+import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.R
 import com.discord.api.botuikit.ComponentType
 import com.discord.api.botuikit.SelectItem
@@ -126,10 +129,29 @@ class WidgetChatListAdapterItemForwardedMessage(
             binding.forwardedMessageContent.text = null
             return
         }
+        val rendered = DiscordParser.parseChannelMessage(
+            itemView.context,
+            message.content.orEmpty(),
+            renderContext(message),
+            MessagePreprocessor(
+                myUserId = parentAdapter.data.userId,
+                messageState = null,
+                embeds = message.embeds,
+                shouldJumboify = true,
+                maxNodes = null,
+            ),
+            MarkupEligibility.parserOptionsFor(message),
+            false,
+        )
+        binding.forwardedMessageContent.visibility = if (rendered.isEmpty()) View.GONE else View.VISIBLE
+        binding.forwardedMessageContent.setDraweeSpanStringBuilder(rendered)
+    }
+
+    private fun renderContext(message: Message): MessageRenderContext {
         val names = message.mentions.orEmpty().associate { mention ->
             mention.id to (mention.globalName?.takeIf(String::isNotBlank) ?: mention.username)
         }
-        val renderContext = MessageRenderContext(
+        return MessageRenderContext(
             context = itemView.context,
             myId = parentAdapter.data.userId,
             isAnimationEnabled = true,
@@ -153,22 +175,6 @@ class WidgetChatListAdapterItemForwardedMessage(
                 ChannelSelector.getInstance().findAndSet(itemView.context, channelId)
             },
         )
-        val rendered = DiscordParser.parseChannelMessage(
-            itemView.context,
-            message.content.orEmpty(),
-            renderContext,
-            MessagePreprocessor(
-                myUserId = parentAdapter.data.userId,
-                messageState = null,
-                embeds = message.embeds,
-                shouldJumboify = true,
-                maxNodes = null,
-            ),
-            MarkupEligibility.parserOptionsFor(message),
-            false,
-        )
-        binding.forwardedMessageContent.visibility = if (rendered.isEmpty()) View.GONE else View.VISIBLE
-        binding.forwardedMessageContent.setDraweeSpanStringBuilder(rendered)
     }
 
     private fun bindRows(entry: ForwardedMessageEntry) {
@@ -263,15 +269,21 @@ class WidgetChatListAdapterItemForwardedMessage(
             orientation = LinearLayout.VERTICAL
             layoutParams = matchWidthParams()
         }
-        embed.title?.takeIf(String::isNotBlank)?.let { title ->
-            container.addView(accessoryText(semibold = true).apply { text = title })
+        val renderContext = renderContext(entry.message)
+        val improvedMarkdown = MarkupEligibility.allowsImprovedMarkdown(entry.message)
+        fun addText(ast: MutableList<Node<MessageRenderContext>>, semibold: Boolean = false) {
+            MessagePreprocessor(parentAdapter.data.userId).process(ast)
+            container.addView(accessoryText(semibold).apply {
+                setDraweeSpanStringBuilder(AstRenderer.render(ast, renderContext))
+            })
         }
-        embed.description?.takeIf(String::isNotBlank)?.let { description ->
-            container.addView(accessoryText().apply { text = description })
+        embed.title?.takeIf(String::isNotBlank)?.let { addText(embed.parseTitle(it), semibold = true) }
+        embed.description?.takeIf { it.isNotBlank() && embed.showsDescription() }?.let {
+            addText(embed.parseDescription(it, improvedMarkdown))
         }
-        embed.fields.orEmpty().forEach { field ->
-            container.addView(accessoryText(semibold = true).apply { text = field.name })
-            container.addView(accessoryText().apply { text = field.value })
+        parseFields(embed.fields, improvedMarkdown)?.forEach { field ->
+            addText(field.parsedName, semibold = true)
+            addText(field.parsedValue)
         }
         val dimensions = embedDimensions(embed)
         if (dimensions != null) {
@@ -365,7 +377,7 @@ class WidgetChatListAdapterItemForwardedMessage(
         mediaViews += this
     }
 
-    private fun accessoryText(semibold: Boolean = false) = TextView(itemView.context).apply {
+    private fun accessoryText(semibold: Boolean = false) = LinkifiedTextView(itemView.context).apply {
         layoutParams = matchWidthParams()
         setPadding(dp(ACCESSORY_INSET_DP), dp(ACCESSORY_SPACING_DP), dp(ACCESSORY_INSET_DP), 0)
         setTextAppearance(if (semibold) R.style.UiKit_TextView_Semibold else R.style.UiKit_TextView)
