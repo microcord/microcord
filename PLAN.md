@@ -163,6 +163,7 @@ coverage and passing builds do not establish complete behavioral parity.
 | Observer errors | Preserve the DEX-proven `ObservationDeck` exception/log-level behavior; do not remove it based on incomplete JADX output |
 | Minimum API safety | `NewApi` lint is fatal for `:app` and `:plugin-api` (CI step before the debug build), because one call newer than minSdk 23 crashed Android 6 at launch. Desugaring does not rewrite `CompletableFuture`, so plugin startup uses the `streamsupport-cfuture` backport; `java.time` and streams are desugared and fine |
 | Custom themes | Runtime `ResourcesLoader` overlay (API 30+, no hooks): a generated resource table replaces palette colors and a placeholder overlay style that every themed context applies. Format is Aliucord theme JSON plus `attrs`/`microcord`; Aliucord's by-value color swaps are replayed through a table generated from the reference. Icon tints, fonts and sounds are table entries served by the loader's `AssetsProvider`; the background image is baked once and shown per Themer's transparency modes. Android 6-10 keep the built-in themes; see [docs/theming.md](docs/theming.md) |
+| Report flow | The modern report menu is parsed leniently: element types newer than 126.21 (free text, dropdowns, radio groups) are skipped, not rendered. The post-report Block button uses the standard fit button size instead of the reference's 32dp, by user request |
 
 Exact dependency versions belong in the version catalog, not in historical
 installation logs. Reference-specific behavioral deviations remain documented

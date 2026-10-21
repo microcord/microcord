@@ -1,5 +1,7 @@
 package com.discord.api.report
 
+import com.google.gson.annotations.JsonAdapter
+
 /** Index of a [ReportNode] inside [MenuAPIResponse.nodes]. */
 typealias ReportNodeRef = Int
 
@@ -48,6 +50,7 @@ data class ReportNodeChild(
 data class ReportNodeElement(
     val type: String,
     val name: String,
+    @field:JsonAdapter(ReportNodeElementDataListTypeAdapter::class)
     val data: List<ReportNodeElementData>?,
     val shouldSubmitData: Boolean,
 )

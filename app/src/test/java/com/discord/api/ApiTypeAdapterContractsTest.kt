@@ -28,6 +28,7 @@ import com.discord.api.report.ReportNodeBottomButton
 import com.discord.api.report.ReportNodeBottomButtonTypeAdapter
 import com.discord.api.report.ReportNodeChild
 import com.discord.api.report.ReportNodeChildTypeAdapter
+import com.discord.api.report.ReportNodeElement
 import com.discord.api.report.ReportNodeElementData
 import com.discord.api.report.ReportNodeElementDataTypeAdapter
 import com.google.gson.GsonBuilder
@@ -193,5 +194,17 @@ class ApiTypeAdapterContractsTest {
             gson.fromJson("""{"type":"cancel"}""", ReportNodeBottomButton::class.java),
         )
         assertNull(gson.fromJson("""{"type":"teleport"}""", ReportNodeBottomButton::class.java))
+    }
+
+    @Test
+    fun reportElementsOfNewerTypesDoNotFailTheMenu() {
+        fun element(data: String) =
+            gson.fromJson("""{"type":"t","name":"n","data":$data}""", ReportNodeElement::class.java)
+
+        assertNull(element("""{"title":"Tell us more","max_length":500}""").data)
+        assertEquals(
+            listOf(ReportNodeElementData("spam", "Spam")),
+            element("""[["spam","Spam","Unwanted ads"],{"value":"x"}]""").data,
+        )
     }
 }

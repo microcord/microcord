@@ -26,6 +26,14 @@ class LoadingButton(context: Context, attrs: AttributeSet?) : FrameLayout(contex
         progress = requireNotNull(findViewById(R.id.loading_button_progress))
         isClickable = true
         isFocusable = true
+        // Layouts style this wrapper as a button, which gives it the button's own background and
+        // padding: a second button around the inner one, visible once the inner one is recoloured.
+        if (attrs != null && attrs.styleAttribute != 0 &&
+            attrs.getAttributeValue(ANDROID_NAMESPACE, "background") == null
+        ) {
+            background = null
+            setPadding(0, 0, 0, 0)
+        }
 
         if (attrs != null) {
             context.obtainStyledAttributes(attrs, R.styleable.LoadingButton, 0, 0).run {
@@ -112,3 +120,5 @@ class LoadingButton(context: Context, attrs: AttributeSet?) : FrameLayout(contex
         if (::button.isInitialized) button.backgroundTintList = ColorStateList.valueOf(color)
     }
 }
+
+private const val ANDROID_NAMESPACE = "http://schemas.android.com/apk/res/android"
