@@ -30,6 +30,7 @@ import com.discord.api.guildmember.GuildMember
 import com.discord.api.guildmember.GuildMemberRemove
 import com.discord.api.guildmember.GuildMembersChunk
 import com.discord.api.message.Message as ApiMessage
+import com.discord.api.permission.Permission
 import com.discord.api.presence.Presence
 import com.discord.api.role.GuildRoleCreate
 import com.discord.api.role.GuildRoleDelete
@@ -656,7 +657,16 @@ class StoreStream private constructor(
     })
     private val pendingReplies = StorePendingReplies(dispatcher, observationDeck)
     private val unreadSettingNotice = StoreUnreadSettingNotice(dispatcher, observationDeck, clock)
-    private val savedMessages = StoreSavedMessages(dispatcher, observationDeck, { RestAPI.apiOrNull })
+    private val savedMessages = StoreSavedMessages(
+        dispatcher,
+        observationDeck,
+        { RestAPI.apiOrNull },
+        canReadChannel = { channelId ->
+            channels.getChannel(channelId) != null &&
+                // DMs have no permission entry; a guild channel needs View Channel.
+                permissions.getPermissionsByChannel()[channelId]?.let { it and Permission.VIEW_CHANNEL != 0L } ?: true
+        },
+    )
     private val pinnedMessages = StorePinnedMessages(dispatcher, observationDeck, loader = { channelId, before, callback ->
         val generation = authGeneration
         restApi.getChannelPins(channelId, before = before)
@@ -2566,7 +2576,7 @@ class StoreStream private constructor(
     private fun handleMessageCreateInternal(message: ApiMessage) {
         val domain = DomainMessage(message)
         message.nonce?.let { nonce ->
-            if (::messageSendCoordinator.isInitialized) messageSendCoordinator.reconcileFromGateway(nonce)
+            if (::messageSendCoordinator.isInitialized) messageSendCoordinator.reconcileFromGateway(nonce, domain)
             reconcileUpload(nonce)
         }
         mentions.handleMessageCreateOrUpdate(message)

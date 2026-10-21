@@ -214,6 +214,19 @@ class MessageSendCoordinatorTest {
     }
 
     @Test
+    fun aGatewayEchoBeatingTheHttpResponseStillReconcilesOnce() {
+        val nonce = acceptedNonce(coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "hi")))
+        val echo = ApiMessage(id = 5_000L, channelId = CHANNEL_ID, content = "hi", nonce = nonce)
+
+        coordinator.reconcileFromGateway(nonce, Message(echo))
+        restApi.respondSuccess(echo)
+
+        val reconciled = updates.filterIsInstance<MessageSendCoordinator.Update.Reconciled>().single()
+        assertEquals(nonce, reconciled.requestId)
+        assertEquals(5_000L, reconciled.message.id)
+    }
+
+    @Test
     fun cancellingRemovesTheOperationAndTellsTheQueue() {
         val nonce = acceptedNonce(coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "hi")))
 

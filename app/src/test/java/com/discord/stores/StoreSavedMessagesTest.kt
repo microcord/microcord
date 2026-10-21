@@ -289,9 +289,14 @@ class StoreSavedMessagesTest {
     }
 
     @Test
-    fun unavailableEntriesRefetchOnlyForRelevantChanges() {
+    fun unavailableEntriesRefetchOnlyOnceTheirChannelBecomesReadable() {
         val f = Fixture()
         f.loaded(saved(1).copy(message = null))
+        f.store.invalidateUnavailable(20)
+        f.store.invalidateUnavailable(10)
+        f.scheduler.triggerActions()
+        assertEquals(1, f.fetches.size)
+        f.readable += 10L
         f.store.invalidateUnavailable(20)
         f.scheduler.triggerActions()
         assertEquals(1, f.fetches.size)
@@ -302,6 +307,17 @@ class StoreSavedMessagesTest {
         f.store.invalidateUnavailable()
         f.scheduler.triggerActions()
         assertEquals(2, f.fetches.size)
+    }
+
+    @Test
+    fun aMissingMessageInAReadableChannelNeverRefetches() {
+        val f = Fixture()
+        f.readable += 10L
+        f.loaded(saved(1).copy(message = null))
+        f.store.invalidateUnavailable()
+        f.store.invalidateUnavailable(10)
+        f.scheduler.triggerActions()
+        assertEquals(1, f.fetches.size)
     }
 
     @Test
@@ -383,7 +399,14 @@ class StoreSavedMessagesTest {
                 else -> error("Unexpected REST call: ${method.name}")
             }
         } as RestAPIInterface
-        val store = StoreSavedMessages(dispatcher, deck, { api }, requestScheduler = Schedulers.immediate())
+        val readable = mutableSetOf<Long>()
+        val store = StoreSavedMessages(
+            dispatcher,
+            deck,
+            { api },
+            requestScheduler = Schedulers.immediate(),
+            canReadChannel = { it in readable },
+        )
 
         init {
             dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))

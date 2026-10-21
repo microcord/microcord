@@ -20,6 +20,7 @@ class StoreSavedMessages(
     private val observationDeck: ObservationDeck,
     private val restApi: () -> RestAPIInterface?,
     private val requestScheduler: Scheduler = Schedulers.io(),
+    private val canReadChannel: (channelId: Long) -> Boolean = { false },
 ) : StoreV2() {
     data class State(val entries: Map<String, SavedMessage>, val loading: Boolean, val error: Throwable?) {
         val bookmarks: List<SavedMessage>
@@ -31,6 +32,13 @@ class StoreSavedMessages(
     private val entries = LinkedHashMap<String, SavedMessage>()
     private val channelIndex = HashMap<Long, MutableSet<Long>>()
     private val missingMessageIds = HashSet<Long>()
+
+    /**
+     * Channels of entries the last fetch returned without a message because we could not read them.
+     * Only one of these becoming readable can change what a refetch returns; an entry whose message
+     * was deleted stays missing however often it is fetched.
+     */
+    private val unreadableMissingChannels = HashSet<Long>()
     private val overdueMessageIds = HashSet<Long>()
     @Volatile private var stale = true
     @Volatile private var lastChanged = 0L
@@ -103,12 +111,13 @@ class StoreSavedMessages(
         invalidate()
     }
 
-    /** Called after channel/guild/permission snapshots change; available entries need no refetch. */
+    /** Called after channel/guild/permission snapshots change; refetches once a missing entry can load. */
     fun invalidateUnavailable(channelId: Long? = null) {
         val expectedGeneration = generation
         dispatcher.schedule {
-            if (isCurrent(expectedGeneration) && missingMessageIds.isNotEmpty() &&
-                (channelId == null || channelIndex[channelId].orEmpty().any(missingMessageIds::contains))
+            if (isCurrent(expectedGeneration) && unreadableMissingChannels.any { missing ->
+                    (channelId == null || missing == channelId) && canReadChannel(missing)
+                }
             ) invalidate()
         }
     }
@@ -196,6 +205,7 @@ class StoreSavedMessages(
         entries.clear()
         channelIndex.clear()
         missingMessageIds.clear()
+        unreadableMissingChannels.clear()
         overdueMessageIds.clear()
         loading = false
         error = null
@@ -259,6 +269,12 @@ class StoreSavedMessages(
                         stale = false
                         error = null
                         changed(membershipChanged)
+                        unreadableMissingChannels.clear()
+                        channelIndex.forEach { (channel, messageIds) ->
+                            if (messageIds.any(missingMessageIds::contains) && !canReadChannel(channel)) {
+                                unreadableMissingChannels += channel
+                            }
+                        }
                     }
                     pending.clear()
                     markChanged()
