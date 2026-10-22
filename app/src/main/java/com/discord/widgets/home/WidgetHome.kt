@@ -19,6 +19,7 @@ import com.discord.stores.StoreStream
 import com.discord.dialogs.WidgetUrgentMessageDialog
 import com.discord.databinding.WidgetHomeBinding
 import com.discord.databinding.WidgetHomePanelCenterChatBinding
+import com.discord.widgets.botuikit.ModalComponent
 import com.discord.widgets.channels.list.WidgetChannelsList
 import com.discord.widgets.channels.list.WidgetChannelsListItemChannelActions
 import com.discord.widgets.channels.memberlist.WidgetChannelMembersList
@@ -568,6 +569,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             .filter { it.hasUnreadUrgentMessages }
             .ui(this)
             .appSubscribe(WidgetHome::class.java) { showUrgentMessageDialog() }
+        ModalComponent.autoOpen(this)
         StoreStream.getNux().getNuxState()
             .filter { it.newUserType != null }
             .take(1)

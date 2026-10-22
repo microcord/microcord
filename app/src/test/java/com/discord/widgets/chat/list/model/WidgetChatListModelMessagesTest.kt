@@ -1,5 +1,14 @@
 package com.discord.widgets.chat.list.model
 
+import com.discord.api.botuikit.ActionRowComponent
+import com.discord.api.botuikit.ButtonComponent
+import com.discord.api.botuikit.ButtonStyle
+import com.discord.api.botuikit.ComponentType
+import com.discord.api.permission.Permission
+import com.discord.models.botuikit.ActionInteractionComponentState
+import com.discord.models.botuikit.ActionRowMessageComponent
+import com.discord.models.botuikit.ButtonMessageComponent
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.api.channel.Channel
 import com.discord.api.message.MessageReference
 import com.discord.api.message.MessageFlags
@@ -44,6 +53,17 @@ class WidgetChatListModelMessagesTest {
         assertTrue(model.items.none { it is ForwardedMessageEntry })
         val row = model.items.filterIsInstance<MessageEntry>().single()
         assertEquals(forwarded.id, row.accessories.filterIsInstance<ForwardedMessageEntry>().single().parentMessage.id)
+    }
+
+    @Test fun botButtonsStayPressableInAChannelTheUserCannotPostIn() {
+        val button = ButtonComponent(ComponentType.BUTTON, "open", "Open", ButtonStyle.PRIMARY, false, null, null)
+        val panel = message(4L, 4_000L).copy(components = listOf(ActionRowComponent(ComponentType.ACTION_ROW, listOf(button))))
+        val model = WidgetChatListModelMessages.build(channel(), metadata(listOf(panel)),
+            permissionsForChannel = Permission.VIEW_CHANNEL, inviteResolver = InviteEmbedResolver.UNRESOLVED)
+        val row = model.items.flatMap { listOf(it) + ((it as? MessageEntry)?.accessories ?: emptyList()) }
+            .filterIsInstance<BotUiComponentEntry>().single()
+        val rendered = (row.messageComponents.single() as ActionRowMessageComponent).components.single() as ButtonMessageComponent
+        assertEquals(ActionInteractionComponentState.Enabled, rendered.stateInteraction)
     }
 
     @Test fun missingReplyStateBecomesUnloadedAndCoreIsFoundAfterReordering() {
