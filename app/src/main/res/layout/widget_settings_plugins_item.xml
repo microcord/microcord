@@ -96,6 +96,16 @@
                 android:padding="12dp"
                 android:src="@drawable/ic_guild_settings_24dp"
                 app:tint="?attr/colorInteractiveNormal" />
+
+            <ImageButton
+                android:id="@+id/plugin_item_uninstall"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/plugin_browser_uninstall"
+                android:padding="12dp"
+                android:src="@drawable/ic_delete_24dp"
+                app:tint="@color/status_red_500" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

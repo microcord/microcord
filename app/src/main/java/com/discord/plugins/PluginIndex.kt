@@ -1,6 +1,8 @@
 package com.discord.plugins
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -88,10 +90,24 @@ data class PluginIndex(val version: Int = 0, val plugins: List<Entry>? = null) {
             file
         }.subscribeOn(Schedulers.io())
 
+        /** Asks Android to uninstall [packageName]. */
+        fun uninstall(context: Context, packageName: String) {
+            context.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")))
+        }
+
         /** The installed version code of [packageName], or null when it is not installed. */
         fun installedVersion(context: Context, packageName: String): Long? = runCatching {
             PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(packageName, 0))
         }.getOrNull()
+
+        /**
+         * Whether the installed copy of [entry] carries a different signer than the index, so Android
+         * refuses the index's APK as a conflicting package until that copy is uninstalled.
+         */
+        fun hasForeignSigner(context: Context, entry: Entry): Boolean = runCatching {
+            val info = context.packageManager.getPackageInfo(requireNotNull(entry.packageName), SIGNER_FLAGS)
+            signers(info).none { sha256(it) == entry.normalizedSigner() }
+        }.getOrDefault(false)
 
         /** The directory `download` writes to; shared through the app's FileProvider for the installer. */
         const val INSTALL_DIR = "plugin_installs"

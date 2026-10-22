@@ -15,6 +15,7 @@ import com.discord.app.AppToast
 import com.discord.databinding.WidgetSettingsPluginBrowserBinding
 import com.discord.databinding.WidgetSettingsPluginBrowserItemBinding
 import com.discord.plugins.PluginIndex
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.rx.ui
 import com.discord.utilities.views.SimpleRecyclerAdapter
 import dev.mantikafasi.manticord.plugins.api.PLUGIN_API_LEVEL
@@ -114,22 +115,33 @@ class WidgetSettingsPluginBrowser : AppFragment(R.layout.widget_settings_plugin_
                 data.authors?.takeIf { it.isNotEmpty() }?.joinToString(),
                 data.versionName,
             ).joinToString(" · ")
-            item.pluginBrowserItemDescription.text = data.description
-            item.pluginBrowserItemDescription.visibility = if (data.description.isNullOrBlank()) View.GONE else View.VISIBLE
-
             val installed = PluginIndex.installedVersion(itemView.context, requireNotNull(data.packageName))
+            val foreign = installed != null && PluginIndex.hasForeignSigner(itemView.context, data)
+            val description = listOfNotNull(
+                data.description?.takeIf { it.isNotBlank() },
+                itemView.context.getString(R.string.plugin_browser_foreign_signer).takeIf { foreign },
+            ).joinToString("\n\n")
+            item.pluginBrowserItemDescription.text = description
+            item.pluginBrowserItemDescription.visibility = if (description.isEmpty()) View.GONE else View.VISIBLE
+
             val compatible = data.pluginApiMinimum <= PLUGIN_API_LEVEL
             val action = item.pluginBrowserItemAction
-            val (label, enabled) = when {
-                !compatible -> R.string.plugin_browser_incompatible to false
-                installed == null -> R.string.plugin_browser_install to true
-                installed < data.versionCode -> R.string.plugin_browser_update to true
-                else -> R.string.plugin_browser_installed to false
+            val upToDate = installed != null && (foreign || installed >= data.versionCode)
+            val label = when {
+                upToDate -> R.string.plugin_browser_uninstall
+                !compatible -> R.string.plugin_browser_incompatible
+                installed == null -> R.string.plugin_browser_install
+                else -> R.string.plugin_browser_update
             }
             action.setText(itemView.context.getString(label))
-            action.isEnabled = enabled && installing == null
+            action.setBackgroundColor(
+                ColorCompat.getColor(itemView.context, if (upToDate) R.color.status_red_500 else R.color.brand_500),
+            )
+            action.isEnabled = (upToDate || compatible) && installing == null
             action.setIsLoading(installing == data.packageName)
-            action.setOnClickListener { install(data) }
+            action.setOnClickListener {
+                if (upToDate) PluginIndex.uninstall(itemView.context, data.packageName) else install(data)
+            }
         }
     }
 }

@@ -14,6 +14,7 @@ import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.databinding.WidgetSettingsPluginsBinding
 import com.discord.databinding.WidgetSettingsPluginsItemBinding
+import com.discord.plugins.PluginIndex
 import com.discord.plugins.PluginLoadingPolicy
 import com.discord.plugins.PluginRuntime
 import com.discord.plugins.PluginSnapshot
@@ -33,6 +34,7 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
         ::togglePlugin,
         { openPlugin(it, WidgetSettingsPlugin.Mode.INFO) },
         { openPlugin(it, WidgetSettingsPlugin.Mode.SETTINGS) },
+        { row -> row.packageName?.let { PluginIndex.uninstall(requireContext(), it) } },
     )
     private var externalPlugins: List<ExternalPluginDescriptor> = emptyList()
     private var loadMetrics = PluginMetrics()
@@ -207,6 +209,7 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
         private val onToggle: (Row) -> Unit,
         private val onInfo: (Row) -> Unit,
         private val onSettings: (Row) -> Unit,
+        private val onUninstall: (Row) -> Unit,
     ) : RecyclerView.Adapter<PluginAdapter.Holder>() {
         var rows: List<Row> = emptyList()
             set(value) {
@@ -250,6 +253,8 @@ class WidgetSettingsPlugins : AppFragment(R.layout.widget_settings_plugins) {
                 binding.pluginItemSettings.visibility = if (row.canOpen) View.VISIBLE else View.GONE
                 binding.pluginItemInfo.setOnClickListener { onInfo(row) }
                 binding.pluginItemSettings.setOnClickListener { onSettings(row) }
+                binding.pluginItemUninstall.visibility = if (row.packageName != null) View.VISIBLE else View.GONE
+                binding.pluginItemUninstall.setOnClickListener { onUninstall(row) }
             }
         }
     }
