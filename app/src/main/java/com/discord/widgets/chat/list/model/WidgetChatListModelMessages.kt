@@ -27,6 +27,7 @@ import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState
 import com.discord.widgets.botuikit.ComponentStateMapper
 import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.MediaMosaicEntry
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
@@ -379,6 +380,8 @@ data class WidgetChatListModelMessages(
             val embedRows = ChatListEntry.createEmbedEntries(
                 message, messageState, blockedChunkExpanded, animateEmojis, autoPlayGifs, renderEmbeds,
                 isThreadStarterMessage, channel, author, roles, names,
+                groupMedia = FeatureFlags.mediaMosaicEnabled() &&
+                    StoreStream.getUserSettings().getIsAttachmentMediaInline(),
             )
             val componentRows =
                 if (showBotComponents && !message.components.isNullOrEmpty()) {
@@ -416,7 +419,7 @@ data class WidgetChatListModelMessages(
                 )
             } else emptyList()
             val (hostedEmbedRows, standaloneEmbedRows) = embedRows.partition {
-                it is AttachmentEntry || it is EmbedEntry ||
+                it is AttachmentEntry || it is MediaMosaicEntry || it is EmbedEntry ||
                     (it is BotUiComponentEntry && it.sourceEmbedIndex != null)
             }
             val hostedAccessories = forwardedRows + hostedEmbedRows + componentRows

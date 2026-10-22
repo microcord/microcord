@@ -19,6 +19,9 @@ import com.google.gson.FieldNamingPolicy
 import com.google.gson.GsonBuilder
 import org.junit.Assert.*
 import org.junit.Test
+import com.discord.widgets.chat.list.entries.MediaMosaicEntry
+import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.api.message.attachment.MessageAttachment
 
 class EmbedGalleryTest {
     private val gson = GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
@@ -77,5 +80,22 @@ class EmbedGalleryTest {
         assertEquals(listOf(companion.image), missingPrimary.getGalleryImages(listOf(missingPrimary, companion)))
         val proxyOnly = companion.copy(image = EmbedImage(null, "https://proxy.example.com/only", 20, 20))
         assertEquals(listOf(primary.image, proxyOnly.image), primary.getGalleryImages(listOf(proxyOnly)))
+    }
+
+    @Test fun `images and videos group into one mosaic ahead of other files`() {
+        fun attachment(id: Long, name: String, size: Int?) =
+            MessageAttachment("https://cdn/$name", 1, id, "https://proxy/$name", name, size, size)
+        val image = attachment(1, "a.png", 100)
+        val file = attachment(2, "notes.txt", null)
+        val video = attachment(3, "b.mp4", 100)
+        val message = Message(id = 10, channelId = 20, type = 0, attachments = listOf(image, file, video))
+        fun entries(group: Boolean) = ChatListEntry.createEmbedEntries(message, null, false, false, false, true,
+            false, channel, null, null, emptyMap(), groupMedia = group)
+
+        val grouped = entries(group = true)
+        assertEquals(listOf(image, video), (grouped[0] as MediaMosaicEntry).items.map { it.attachment })
+        assertEquals(listOf(0, 2), (grouped[0] as MediaMosaicEntry).items.map { it.embedIndex })
+        assertEquals(file, (grouped[1] as AttachmentEntry).attachment)
+        assertEquals(3, entries(group = false).filterIsInstance<AttachmentEntry>().size)
     }
 }

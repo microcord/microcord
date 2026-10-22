@@ -22,6 +22,7 @@ import com.discord.utilities.permissions.PermissionUtils
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.MediaMosaicEntry
 import com.discord.widgets.chat.list.entries.ActivityMessageEntry
 import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
@@ -139,6 +140,8 @@ data class WidgetChatListModel(
                     entry is MessageEntry && entry.message.id == pendingReplyMessageId ->
                         entry.copy(isPendingReply = true)
                     entry is AttachmentEntry && entry.message.id == pendingReplyMessageId ->
+                        entry.copy(isPendingReply = true)
+                    entry is MediaMosaicEntry && entry.message.id == pendingReplyMessageId ->
                         entry.copy(isPendingReply = true)
                     entry is EmbedEntry && entry.message.id == pendingReplyMessageId ->
                         entry.copy(isPendingReply = true)

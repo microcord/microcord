@@ -48,6 +48,7 @@ import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemMessage
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapterItemForwardedMessage
 import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.MediaMosaicEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
@@ -219,7 +220,7 @@ class WidgetMessageBookmarks : AppFragment(R.layout.widget_message_bookmarks) {
                     renderEmbeds = settings.getIsRenderEmbedsEnabled() && settings.getIsEmbedMediaInlined(),
                 ),
                 message,
-            ).filter { it is MessageEntry || it is AttachmentEntry || it is EmbedEntry || it is StickerEntry || it is ForwardedMessageEntry }
+            ).filter { it is MessageEntry || it is AttachmentEntry || it is MediaMosaicEntry || it is EmbedEntry || it is StickerEntry || it is ForwardedMessageEntry }
             previewAdapter.data = WidgetUserMentions.Model(
                 userId = StoreStream.getUsers().getMe().id,
                 guildId = displayChannel.guildId, guild = guild,

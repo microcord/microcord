@@ -20,6 +20,8 @@ import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.widgets.botuikit.BotComponentExperiments
 import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 import com.discord.widgets.botuikit.ComponentStateMapper
+import com.discord.api.message.attachment.MessageAttachmentType
+import com.discord.api.message.attachment.MessageAttachment
 
 /**
  * One row of the chat list.
@@ -102,9 +104,14 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val ACTIVITY_MESSAGE = 47
         const val POLL = 48
         const val SEARCH_SPOILER_RESULT = 49
+        const val MEDIA_MOSAIC = 50
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24
+
+        private fun MessageAttachment.isMosaicMedia() =
+            (type == MessageAttachmentType.IMAGE || type == MessageAttachmentType.VIDEO) &&
+                (width ?: 0) > 0 && (height ?: 0) > 0
 
         /**
          * Attachments first, then embeds, sharing one running `embedIndex` because revealed-spoiler
@@ -123,6 +130,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             author: GuildMember?,
             roles: Map<Long, GuildRole>?,
             nickOrUsernames: Map<Long, String>,
+            groupMedia: Boolean = false,
         ): List<ChatListEntry> {
             // Type 46 embeds contain poll closure metadata consumed by the system-message row.
             if (message.type == MessageTypes.POLL_RESULT) return emptyList()
@@ -137,21 +145,26 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
             val entries = ArrayList<ChatListEntry>(embeds.size + attachments.size + if (message.poll != null) 1 else 0)
             message.poll?.let { entries.add(PollEntry(message, it)) }
             var embedIndex = 0
-            attachments.forEach { attachment ->
-                entries.add(
-                    AttachmentEntry(
-                        embedIndex = embedIndex,
-                        guildId = channel.guildId,
-                        message = message,
-                        messageState = messageState,
-                        attachment = attachment,
-                        isBlockedExpanded = blockedChunkExpanded,
-                        allowAnimatedEmojis = allowAnimatedEmojis,
-                        autoPlayGifs = autoPlayGifs,
-                        isThreadStarterMessage = isThreadStarterMessage,
-                    ),
+            val attachmentEntries = attachments.map { attachment ->
+                AttachmentEntry(
+                    embedIndex = embedIndex++,
+                    guildId = channel.guildId,
+                    message = message,
+                    messageState = messageState,
+                    attachment = attachment,
+                    isBlockedExpanded = blockedChunkExpanded,
+                    allowAnimatedEmojis = allowAnimatedEmojis,
+                    autoPlayGifs = autoPlayGifs,
+                    isThreadStarterMessage = isThreadStarterMessage,
                 )
-                embedIndex++
+            }
+            // Modern Discord groups the images and videos into one mosaic, ahead of the other files.
+            val (media, files) = attachmentEntries.partition { it.attachment.isMosaicMedia() }
+            if (groupMedia && media.size > 1) {
+                entries.add(MediaMosaicEntry(media))
+                entries.addAll(files)
+            } else {
+                entries.addAll(attachmentEntries)
             }
 
             val isAutoModSystemMessage = message.type == AUTO_MOD_SYSTEM_MESSAGE_TYPE

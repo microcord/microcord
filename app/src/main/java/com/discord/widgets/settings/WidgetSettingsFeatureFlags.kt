@@ -106,6 +106,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.gifUrlToInputEnabled()
             setOnCheckedListener(FeatureFlags::setGifUrlToInputEnabled)
         }
+        binding.settingsFeatureMediaMosaic.apply {
+            isChecked = FeatureFlags.mediaMosaicEnabled()
+            setOnCheckedListener(FeatureFlags::setMediaMosaicEnabled)
+        }
         binding.settingsFeatureQuickMessageActions.apply {
             isChecked = FeatureFlags.quickMessageActionsEnabled()
             setOnCheckedListener(FeatureFlags::setQuickMessageActionsEnabled)

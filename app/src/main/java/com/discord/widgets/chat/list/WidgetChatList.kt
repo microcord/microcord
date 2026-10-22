@@ -10,6 +10,7 @@ import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
 import com.discord.stores.StoreStream
 import com.discord.widgets.chat.list.entries.AttachmentEntry
+import com.discord.widgets.chat.list.entries.MediaMosaicEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.StickerEntry
@@ -132,6 +133,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
         return when (entry) {
             is MessageEntry -> entry.message
             is AttachmentEntry -> entry.message
+            is MediaMosaicEntry -> entry.message
             is EmbedEntry -> entry.message
             is StickerEntry -> entry.message
             else -> null

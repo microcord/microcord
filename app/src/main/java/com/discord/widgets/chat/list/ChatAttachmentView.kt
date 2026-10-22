@@ -65,6 +65,16 @@ class ChatAttachmentView @JvmOverloads constructor(
     private var expanded = false
     private var wrapping = false
 
+    /** Set when this view is one tile of a media mosaic: the media fills exactly this size. */
+    private var tileSize: Pair<Int, Int>? = null
+
+    /** Makes this view a mosaic tile of [width] x [height] pixels instead of sizing to its media. */
+    fun setTileSize(width: Int, height: Int) {
+        tileSize = width to height
+        (inlineMedia.layoutParams as MarginLayoutParams).apply { topMargin = 0; bottomMargin = 0 }
+        inlineMedia.radius = resources.displayMetrics.density * TILE_RADIUS_DP
+    }
+
     init {
         binding.chatListItemAttachmentTextPreviewScroll.setOnTouchListener { view, event ->
             when (event.actionMasked) {
@@ -191,7 +201,7 @@ class ChatAttachmentView @JvmOverloads constructor(
             return
         }
 
-        val (scaledWidth, scaledHeight) = EmbedResourceUtils.calculateScaledSize(
+        val (scaledWidth, scaledHeight) = tileSize ?: EmbedResourceUtils.calculateScaledSize(
             width,
             height,
             maxAttachmentImageWidth,
@@ -437,6 +447,7 @@ class ChatAttachmentView @JvmOverloads constructor(
         const val SPOILER_FADE_IN_MS = 50L
         const val SPOILER_FADE_OUT_MS = 200L
         const val DOWNLOAD_STARTED_ALPHA = 0.3f
+        const val TILE_RADIUS_DP = 2f
         const val WRAP_DISABLED_ALPHA = 0.6f
         val previewClient = OkHttpClient()
         val codeLanguageRules by lazy {

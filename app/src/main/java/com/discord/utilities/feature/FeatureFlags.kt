@@ -30,6 +30,8 @@ object FeatureFlags {
     fun gifUrlToInputEnabled() = enabled(ClientSettings.gifUrlToInput)
     fun setGifUrlToInputEnabled(enabled: Boolean) = setEnabled(ClientSettings.gifUrlToInput, enabled)
     fun quickMessageActionsEnabled() = enabled(ClientSettings.quickMessageActions)
+    fun mediaMosaicEnabled() = enabled(ClientSettings.mediaMosaic)
+    fun setMediaMosaicEnabled(enabled: Boolean) = setEnabled(ClientSettings.mediaMosaic, enabled)
     fun setQuickMessageActionsEnabled(enabled: Boolean) = setEnabled(ClientSettings.quickMessageActions, enabled)
     fun messageCustomizationsEnabled() = enabled(ClientSettings.messageCustomizations)
     fun setMessageCustomizationsEnabled(enabled: Boolean) = setEnabled(ClientSettings.messageCustomizations, enabled)
