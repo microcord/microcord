@@ -770,6 +770,9 @@ data class WidgetChannelListModel(
             }
 
             val threadParentMap = sortThreadsForChannelList(activeJoinedGuildThreads, selectedChannel)
+            val idleThreadIds = activeJoinedGuildThreads.values.flatMap { it.values }
+                .filterNot(ActiveJoinedThread::timedRelevant)
+                .mapTo(HashSet()) { it.channel.id }
             val sortedCategories = sortedCategories(guildChannels)
 
             /** Categories the user can manage: kept even when they end up empty. */
@@ -841,7 +844,9 @@ data class WidgetChannelListModel(
                                     areAnyChildThreadsSelected(parent.id)
                                 val suppressed = parent.parentId in collapsedCategories ||
                                     isParentMuted == true
-                                !parentInFocus && !isThreadUnread(textChannel) && suppressed
+                                val idle = textChannel.id in idleThreadIds && mentionCount <= 0
+                                !channelSelected && !isThreadUnread(textChannel) &&
+                                    (idle || (!parentInFocus && suppressed))
                             }
                         } else {
                             val inFocus = channelSelected || areAnyChildThreadsSelected(id)

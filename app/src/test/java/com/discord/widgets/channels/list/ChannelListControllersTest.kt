@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import com.discord.utilities.threads.ThreadUtils
 import com.discord.api.channel.Channel
 import com.discord.api.thread.ThreadMetadata
 import com.discord.utilities.SnowflakeUtils
@@ -57,7 +58,7 @@ class ChannelListControllersTest {
 
         assertEquals(
             createdAt + 60 * 60_000L,
-            WidgetThreadArchiveActions.computeThreadAutoArchiveTimeMs(channel),
+            ThreadUtils.computeThreadAutoArchiveTimeMs(channel),
         )
     }
 

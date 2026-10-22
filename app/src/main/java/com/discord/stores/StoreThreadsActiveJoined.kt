@@ -8,6 +8,12 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.thread.dto.ModelThreadListSync
 import com.discord.stores.updates.ObservationDeck
 import rx.Observable
+import rx.Subscription
+import java.util.concurrent.TimeUnit
+import com.discord.utilities.threads.ThreadUtils
+import com.discord.api.channel.isPinned
+import rx.schedulers.Schedulers
+import rx.Scheduler
 
 /**
  * The intersection of [StoreThreadsActive] and [StoreThreadsJoined]: unarchived threads the signed-in
@@ -22,15 +28,21 @@ class StoreThreadsActiveJoined(
     private val storeThreadsActive: StoreThreadsActive,
     private val storeThreadsJoined: StoreThreadsJoined,
     private val observationDeck: ObservationDeck,
+    private val dispatcher: Dispatcher,
+    private val lastMessageId: (Channel) -> Long = Channel::lastMessageId,
+    private val timerScheduler: Scheduler = Schedulers.computation(),
 ) : StoreV2() {
 
     data class ActiveJoinedThread(
         val channel: Channel,
         val joinTimestamp: UtcDateTime,
         val muted: Boolean,
+        /** Inside its auto-archive window, or pinned. */
+        val timedRelevant: Boolean = true,
     )
 
     private val activeJoinedThreads = HashMap<Long, ActiveJoinedThread>()
+    private val archiveTimers = HashMap<Long, Subscription>()
     private var activeJoinedThreadsByThreadIdSnapshot: Map<Long, ActiveJoinedThread> = emptyMap()
 
     /** guild id → parent channel id → thread id → row. Rebuilt wholesale in [snapshotData]. */
@@ -102,8 +114,10 @@ class StoreThreadsActiveJoined(
     fun handleGuildDelete(guildId: Long) {
         val iterator = activeJoinedThreads.values.iterator()
         while (iterator.hasNext()) {
-            if (iterator.next().channel.guildId == guildId) {
+            val thread = iterator.next()
+            if (thread.channel.guildId == guildId) {
                 iterator.remove()
+                archiveTimers.remove(thread.channel.id)?.unsubscribe()
                 markChanged()
             }
         }
@@ -125,6 +139,16 @@ class StoreThreadsActiveJoined(
     fun handleThreadMembersUpdate(payload: ThreadMembersUpdate) = updateThread(payload.guildId, payload.id)
 
     /**
+     * A message only matters to an idle thread, which it makes relevant again. A thread still in its
+     * window keeps its timer, which re-arms from the newer last message when it fires.
+     */
+    @StoreThread
+    fun handleMessageCreate(channelId: Long) {
+        val thread = activeJoinedThreads[channelId] ?: return
+        if (!thread.timedRelevant) updateThread(thread.channel.guildId, channelId)
+    }
+
+    /**
      * Drop the projection on logout.
      *
      * The reference has no `reset()`; this project wipes user state at logout, so the hook exists to
@@ -132,6 +156,8 @@ class StoreThreadsActiveJoined(
      */
     internal fun reset() {
         activeJoinedThreads.clear()
+        archiveTimers.values.forEach(Subscription::unsubscribe)
+        archiveTimers.clear()
         markChanged()
     }
 
@@ -155,8 +181,7 @@ class StoreThreadsActiveJoined(
         storeThreadsJoined.getAllJoinedThreadsInternal().values.forEach { joined ->
             if (guildId != null && joined.guildId != guildId) return@forEach
             val channel = activeByGuild[joined.guildId]?.get(joined.threadId) ?: return@forEach
-            activeJoinedThreads[channel.id] =
-                ActiveJoinedThread(channel, joined.joinTimestamp, joined.muted)
+            activeJoinedThreads[channel.id] = row(channel, joined)
             markChanged()
         }
     }
@@ -166,11 +191,26 @@ class StoreThreadsActiveJoined(
         val channel = storeThreadsActive.getAllActiveThreadsInternal()[guildId]?.get(channelId)
         val joined = storeThreadsJoined.getAllJoinedThreadsInternal()[channelId]
         if (channel != null && joined != null) {
-            activeJoinedThreads[channelId] =
-                ActiveJoinedThread(channel, joined.joinTimestamp, joined.muted)
-            markChanged()
+            val row = row(channel, joined)
+            if (activeJoinedThreads.put(channelId, row) != row) markChanged()
         } else if (activeJoinedThreads.remove(channelId) != null) {
+            archiveTimers.remove(channelId)?.unsubscribe()
             markChanged()
         }
+    }
+
+    /** Builds the row and (re)arms the timer that flips it once the thread goes idle. */
+    @StoreThread
+    private fun row(channel: Channel, joined: StoreThreadsJoined.JoinedThread): ActiveJoinedThread {
+        archiveTimers.remove(channel.id)?.unsubscribe()
+        val remainingMs = ThreadUtils.computeThreadAutoArchiveTimeMs(channel, lastMessageId(channel)) -
+            timerScheduler.now()
+        val pinned = channel.isPinned()
+        val timedRelevant = pinned || remainingMs > 0
+        if (!pinned && remainingMs > 0) {
+            archiveTimers[channel.id] = Observable.timer(remainingMs + 1, TimeUnit.MILLISECONDS, timerScheduler)
+                .subscribe({ dispatcher.schedule { updateThread(channel.guildId, channel.id) } }, {})
+        }
+        return ActiveJoinedThread(channel, joined.joinTimestamp, joined.muted, timedRelevant)
     }
 }

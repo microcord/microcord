@@ -23,6 +23,8 @@ import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import rx.schedulers.TestScheduler
+import java.util.concurrent.TimeUnit
+import com.discord.utilities.SnowflakeUtils
 
 /**
  * Behavioral coverage for the thread store family. Each test drives the stores exactly as
@@ -248,6 +250,31 @@ class ThreadStoresTest {
         assertEquals(StoreThreadDraft.ThreadDraftState(), observed.last())
     }
 
+    @Test
+    fun `a joined thread goes idle at its auto-archive time and a message revives it`() {
+        val fixture = fixture()
+        fixture.dispatch {
+            users.handleConnectionOpen(readyPayload())
+            channels.handleConnectionOpen(readyPayload())
+            threadsJoined.handleConnectionOpen(readyPayload())
+            threadsActive.handleConnectionOpen()
+        }
+        fun relevant() = fixture.threadsActiveJoined.getAllActiveJoinedThreadsById().getValue(11L).timedRelevant
+
+        // The fixture thread was created at the snowflake epoch, long past its 24h window.
+        fixture.scheduler.advanceTimeTo(SnowflakeUtils.toTimestamp(11L) + TimeUnit.DAYS.toMillis(2), TimeUnit.MILLISECONDS)
+        fixture.dispatch { threadsActiveJoined.handleConnectionOpen() }
+        assertFalse(relevant())
+
+        fixture.recentMessageIds[11L] = SnowflakeUtils.fromTimestamp(fixture.scheduler.now())
+        fixture.dispatch { threadsActiveJoined.handleMessageCreate(11L) }
+        assertTrue(relevant())
+
+        fixture.scheduler.advanceTimeBy(1441, TimeUnit.MINUTES)
+        fixture.scheduler.triggerActions()
+        assertFalse(relevant())
+    }
+
     // -- Fixture --------------------------------------------------------------------------------
 
     private class Fixture {
@@ -258,7 +285,12 @@ class ThreadStoresTest {
         val channels = StoreChannels(dispatcher, deck)
         val threadsJoined = StoreThreadsJoined(users, deck)
         val threadsActive = StoreThreadsActive(channels, deck)
-        val threadsActiveJoined = StoreThreadsActiveJoined(threadsActive, threadsJoined, deck)
+        val recentMessageIds = HashMap<Long, Long>()
+        val threadsActiveJoined = StoreThreadsActiveJoined(
+            threadsActive, threadsJoined, deck, dispatcher,
+            lastMessageId = { recentMessageIds[it.id] ?: 0L },
+            timerScheduler = scheduler,
+        )
         val threadMembers = StoreThreadMembers(deck, channels)
         val messages = StoreMessages(deck)
         val threadMessages = StoreThreadMessages(messages, channels, deck)

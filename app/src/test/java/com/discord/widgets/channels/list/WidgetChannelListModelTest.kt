@@ -402,6 +402,23 @@ class WidgetChannelListModelTest {
         assertTrue(items.filterIsInstance<ChannelListItemThread>().any { it.channel.id == post.id })
     }
 
+    @Test
+    fun `an idle followed thread hides unless it is unread or open`() {
+        val parent = channel(2, Channel.GUILD_TEXT)
+        val thread = channel(3, Channel.PUBLIC_THREAD, parentId = 2)
+        fun threads(unread: Set<Long> = emptySet(), selected: Channel? = null) = build(
+            listOf(parent),
+            unreadChannelIds = unread,
+            selectedChannel = selected,
+            activeJoinedThreads = mapOf(2L to mapOf(3L to thread)),
+            idleThreadIds = setOf(3L),
+        ).filterIsInstance<ChannelListItemThread>()
+
+        assertTrue(threads().isEmpty())
+        assertEquals(1, threads(unread = setOf(3L)).size)
+        assertEquals(1, threads(selected = thread).size)
+    }
+
     // ---- helpers -------------------------------------------------------------------------
 
     private fun List<ChannelListItem>.channelIds(): List<Long> = mapNotNull { item ->
@@ -428,6 +445,7 @@ class WidgetChannelListModelTest {
         unelevated: Boolean = false,
         ableToInstantInvite: Boolean = false,
         activeJoinedThreads: Map<Long, Map<Long, Channel>> = emptyMap(),
+        idleThreadIds: Set<Long> = emptySet(),
     ): List<ChannelListItem> = WidgetChannelListModel.guildListBuilder(
         selectedGuildId = GUILD_ID,
         guild = WidgetChannelListModel.GuildInfo(
@@ -447,6 +465,7 @@ class WidgetChannelListModelTest {
                     channel = thread,
                     joinTimestamp = UtcDateTime(0L),
                     muted = false,
+                    timedRelevant = thread.id !in idleThreadIds,
                 )
             }
         },

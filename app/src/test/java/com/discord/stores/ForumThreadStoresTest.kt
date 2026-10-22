@@ -201,7 +201,7 @@ class ForumThreadStoresTest {
         val channels = StoreChannels(dispatcher, deck)
         val threadsActive = StoreThreadsActive(channels, deck)
         val threadsJoined = StoreThreadsJoined(users, deck)
-        val threadsActiveJoined = StoreThreadsActiveJoined(threadsActive, threadsJoined, deck)
+        val threadsActiveJoined = StoreThreadsActiveJoined(threadsActive, threadsJoined, deck, dispatcher)
         val messages = StoreMessages(deck)
         val messagesMostRecent = StoreMessagesMostRecent(deck, storeChannels = channels)
         val messageAck = StoreMessageAck(

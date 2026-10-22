@@ -11,6 +11,8 @@ import com.discord.api.channel.isThread
 import com.discord.api.channel.isVoiceChannel
 import com.discord.models.guild.Guild
 import com.discord.models.message.Message
+import com.discord.utilities.time.TimeUtils
+import com.discord.utilities.SnowflakeUtils
 
 /**
  * Permission predicates for threads.
@@ -71,6 +73,21 @@ object ThreadUtils {
     fun canViewAllPrivateThreads(channelPermissions: Long?): Boolean =
         PermissionUtils.can(Permission.MANAGE_THREADS, channelPermissions) &&
             PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, channelPermissions)
+
+    /**
+     * When [channel] auto-archives if nothing more happens in it: its last activity (creation, last
+     * message or archive change) plus its auto-archive duration.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun computeThreadAutoArchiveTimeMs(channel: Channel, lastMessageId: Long = channel.lastMessageId): Long {
+        val lastActivityMs = maxOf(
+            SnowflakeUtils.toTimestamp(channel.id),
+            if (lastMessageId > 0L) SnowflakeUtils.toTimestamp(lastMessageId) else 0L,
+            channel.threadMetadata?.archiveTimestamp?.let(TimeUtils::parseUTCDate) ?: 0L,
+        )
+        return lastActivityMs + (channel.threadMetadata?.autoArchiveDuration ?: 0) * 60_000L
+    }
 
     /** Whether a public thread can be started in [channel], from [message] when there is one. */
     @JvmStatic

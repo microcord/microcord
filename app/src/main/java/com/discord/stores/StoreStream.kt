@@ -237,7 +237,13 @@ class StoreStream private constructor(
     // private-thread permissions depend on whether the user is a member (StorePermissions.java:92-95).
     private val threadsJoined = StoreThreadsJoined(users, observationDeck)
     private val threadsActive = StoreThreadsActive(channels, observationDeck)
-    private val threadsActiveJoined = StoreThreadsActiveJoined(threadsActive, threadsJoined, observationDeck)
+    private val threadsActiveJoined = StoreThreadsActiveJoined(
+        threadsActive,
+        threadsJoined,
+        observationDeck,
+        dispatcher,
+        lastMessageId = { messagesMostRecent.getMostRecentIdsInternal()[it.id] ?: it.lastMessageId },
+    )
     private val threadMembers = StoreThreadMembers(observationDeck, channels)
     private val threadDraft = StoreThreadDraft(dispatcher)
     private val stageInstances = StoreStageInstances(observationDeck)
@@ -2590,6 +2596,7 @@ class StoreStream private constructor(
             },
         )
         messagesMostRecent.handleMessageCreate(domain)
+        threadsActiveJoined.handleMessageCreate(domain.channelId)
         messagePreviews.handleMessageCreate(message)
         messageAck.handleMessageCreate(message)
         if (message.author?.id == users.getMeInternal().id) {

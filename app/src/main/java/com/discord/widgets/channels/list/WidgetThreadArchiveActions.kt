@@ -13,7 +13,6 @@ import com.discord.i18n.i18nFormat
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
@@ -24,6 +23,7 @@ import com.discord.utilities.time.TimeUtils
 import com.google.android.material.radiobutton.MaterialRadioButton
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
+import com.discord.utilities.threads.ThreadUtils
 
 /**
  * The thread auto-archive sheet: pick how long the thread stays active without a message, or
@@ -90,7 +90,7 @@ class WidgetThreadArchiveActions : AppBottomSheet() {
             R.string.auto_archive_thread_at_long,
             "time" to TimeUtils.toReadableTimeString(
                 requireContext(),
-                computeThreadAutoArchiveTimeMs(channel),
+                ThreadUtils.computeThreadAutoArchiveTimeMs(channel),
             ),
         )
 
@@ -192,23 +192,5 @@ class WidgetThreadArchiveActions : AppBottomSheet() {
                 .show(fragmentManager, WidgetThreadArchiveActions::class.java.name)
         }
 
-        /**
-         * When the thread will archive if nothing else is said in it.
-         *
-         * Reference: `ThreadUtils.computeThreadAutoArchiveTimeMs`. The API refreshes the archive
-         * timestamp on activity, but malformed or stale metadata
-         * must never place auto-archive before the thread itself existed.
-         */
-        @JvmStatic
-        fun computeThreadAutoArchiveTimeMs(channel: Channel): Long {
-            val lastActivityMs = maxOf(
-                SnowflakeUtils.toTimestamp(channel.id),
-                channel.threadMetadata?.archiveTimestamp?.let(TimeUtils::parseUTCDate) ?: 0L,
-            )
-            return lastActivityMs +
-                (channel.threadMetadata?.autoArchiveDuration ?: 0) * MILLIS_PER_MINUTE
-        }
-
-        private const val MILLIS_PER_MINUTE = 60_000L
     }
 }
