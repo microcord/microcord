@@ -21,6 +21,11 @@ dependencies {
 
 publishing {
     repositories {
+        // Pushed to this repository's public `maven` branch by .github/workflows/plugin-sdk.yml.
+        maven {
+            name = "Public"
+            url = uri(rootProject.layout.buildDirectory.dir("public-maven"))
+        }
         maven {
             name = "GitHubEnterprise"
             url = uri("https://maven.git.hoodnet.work/microcord/microcord")
