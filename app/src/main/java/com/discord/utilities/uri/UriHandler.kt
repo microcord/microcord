@@ -12,6 +12,7 @@ import androidx.fragment.app.FragmentActivity
 import com.discord.R
 import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.intent.IntentUtils
 
 /**
@@ -144,6 +145,7 @@ object UriHandler {
     @JvmStatic
     @JvmOverloads
     fun isTrustedDomain(url: String, mask: String? = null): Boolean {
+        if (DeveloperSettings.isTrustAllDomainsEnabled()) return true
         val host = getDomainName(url)
         if (host != null && isImplicitlyTrustedDomain(host)) return true
         return trustedDomainResolver?.invoke(url, mask) ?: false

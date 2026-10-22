@@ -11,6 +11,7 @@ object DeveloperSettings {
     private const val FLOATING_SHORTCUT_Y = "developer_floating_shortcut_y"
     private const val LEGACY_MESSAGE_UPLOADS = "developer_legacy_message_uploads"
     private const val VIEW_RAW = "developer_view_raw"
+    private const val TRUST_ALL_DOMAINS = "developer_trust_all_domains"
     const val ACTUAL_TIER = -1
 
     /** Session-durable: a switch of accounts is not a reason to stop logging this device. */
@@ -49,6 +50,16 @@ object DeveloperSettings {
     fun setViewRawEnabled(enabled: Boolean) {
         SharedPreferencesProvider.getPrefsSessionDurable().edit()
             .putBoolean(VIEW_RAW, enabled).apply()
+    }
+
+    /** Opens every link without the "Leaving Discord" confirmation. */
+    fun isTrustAllDomainsEnabled(): Boolean = runCatching {
+        SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(TRUST_ALL_DOMAINS, false)
+    }.getOrDefault(false)
+
+    fun setTrustAllDomainsEnabled(enabled: Boolean) {
+        SharedPreferencesProvider.getPrefsSessionDurable().edit()
+            .putBoolean(TRUST_ALL_DOMAINS, enabled).apply()
     }
 
     fun floatingShortcutPosition(): Pair<Float, Float> = runCatching {

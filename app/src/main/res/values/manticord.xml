@@ -214,6 +214,8 @@
     <string name="microcord_settings_search_hint">Search settings</string>
     <string name="microcord_mark_all_as_read">Mark All as Read</string>
     <string name="microcord_mark_dms_as_read">Mark DMs as Read</string>
+    <string name="developer_trust_all_domains">Trust all domains</string>
+    <string name="developer_trust_all_domains_description">Opens every link without asking for confirmation first</string>
     <string name="developer_view_raw">View Raw</string>
     <string name="developer_view_raw_description">Adds View Raw to message menus, showing the markdown and JSON of a message</string>
     <string name="view_raw_title">Raw message by %1$s</string>
