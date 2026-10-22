@@ -663,7 +663,6 @@ class StoreStream private constructor(
         { RestAPI.apiOrNull },
         canReadChannel = { channelId ->
             channels.getChannel(channelId) != null &&
-                // DMs have no permission entry; a guild channel needs View Channel.
                 permissions.getPermissionsByChannel()[channelId]?.let { it and Permission.VIEW_CHANNEL != 0L } ?: true
         },
     )

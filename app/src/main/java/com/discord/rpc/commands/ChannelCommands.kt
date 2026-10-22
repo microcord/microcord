@@ -19,6 +19,7 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.permissions.PermissionUtils
 import org.json.JSONArray
 import org.json.JSONObject
+import com.discord.api.channel.isPrivate
 
 /** `messages` and `voice_states` stay empty; the reference only fills them for IPC clients. */
 fun transformChannel(channel: Channel): JSONObject = JSONObject()
@@ -64,7 +65,7 @@ val channelCommands: Map<String, RpcCommand> = mapOf(
         }
         val channels = StoreStream.getChannels().getAllChannels().values
             .filter { guildId == null || it.guildId == guildId }
-            .filter { PermissionUtils.can(Permission.VIEW_CHANNEL, channelPermissions(it.id)) }
+            .filter { it.isPrivate() || PermissionUtils.can(Permission.VIEW_CHANNEL, channelPermissions(it.id)) }
             .map {
                 JSONObject()
                     .put("id", it.id.toString())

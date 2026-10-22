@@ -7,7 +7,6 @@ import com.discord.api.channel.isCategory
 import com.discord.app.AppViewModel
 import com.discord.stores.StoreChannels
 import com.discord.stores.StoreStream
-import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
@@ -78,12 +77,9 @@ class WidgetChannelPickerBottomSheetViewModel(
 
         internal fun filterChannels(
             channels: Collection<Channel>,
-            permissions: Map<Long, Long>,
             hideAnnouncementChannels: Boolean,
         ): List<Channel> = channels.filter { channel ->
-            !channel.isCategory() &&
-                (!hideAnnouncementChannels || !channel.isAnnouncementChannel()) &&
-                PermissionUtils.hasAccess(channel, permissions[channel.id])
+            !channel.isCategory() && (!hideAnnouncementChannels || !channel.isAnnouncementChannel())
         }
 
         private fun observeStoreState(
@@ -91,12 +87,7 @@ class WidgetChannelPickerBottomSheetViewModel(
             storeChannels: StoreChannels,
             hideAnnouncementChannels: Boolean,
         ): Observable<StoreState> = storeChannels.observeChannelsForGuild(guildId).map { channels ->
-            StoreState.Loaded(
-                channels.values.filter { channel ->
-                    !channel.isCategory() &&
-                        (!hideAnnouncementChannels || !channel.isAnnouncementChannel())
-                },
-            ) as StoreState
+            StoreState.Loaded(filterChannels(channels.values, hideAnnouncementChannels)) as StoreState
         }
     }
 }

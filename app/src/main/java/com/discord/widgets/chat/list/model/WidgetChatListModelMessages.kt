@@ -332,8 +332,6 @@ data class WidgetChatListModelMessages(
             isThreadStarterMessage: Boolean = false,
             userUpdates: UserUpdates = UserUpdates(),
         ): List<ChatListEntry> {
-            if (message.type == 38 && !PermissionUtils.can(Permission.CREATE_INSTANT_INVITE, permissionsForChannel)) return emptyList()
-
             val rows = ArrayList<ChatListEntry>()
             val replyState = resolveReplyState(message, repliedMessages)
             val replyData = replyState?.let { state ->
@@ -450,7 +448,7 @@ data class WidgetChatListModelMessages(
                 rows += ReactionsEntry(
                     message,
                     canAdd,
-                    canAdd && PermissionUtils.can(Permission.ADD_REACTIONS, permissionsForChannel),
+                    canAdd && (channel.isPrivate() || PermissionUtils.can(Permission.ADD_REACTIONS, permissionsForChannel)),
                     animateEmojis,
                 )
             }

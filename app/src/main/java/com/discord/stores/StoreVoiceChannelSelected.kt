@@ -4,17 +4,18 @@ import com.discord.utilities.analytics.IdleTracker
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.shouldPlayJoinLeaveSounds
-import com.discord.api.permission.Permission
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelApplicationStream
 import com.discord.models.domain.ModelPayload
 import com.discord.rtcconnection.RtcConnection
 import com.discord.stores.updates.ObservationDeck
-import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.time.Clock
 import com.discord.utilities.voice.VoiceChannelJoinability
 import rx.Observable
 import rx.subjects.PublishSubject
+import com.discord.utilities.voice.VoiceChannelJoinabilityUtils
+import com.discord.api.guild.GuildVerificationLevel
+import com.discord.api.guild.GuildMaxVideoChannelUsers
 
 /**
  * Which voice channel this client is in.
@@ -273,22 +274,17 @@ class StoreVoiceChannelSelected(
         if (channelId == VOICE_CHANNEL_ID_NONE) return VoiceChannelJoinability.CAN_JOIN
         val channel = channels.findChannelByIdInternal(channelId)
             ?: return VoiceChannelJoinability.CHANNEL_DOES_NOT_EXIST
-        val channelPermissions = permissions.getPermissionsByChannelInternal()[channelId]
-        if (!PermissionUtils.hasAccess(channel, channelPermissions)) {
-            return VoiceChannelJoinability.PERMISSIONS_MISSING
-        }
-        val occupants = voiceStates.getInternal()[channel.guildId].orEmpty()
-            .count { it.value.channelId == channelId }
-        val maxVideoChannelUsers = getMaxVideoChannelUsers(channel.guildId)
-        if (maxVideoChannelUsers != null && occupants >= maxVideoChannelUsers) {
-            return VoiceChannelJoinability.GUILD_VIDEO_AT_CAPACITY
-        }
-        // MOVE_MEMBERS is the reference's bypass for a full channel.
-        val bypassesUserLimit = PermissionUtils.can(Permission.MOVE_MEMBERS, channelPermissions)
-        if (channel.userLimit > 0 && occupants >= channel.userLimit && !bypassesUserLimit) {
-            return VoiceChannelJoinability.CHANNEL_FULL
-        }
-        return VoiceChannelJoinability.CAN_JOIN
+        return VoiceChannelJoinabilityUtils.computeJoinability(
+            channel = channel,
+            channelVoiceStates = voiceStates.getInternal()[channel.guildId].orEmpty().values,
+            channelPermissions = permissions.getPermissionsByChannelInternal()[channelId],
+            guildMaxVideoChannelUsers = getMaxVideoChannelUsers(channel.guildId)
+                ?.let { GuildMaxVideoChannelUsers.Limited(it) }
+                ?: GuildMaxVideoChannelUsers.Unlimited,
+            verificationLevelTriggered = GuildVerificationLevel.NONE,
+            selectedVoiceChannelId = selectedVoiceChannelId,
+            stageInstance = null,
+        )
     }
 
     companion object {

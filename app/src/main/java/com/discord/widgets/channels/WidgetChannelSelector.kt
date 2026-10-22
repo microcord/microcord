@@ -17,7 +17,6 @@ import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.app.AppBottomSheet
 import com.discord.stores.StoreChannels
-import com.discord.stores.StorePermissions
 import com.discord.stores.StoreStream
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.drawable.setCompoundDrawablesCompat
@@ -25,7 +24,6 @@ import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
-import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
@@ -135,14 +133,12 @@ class WidgetChannelSelector : AppBottomSheet() {
 
         internal fun buildItems(
             channels: Collection<Channel>,
-            permissions: Map<Long, Long>,
             includeNoChannel: Boolean,
             filterFunction: FilterFunction,
         ): List<Item> = buildList {
             if (includeNoChannel) add(Item(null))
             channels.asSequence()
                 .filter(filterFunction::includeChannel)
-                .filter { PermissionUtils.hasAccess(it, permissions[it.id]) }
                 .sortedWith(Channel.getSortByNameAndType())
                 .mapTo(this) { Item(it) }
         }
@@ -152,13 +148,9 @@ class WidgetChannelSelector : AppBottomSheet() {
             includeNoChannel: Boolean,
             filterFunction: FilterFunction,
             storeChannels: StoreChannels = StoreStream.getChannels(),
-            storePermissions: StorePermissions = StoreStream.getPermissions(),
-        ): Observable<List<Item>> = Observable.combineLatest(
-            storeChannels.observeChannelsForGuild(guildId),
-            storePermissions.observeChannelPermissionsForGuild(guildId),
-        ) { channels, permissions ->
-            buildItems(channels.values, permissions, includeNoChannel, filterFunction)
-        }.computationLatest().distinctUntilChanged()
+        ): Observable<List<Item>> = storeChannels.observeChannelsForGuild(guildId)
+            .map { channels -> buildItems(channels.values, includeNoChannel, filterFunction) }
+            .computationLatest().distinctUntilChanged()
     }
 
     companion object {

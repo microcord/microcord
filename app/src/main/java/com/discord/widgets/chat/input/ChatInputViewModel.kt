@@ -34,6 +34,7 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
 import rx.Observable
+import com.discord.utilities.threads.ThreadUtils
 
 /**
  * Everything the composer needs to know about the channel it is sitting in.
@@ -224,7 +225,7 @@ class ChatInputViewModel(
         val isBlocked = relationshipType == ModelUserRelationship.TYPE_BLOCKED
         val archivedAndCannotUnarchive = channel.isThread() &&
             channel.threadMetadata?.archived == true &&
-            !PermissionUtils.can(Permission.MANAGE_THREADS, channelPermissions)
+            !ThreadUtils.canUnarchiveThread(channel, channelPermissions)
 
         val canSendHere = !isBlocked && canWrite && !isLurking && !archivedAndCannotUnarchive
         // In a forum the composer only exists while a post is being drafted; the channel itself
@@ -287,9 +288,7 @@ class ChatInputViewModel(
             shouldShowVerificationGate = shouldShowVerificationGate,
             joinRequestStatus = joinRequestStatus,
             threadDraftState = threadDraftState,
-            // Reference: `ThreadUtils.canCreateThread(permissions, channel, null, guild)`.
-            // `utilities/threads/ThreadUtils` does not exist in this project, so the composer's
-            // "create thread" attachment page stays hidden rather than leading nowhere.
+            // The composer's "create thread" attachment page is not built yet.
             showCreateThreadOption = false,
         )
     }

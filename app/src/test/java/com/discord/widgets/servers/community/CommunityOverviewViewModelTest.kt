@@ -24,7 +24,7 @@ class CommunityOverviewViewModelTest {
         )
 
         assertEquals(
-            WidgetServerSettingsCommunityOverviewViewModel.ViewState.Loaded(guild, null, null),
+            WidgetServerSettingsCommunityOverviewViewModel.ViewState.Loaded(guild, null, null, isAdmin = true),
             WidgetServerSettingsCommunityOverviewViewModel.toViewState(state),
         )
     }

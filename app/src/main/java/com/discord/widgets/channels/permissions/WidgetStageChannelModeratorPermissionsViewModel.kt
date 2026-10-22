@@ -10,6 +10,8 @@ import com.discord.models.user.User
 import com.discord.stores.StoreStream
 import com.discord.utilities.rx.ui
 import rx.Observable
+import com.discord.api.channel.Channel
+import com.discord.utilities.permissions.PermissionUtils
 
 class WidgetStageChannelModeratorPermissionsViewModel(channelId: Long) :
     AppViewModel<WidgetStageChannelModeratorPermissionsViewModel.ViewState>() {
@@ -30,10 +32,21 @@ class WidgetStageChannelModeratorPermissionsViewModel(channelId: Long) :
                     users,
                     guilds.getMembers()[guild.id].orEmpty(),
                     users[guild.ownerId],
-                    PermissionEditor.canManage(guild, me, permissions),
+                    canEditStageModerators(guild, me.id, channel, permissions),
                 ),
             )
         }.ui(this).subscribe(::updateViewState)
+    }
+
+    /** The reference's `StageChannelUtils.computeCanEditStageModerators`. */
+    private fun canEditStageModerators(guild: Guild, meId: Long, channel: Channel, channelPermissions: Long?): Boolean {
+        if (guild.isOwner(meId) || PermissionUtils.can(Permission.ADMINISTRATOR, channelPermissions)) return true
+        val moderation = Permission.MANAGE_ROLES or Permission.MANAGE_CHANNELS or
+            Permission.MUTE_MEMBERS or Permission.MOVE_MEMBERS
+        if (PermissionUtils.can(moderation, StoreStream.getPermissions().getGuildPermissions()[guild.id])) return true
+        val member = StoreStream.getGuilds().getMembers()[guild.id]?.get(meId)
+        val overwrite = PermissionUtils.computeChannelOverwrite(meId, guild.id, member, channel.permissionOverwrites)
+        return PermissionUtils.can(Permission.MANAGE_ROLES, overwrite)
     }
 
     internal fun buildViewState(state: StoreState.Valid): ViewState.Valid {

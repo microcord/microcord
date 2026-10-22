@@ -36,6 +36,7 @@ import com.discord.widgets.chat.list.entries.StickerGreetEntry
 import com.discord.widgets.chat.list.entries.ThreadDraftFormEntry
 import com.discord.widgets.chat.list.entries.ThreadEmbedEntry
 import rx.Observable
+import com.discord.utilities.threads.ThreadUtils
 
 /**
  * Everything `WidgetChatList` renders: the row list plus the surrounding channel, guild and viewer
@@ -265,7 +266,7 @@ data class WidgetChatListModel(
                 inputs.threadDraft,
                 canCreatePrivateThread(permissions, parentChannel, inputs.guild),
                 canCreatePrivateThread(permissions, parentChannel, inputs.guild),
-                canCreatePublicThread(permissions, parentChannel, messagePair.first, inputs.guild),
+                ThreadUtils.canCreatePublicThread(permissions, parentChannel, messagePair.first, inputs.guild),
             )
             return WidgetChatListModel(
                 inputs.myId,
@@ -287,20 +288,6 @@ data class WidgetChatListModel(
             guild ?: return false
             val permissionAllowed = PermissionUtils.can(Permission.CREATE_PRIVATE_THREADS, permissions)
             val channelAllowed = !channel.isThread() && !channel.isVoiceChannel() && !channel.isAnnouncementChannel()
-            return permissionAllowed && channelAllowed
-        }
-
-        private fun canCreatePublicThread(
-            permissions: Long?,
-            channel: Channel,
-            message: Message?,
-            guild: Guild?,
-        ): Boolean {
-            guild ?: return false
-            val permissionAllowed = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
-                (message == null || PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions))
-            val channelAllowed = message?.isSystemMessage() != true && !channel.isThread() &&
-                message?.hasThread() != true && !channel.isVoiceChannel()
             return permissionAllowed && channelAllowed
         }
 

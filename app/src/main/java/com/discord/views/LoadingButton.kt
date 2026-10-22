@@ -26,8 +26,7 @@ class LoadingButton(context: Context, attrs: AttributeSet?) : FrameLayout(contex
         progress = requireNotNull(findViewById(R.id.loading_button_progress))
         isClickable = true
         isFocusable = true
-        // Layouts style this wrapper as a button, which gives it the button's own background and
-        // padding: a second button around the inner one, visible once the inner one is recoloured.
+        // A button style on this wrapper would draw a second button around the inner one.
         if (attrs != null && attrs.styleAttribute != 0 &&
             attrs.getAttributeValue(ANDROID_NAMESPACE, "background") == null
         ) {

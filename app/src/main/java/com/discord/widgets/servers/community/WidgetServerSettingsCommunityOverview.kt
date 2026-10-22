@@ -92,9 +92,7 @@ class WidgetServerSettingsCommunityOverview :
                     WidgetChannelSelector.launchForText(this, viewState.guild.id, REQUEST_KEY_UPDATES_CHANNEL)
                 }
                 locale.setOnClickListener { WidgetSettingsLanguageSelect.show(this) }
-                // Both the updates channel and leaving Community are admin-only, not Manage Server.
-                updatesChannel.isEnabled = viewState.isAdmin
-                updatesChannel.alpha = if (viewState.isAdmin) 1f else DISABLED_ALPHA
+                // Leaving Community needs Administrator; the rest only Manage Server.
                 disableSection.visibility = if (viewState.isAdmin) View.VISIBLE else View.GONE
                 disableButton.visibility = if (viewState.isAdmin) View.VISIBLE else View.GONE
                 disableButton.setOnClickListener {
@@ -109,7 +107,6 @@ class WidgetServerSettingsCommunityOverview :
         private const val REQUEST_KEY_RULES_CHANNEL = "REQUEST_KEY_RULES_CHANNEL"
         private const val REQUEST_KEY_UPDATES_CHANNEL = "REQUEST_KEY_UPDATES_CHANNEL"
         private const val INVALID_ID = -1L
-        private const val DISABLED_ALPHA = 0.3f
 
         fun newInstance(guildId: Long) = WidgetServerSettingsCommunityOverview().apply {
             arguments = Bundle().apply { putLong(INTENT_EXTRA_GUILD_ID, guildId) }

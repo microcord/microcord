@@ -7,6 +7,10 @@ import com.discord.restapi.RestAPIParams
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
 import rx.Observable
+import com.discord.api.channel.isThread
+import com.discord.api.channel.isVoiceChannel
+import com.discord.models.guild.Guild
+import com.discord.models.message.Message
 
 /**
  * Permission predicates for threads.
@@ -66,5 +70,16 @@ object ThreadUtils {
     @JvmStatic
     fun canViewAllPrivateThreads(channelPermissions: Long?): Boolean =
         PermissionUtils.can(Permission.MANAGE_THREADS, channelPermissions) &&
-            PermissionUtils.can(Permission.MANAGE_MESSAGES, channelPermissions)
+            PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, channelPermissions)
+
+    /** Whether a public thread can be started in [channel], from [message] when there is one. */
+    @JvmStatic
+    fun canCreatePublicThread(permissions: Long?, channel: Channel, message: Message?, guild: Guild?): Boolean {
+        guild ?: return false
+        val permissionAllowed = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
+            (message == null || PermissionUtils.can(Permission.READ_MESSAGE_HISTORY, permissions))
+        val channelAllowed = message?.isSystemMessage() != true && !channel.isThread() &&
+            message?.hasThread() != true && !channel.isVoiceChannel()
+        return permissionAllowed && channelAllowed
+    }
 }

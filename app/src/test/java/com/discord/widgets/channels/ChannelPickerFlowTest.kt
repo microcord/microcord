@@ -1,7 +1,6 @@
 package com.discord.widgets.channels
 
 import com.discord.api.channel.Channel
-import com.discord.api.permission.Permission
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -17,16 +16,10 @@ class ChannelPickerFlowTest {
         val category = channel(5, Channel.CATEGORY, "category")
 
         assertEquals(
-            listOf(text, voice),
+            // Like the reference, a channel the user cannot see is still pickable (AFK, rules...).
+            listOf(text, hidden, voice),
             WidgetChannelPickerBottomSheetViewModel.filterChannels(
                 listOf(text, hidden, voice, announcement, category),
-                mapOf(
-                    text.id to Permission.VIEW_CHANNEL,
-                    hidden.id to Permission.NONE,
-                    voice.id to (Permission.VIEW_CHANNEL or Permission.CONNECT),
-                    announcement.id to Permission.VIEW_CHANNEL,
-                    category.id to Permission.VIEW_CHANNEL,
-                ),
                 hideAnnouncementChannels = true,
             ),
         )
@@ -49,7 +42,7 @@ class ChannelPickerFlowTest {
     }
 
     @Test
-    fun selectorAppliesCallerFilterPermissionAndReferenceOrdering() {
+    fun selectorAppliesCallerFilterAndReferenceOrdering() {
         val later = channel(1, Channel.GUILD_TEXT, "later", position = 2)
         val first = channel(2, Channel.GUILD_TEXT, "first", position = 1)
         val voiceWithoutConnect = channel(3, Channel.GUILD_VOICE, "voice")
@@ -57,18 +50,12 @@ class ChannelPickerFlowTest {
 
         val items = WidgetChannelSelector.Model.buildItems(
             listOf(later, first, voiceWithoutConnect, excluded),
-            mapOf(
-                later.id to Permission.VIEW_CHANNEL,
-                first.id to Permission.VIEW_CHANNEL,
-                voiceWithoutConnect.id to Permission.VIEW_CHANNEL,
-                excluded.id to Permission.VIEW_CHANNEL,
-            ),
             includeNoChannel = true,
             filterFunction = WidgetChannelSelector.SetFilterFunction(setOf(later.id, first.id, voiceWithoutConnect.id)),
         )
 
         assertEquals(null, items.first().channel)
-        assertEquals(listOf(first, later), items.drop(1).map { it.channel })
+        assertEquals(listOf(first, later, voiceWithoutConnect), items.drop(1).map { it.channel })
     }
 
     @Test

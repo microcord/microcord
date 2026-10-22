@@ -40,12 +40,11 @@ class GuildRoleSubscriptionsFeatureFlag(
     fun canGuildSeeGuildRoleSubscriptionSettings(guildId: Long): Boolean {
         val guild = storeGuilds.getGuild(guildId) ?: return false
         if (guild.hasFeature(GuildFeature.CREATOR_MONETIZABLE_DISABLED)) return false
-        val isOwner = guild.isOwner(storeUser.getMe().id)
-        val canManage = isOwner ||
-            PermissionUtils.can(Permission.ADMINISTRATOR, storePermissions.getGuildPermissions()[guildId])
-        if (!canManage) return false
-        if (guild.isCreatorMonetizationEnabled) return true
-        return guild.hasFeature(GuildFeature.COMMUNITY) && isOwner && isUserInEligibleCountry()
+        if (guild.isCreatorMonetizationEnabled) {
+            return PermissionUtils.can(Permission.MANAGE_GUILD, storePermissions.getGuildPermissions()[guildId])
+        }
+        return guild.hasFeature(GuildFeature.COMMUNITY) && guild.isOwner(storeUser.getMe().id) &&
+            isUserInEligibleCountry()
     }
 
     fun isGuildEligibleForGuildRoleSubscriptionTrials(guildId: Long): Boolean =

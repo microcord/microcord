@@ -187,11 +187,8 @@ class VoiceEngineServiceController(
         private const val NOTIFICATION_THROTTLE_MS = 300L
 
         /**
-         * Whether the call is over and its service should stop.
-         *
-         * The reference also stopped it for a drop it was about to reconnect from. Since Android 14 a
-         * service restarted from the background cannot use the microphone, so the call came back
-         * silent; it now survives the reconnect and stops only when the call really ends.
+         * Whether the call is over. Unlike the reference, a reconnecting drop keeps the service: one
+         * restarted from the background on Android 14+ cannot use the microphone.
          */
         internal fun endsService(data: NotificationData): Boolean {
             val state = data.rtcConnectionState

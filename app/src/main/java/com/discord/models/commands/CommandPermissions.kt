@@ -97,7 +97,7 @@ fun ApplicationCommand.commandAccess(
     if (isUserInstalled && integrationTypes?.contains(ApplicationIntegrationType.USER_INSTALL.value) == true) {
         return CommandAccess.ALLOWED
     }
-    if ((!context.hasBaseAccessPermissions || !context.hasSendMessagesPermission) &&
+    if (!context.hasBaseAccessPermissions &&
         isGuildInstalled &&
         (
             integrationTypes.isNullOrEmpty() ||

@@ -186,12 +186,8 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
 
     /**
      * Puts the service in the foreground with [types], or only refreshes its notification when it
-     * already has them.
-     *
-     * Every call state change lands here, often while the app is in the background, where Android 14+
-     * refuses the microphone type. Re-promoting then would drop a live call to receive-only, which
-     * silences the microphone, so a service that already holds its types is never re-promoted, and
-     * a refused change keeps the types it has.
+     * already has them. Android 14+ refuses the microphone type from the background, so a live
+     * call is never re-promoted or downgraded to receive-only.
      */
     private fun promoteForeground(notification: Notification, types: Int) {
         val current = foregroundTypes

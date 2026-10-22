@@ -59,6 +59,7 @@ import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.plugins.PluginContextMenuHost
 import dev.mantikafasi.manticord.plugins.api.PluginContextMenuSurface
 import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
+import com.discord.utilities.threads.ThreadUtils
 
 class WidgetChatListActions : AppBottomSheet() {
     interface Host {
@@ -385,13 +386,7 @@ class WidgetChatListActions : AppBottomSheet() {
 
     private fun canCreatePublicThread(model: Model): Boolean {
         val channel = model.channel ?: return false
-        val guild = model.guild ?: return false
-        val permissions = model.permissions
-        val permissionAllowed = PermissionUtils.can(Permission.CREATE_PUBLIC_THREADS, permissions) &&
-            PermissionUtils.can(Permission.MANAGE_MESSAGES, permissions)
-        val channelAllowed = !model.message.isSystemMessage() && !channel.isThread() &&
-            !model.message.hasThread() && !channel.isVoiceChannel()
-        return permissionAllowed && channelAllowed
+        return ThreadUtils.canCreatePublicThread(model.permissions, channel, model.message, model.guild)
     }
 
     private fun bind(view: View, visible: Boolean, click: () -> Unit) =

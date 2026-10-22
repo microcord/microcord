@@ -307,9 +307,6 @@ object PermissionUtils {
             guildRoles,
             parentChannel.permissionOverwrites.orEmpty(),
         )
-        if (thread.isPrivateThread() && !hasJoined && !can(Permission.MANAGE_THREADS, permissions)) {
-            return Permission.NONE
-        }
         return if (can(Permission.SEND_MESSAGES_IN_THREADS, permissions)) {
             permissions or Permission.SEND_MESSAGES
         } else {

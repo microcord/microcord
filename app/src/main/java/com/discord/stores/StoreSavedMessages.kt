@@ -33,11 +33,7 @@ class StoreSavedMessages(
     private val channelIndex = HashMap<Long, MutableSet<Long>>()
     private val missingMessageIds = HashSet<Long>()
 
-    /**
-     * Channels of entries the last fetch returned without a message because we could not read them.
-     * Only one of these becoming readable can change what a refetch returns; an entry whose message
-     * was deleted stays missing however often it is fetched.
-     */
+    /** Channels whose saved messages came back missing because we cannot read them. */
     private val unreadableMissingChannels = HashSet<Long>()
     private val overdueMessageIds = HashSet<Long>()
     @Volatile private var stale = true

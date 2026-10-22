@@ -325,12 +325,7 @@ class MessageSendCoordinator @JvmOverloads constructor(
         commandChannels.remove(requestId)?.let { queues[it]?.cancel(requestId) }
     }
 
-    /**
-     * The gateway already delivered this message, so the queued attempt is redundant.
-     *
-     * This settles the send just as the HTTP response would: once the operation is gone, that
-     * response finds nothing to settle, so anyone waiting on [Update.Reconciled] must hear it here.
-     */
+    /** The gateway already delivered this message: cancel the queued attempt and settle the send. */
     fun reconcileFromGateway(requestId: String, message: Message) {
         val operation = operations.remove(requestId) ?: return
         queues[operation.channelId]?.cancel(operation.queueRequestId)

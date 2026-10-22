@@ -95,7 +95,6 @@ class WidgetGuildScheduledEventLocationSelectViewModelTest {
     fun selectorAdapterKeepsOnlyAllowedLocationIds() {
         val items = WidgetChannelSelector.Model.buildItems(
             channels = listOf(voice, stage),
-            permissions = mapOf(voice.id to Long.MAX_VALUE, stage.id to Long.MAX_VALUE),
             includeNoChannel = false,
             filterFunction = WidgetChannelSelector.SetFilterFunction(setOf(stage.id)),
         )

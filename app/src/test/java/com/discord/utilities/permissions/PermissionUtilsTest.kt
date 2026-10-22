@@ -124,7 +124,7 @@ class PermissionUtilsTest {
 
     // region thread derivation
 
-    @Test fun `private thread is invisible until joined without manage threads`() {
+    @Test fun `private thread membership does not gate permissions, as in the reference`() {
         val roles = mapOf(
             GUILD to role(GUILD, Permission.VIEW_CHANNEL or Permission.SEND_MESSAGES_IN_THREADS),
         )
@@ -138,7 +138,9 @@ class PermissionUtilsTest {
             USER, thread, parent, OWNER, member(), roles, hasJoined = true,
         )
 
-        assertEquals(Permission.NONE, notJoined)
+        // The server only lists private threads to members and managers; a client gate here made
+        // a thread opened before its membership arrived unreadable.
+        assertEquals(joined, notJoined)
         assertTrue(PermissionUtils.can(Permission.SEND_MESSAGES, joined))
     }
 
