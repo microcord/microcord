@@ -214,4 +214,15 @@
     <string name="microcord_settings_search_hint">Search settings</string>
     <string name="microcord_mark_all_as_read">Mark All as Read</string>
     <string name="microcord_mark_dms_as_read">Mark DMs as Read</string>
+    <string name="developer_view_raw">View Raw</string>
+    <string name="developer_view_raw_description">Adds View Raw to message menus, showing the markdown and JSON of a message</string>
+    <string name="view_raw_title">Raw message by %1$s</string>
+    <string name="view_raw_content">Content</string>
+    <string name="view_raw_data">Raw Data</string>
+    <string name="view_raw_all_data">All Raw Data</string>
+    <string name="view_raw_copy_content">Copy Content</string>
+    <string name="view_raw_copy_data">Copy Raw Data</string>
+    <string name="view_raw_copy_raw">Copy Raw</string>
+    <string name="view_raw_copied_content">Copied content to clipboard!</string>
+    <string name="view_raw_copied_data">Copied data to clipboard!</string>
 </resources>

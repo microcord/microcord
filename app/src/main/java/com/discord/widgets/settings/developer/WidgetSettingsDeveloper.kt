@@ -88,6 +88,10 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             isChecked = DeveloperSettings.isLegacyMessageUploadsEnabled()
             setOnCheckedListener(DeveloperSettings::setLegacyMessageUploadsEnabled)
         }
+        binding.settingsDeveloperViewRaw.apply {
+            isChecked = DeveloperSettings.isViewRawEnabled()
+            setOnCheckedListener(DeveloperSettings::setViewRawEnabled)
+        }
         binding.settingsDeveloperStartupMetrics.setOnClickListener {
             WidgetSettingsStartupMetrics.launch(it.context)
         }

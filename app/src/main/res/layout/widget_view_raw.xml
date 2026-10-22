@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingLeft="16dp" android:paddingTop="16dp" android:paddingRight="16dp" android:paddingBottom="@dimen/list_bottom_padding" style="@style/UiKit.ViewGroup.LinearLayout">
+            <LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingBottom="12dp">
+                <com.google.android.material.button.MaterialButton android:id="@+id/view_raw_copy_content" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="3dp" android:text="@string/view_raw_content" android:contentDescription="@string/view_raw_copy_content" app:icon="@drawable/ic_copy_24dp" app:iconGravity="textStart" style="@style/UiKit.Material.Button"/>
+                <com.google.android.material.button.MaterialButton android:id="@+id/view_raw_copy_json" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="3dp" android:text="@string/view_raw_data" android:contentDescription="@string/view_raw_copy_data" app:icon="@drawable/ic_copy_24dp" app:iconGravity="textStart" style="@style/UiKit.Material.Button"/>
+            </LinearLayout>
+            <com.discord.utilities.view.text.SimpleDraweeSpanTextView android:id="@+id/view_raw_content" android:layout_width="match_parent" android:layout_height="wrap_content" android:textIsSelectable="true" android:textColor="?attr/colorTextNormal" style="@style/UiKit.TextView"/>
+            <View android:id="@+id/view_raw_divider" android:layout_marginTop="16dp" style="@style/UiKit.Divider"/>
+            <TextView android:paddingStart="0dp" android:text="@string/view_raw_all_data" style="@style/UiKit.Settings.Item.Header"/>
+            <com.discord.utilities.view.text.SimpleDraweeSpanTextView android:id="@+id/view_raw_json" android:layout_width="match_parent" android:layout_height="wrap_content" android:textIsSelectable="true" android:textColor="?attr/colorTextNormal" style="@style/UiKit.TextView"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

@@ -10,6 +10,7 @@ object DeveloperSettings {
     private const val FLOATING_SHORTCUT_X = "developer_floating_shortcut_x"
     private const val FLOATING_SHORTCUT_Y = "developer_floating_shortcut_y"
     private const val LEGACY_MESSAGE_UPLOADS = "developer_legacy_message_uploads"
+    private const val VIEW_RAW = "developer_view_raw"
     const val ACTUAL_TIER = -1
 
     /** Session-durable: a switch of accounts is not a reason to stop logging this device. */
@@ -38,6 +39,16 @@ object DeveloperSettings {
     fun setLegacyMessageUploadsEnabled(enabled: Boolean) {
         SharedPreferencesProvider.getPrefsSessionDurable().edit()
             .putBoolean(LEGACY_MESSAGE_UPLOADS, enabled).apply()
+    }
+
+    /** Adds "View Raw" to message menus, showing the message's markdown source and JSON. */
+    fun isViewRawEnabled(): Boolean = runCatching {
+        SharedPreferencesProvider.getPrefsSessionDurable().getBoolean(VIEW_RAW, false)
+    }.getOrDefault(false)
+
+    fun setViewRawEnabled(enabled: Boolean) {
+        SharedPreferencesProvider.getPrefsSessionDurable().edit()
+            .putBoolean(VIEW_RAW, enabled).apply()
     }
 
     fun floatingShortcutPosition(): Pair<Float, Float> = runCatching {

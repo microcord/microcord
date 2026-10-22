@@ -13,6 +13,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.utilities.developer.DeveloperSettings
 import com.discord.api.commands.ApplicationCommandIndexCommand
 import com.discord.utilities.theme.ThemeRuntime
 import com.discord.widgets.chat.input.applauncher.WidgetContextCommandsSheet
@@ -200,6 +201,15 @@ class WidgetChatListActions : AppBottomSheet() {
         }
         bind(binding.dialogChatActionsCopyId, model.isDeveloper && !isLocal) {
             copy(message.id.toString(), R.string.copy_id)
+            dismiss()
+        }
+        bind(binding.dialogChatActionsCopyRaw, DeveloperSettings.isViewRawEnabled() && !message.content.isNullOrEmpty()) {
+            copy(message.content.orEmpty(), R.string.view_raw_copy_raw)
+            AppToast.show(this, R.string.view_raw_copied_content)
+            dismiss()
+        }
+        bind(binding.dialogChatActionsViewRaw, DeveloperSettings.isViewRawEnabled() && !isLocal) {
+            WidgetViewRaw.launch(requireContext(), message.channelId, message.id)
             dismiss()
         }
         // Aliucord's way to share a theme: a JSON file posted in a channel, installed from here.
