@@ -175,6 +175,7 @@ import rx.subjects.PublishSubject
 import rx.schedulers.Schedulers
 import com.discord.utilities.user.UserUtils.displayName
 import com.discord.utilities.user.UserUtils.synthesizeApiUser
+import com.discord.utilities.lifecycle.Backgrounded
 
 class StoreStream private constructor(
     val dispatcher: Dispatcher,
@@ -3933,10 +3934,22 @@ class StoreStream private constructor(
         private const val RTC_LATENCY_URL = "https://latency.discord.media/rtc?v=2"
         private const val GATEWAY_INIT_TIMEOUT_MS = 10_000L
         private const val GATEWAY_TAG = "ManticordGateway"
+        /** Longer than [Backgrounded]'s own debounce, so a real exit is always seen. */
+        private const val TASK_REMOVAL_BACKGROUND_TIMEOUT_S = 5L
         @Volatile private var instance: StoreStream? = null
 
+        /**
+         * Ends the session once the finished main screen leaves the app in the background (task
+         * removed, or backed out), so presence clears promptly. A main screen finishing because
+         * another replaced it keeps the app in front: closing then left the gateway down with no
+         * foreground event to reconnect it.
+         */
         fun disconnectGatewayForTaskRemoval() {
-            instance?.gateway?.close()
+            Backgrounded.observe()
+                .filter { it }
+                .first()
+                .timeout(TASK_REMOVAL_BACKGROUND_TIMEOUT_S, TimeUnit.SECONDS)
+                .subscribe({ instance?.gateway?.close() }, {})
         }
 
         private fun acceptLanguages(): String {
