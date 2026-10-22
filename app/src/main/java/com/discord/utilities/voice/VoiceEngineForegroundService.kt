@@ -44,6 +44,9 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
     private var wakeLockWifi: WifiManager.WifiLock? = null
     private var foregroundNotification: Notification? = null
 
+    /** The types the service is foreground with, or null while it is not foreground. */
+    private var foregroundTypes: Int? = null
+
     override fun onBind(intent: Intent): IBinder = binder
 
     override fun onCreate() {
@@ -87,6 +90,7 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
             ACTION.TOGGLE_MUTED -> onToggleSelfMute()
             ACTION.TOGGLE_DEAFENED -> onToggleSelfDeafen()
             ACTION.STOP_SERVICE -> {
+                foregroundTypes = null
                 stopForeground(true)
                 stopSelf()
             }
@@ -180,21 +184,43 @@ class VoiceEngineForegroundService : IntentService("VoiceEngineForegroundService
         return types
     }
 
+    /**
+     * Puts the service in the foreground with [types], or only refreshes its notification when it
+     * already has them.
+     *
+     * Every call state change lands here, often while the app is in the background, where Android 14+
+     * refuses the microphone type. Re-promoting then would drop a live call to receive-only, which
+     * silences the microphone, so a service that already holds its types is never re-promoted, and
+     * a refused change keeps the types it has.
+     */
     private fun promoteForeground(notification: Notification, types: Int) {
+        val current = foregroundTypes
+        if (current == types) {
+            getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 startForeground(NOTIFICATION_ID, notification, types)
+                foregroundTypes = types
             } catch (exception: SecurityException) {
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
                     types == ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 ) {
                     throw exception
                 }
+                if (current != null) {
+                    AppLog.w(LOG_TAG, "Foreground media access changed while not eligible; keeping current types.")
+                    getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification)
+                    return
+                }
                 AppLog.w(LOG_TAG, "Foreground media access is not currently eligible; using receive-only mode.")
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                foregroundTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             }
         } else {
             startForeground(NOTIFICATION_ID, notification)
+            foregroundTypes = types
         }
     }
 

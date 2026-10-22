@@ -114,7 +114,7 @@ class VoiceEngineServiceController(
             errorClass = VoiceEngineServiceController::class.java,
             subscriptionHandler = { serviceSubscription = it },
         ) { data ->
-            if (data.rtcConnectionState is RtcConnection.State.Disconnected) {
+            if (endsService(data)) {
                 permissionDisconnectRequested = false
                 DiscordOverlayService.resetDismissal()
                 DiscordOverlayService.launchForClose(appContext)
@@ -185,6 +185,18 @@ class VoiceEngineServiceController(
 
     companion object {
         private const val NOTIFICATION_THROTTLE_MS = 300L
+
+        /**
+         * Whether the call is over and its service should stop.
+         *
+         * The reference also stopped it for a drop it was about to reconnect from. Since Android 14 a
+         * service restarted from the background cannot use the microphone, so the call came back
+         * silent; it now survives the reconnect and stops only when the call really ends.
+         */
+        internal fun endsService(data: NotificationData): Boolean {
+            val state = data.rtcConnectionState
+            return state is RtcConnection.State.Disconnected && (!state.willReconnect || data.channelId <= 0L)
+        }
 
         private val NOTIFICATION_DATA_DISCONNECTED = NotificationData(
             rtcConnectionState = RtcConnection.State.Disconnected(false),
