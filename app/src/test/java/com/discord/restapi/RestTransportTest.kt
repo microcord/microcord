@@ -127,6 +127,7 @@ class RestTransportTest {
         server.enqueue(MockResponse().setBody("{\"applications\":[],\"application_commands\":[]}"))
         server.enqueue(MockResponse().setBody("{\"threads\":[],\"members\":[],\"has_more\":false}"))
         server.enqueue(MockResponse().setResponseCode(204))
+        server.enqueue(MockResponse().setBody("{\"id\":\"10\",\"name\":\"App\"}"))
         RestAPI.install(RestAPIBuilder(server.url("/api/").toString(), MemoryCookieJar()), emptyList())
 
         RestAPI.applicationDirectoryApiOrNull!!.categories("en-US").toBlocking().single()
@@ -160,8 +161,9 @@ class RestTransportTest {
                 nonce = "nonce-fixture",
             ),
         ).toBlocking().subscribe()
+        RestAPI.applicationDirectoryApiOrNull!!.publicApplication(10L).toBlocking().single()
 
-        val requests = List(6) {
+        val requests = List(7) {
             val request = server.takeRequest()
             assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
             assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
@@ -170,8 +172,9 @@ class RestTransportTest {
         }
         assertEquals("/api/v9/applications/10/application-command-index", requests[3].path)
         assertEquals("/api/v9/channels/20/threads/search", requests[4].path)
-        assertEquals("/api/v9/interactions", requests.last().path)
-        assertTrue(requests.last().body.readUtf8().contains("\"type\":4"))
+        assertEquals("/api/v9/interactions", requests[5].path)
+        assertTrue(requests[5].body.readUtf8().contains("\"type\":4"))
+        assertEquals("/api/v9/applications/10/public?with_guild=false", requests.last().path)
     }
 
     @Test

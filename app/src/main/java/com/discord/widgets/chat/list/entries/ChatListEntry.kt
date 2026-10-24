@@ -105,6 +105,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val POLL = 48
         const val SEARCH_SPOILER_RESULT = 49
         const val MEDIA_MOSAIC = 50
+        const val APPLICATION_LINK = 51
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24
@@ -262,6 +263,32 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                 entries[code] = GiftEntry(author.id, message.id, message.channelId, code, message)
             }
             return entries.values
+        }
+
+        /**
+         * One card per distinct application in `oauth2/authorize` links, up to ten, as Discord does.
+         * Only links that install an app for its commands get one: no scope, or only
+         * `applications.commands`. A bot or account-access link stays a plain link.
+         */
+        fun createApplicationLinkEntries(message: Message): Collection<ChatListEntry> {
+            val content = message.content
+            if (content.isNullOrEmpty()) return emptyList()
+            return APPLICATION_LINK_PATTERN.findAll(content)
+                .mapNotNull { applicationLinkId(it.groupValues[1]) }
+                .distinct()
+                .take(MAX_APPLICATION_LINKS)
+                .map { ApplicationLinkEntry(it, message) }
+                .toList()
+        }
+
+        internal fun applicationLinkId(query: String): Long? {
+            val parameters = query.split('&').associate {
+                val name = it.substringBefore('=')
+                name to runCatching { java.net.URLDecoder.decode(it.substringAfter('=', ""), "UTF-8") }.getOrDefault("")
+            }
+            val scopes = parameters["scope"].orEmpty().split(' ').filter(String::isNotEmpty)
+            if (scopes.any { it != "applications.commands" }) return null
+            return parameters["client_id"]?.toLongOrNull()?.takeIf { it > 0 }
         }
 
         /** One card per distinct guild-template code in the body. */
@@ -512,6 +539,11 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         private val INVITE_LINK = Regex(
             "(?:https?://(?:(?:$DISCORD_HOSTS/invite)|(?:$GG_HOST))|(?:^$GG_HOST))/([\\w-]+)/?" +
                 "(?:(?:\\S*[?&]event=)([\\w-]+))?",
+            RegexOption.IGNORE_CASE,
+        )
+        private const val MAX_APPLICATION_LINKS = 10
+        private val APPLICATION_LINK_PATTERN = Regex(
+            "https?://(?:www\\.|ptb\\.|canary\\.)?$DISCORD_HOSTS/(?:api/)?oauth2/authorize/?\\?([^\\s<>#]+)",
             RegexOption.IGNORE_CASE,
         )
         private val GUILD_TEMPLATE_LINK = Regex(

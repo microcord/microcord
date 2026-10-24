@@ -36,6 +36,7 @@ import com.discord.widgets.guilds.invite.WidgetGuildInvite
 import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.widgets.auth.WidgetRemoteAuth
 import com.discord.widgets.media.WidgetQRScanner
+import com.discord.widgets.applicationdirectory.ApplicationInstallCoordinator
 import com.discord.widgets.applicationdirectory.WidgetApplicationDirectory
 import com.discord.widgets.applicationdirectory.WidgetApplicationDirectoryDetail
 import com.discord.widgets.directories.WidgetDirectoriesSearch
@@ -413,10 +414,12 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                 ?.let { WidgetRemoteAuth.launch(requireContext(), it) }
                 ?: WidgetQRScanner.launch(requireContext(), showHelpChip = true)
             // `/oauth2/authorize` and `/connect/authorize` open the app-authorization screen.
-            is DeepLinkRoute.Authorization -> WidgetOauth2Authorize.launch(
-                requireContext(),
-                WidgetOauth2Authorize.authorizeUri(route.parameters),
-            )
+            is DeepLinkRoute.Authorization -> WidgetOauth2Authorize.installApplicationId(route.parameters)
+                ?.let { ApplicationInstallCoordinator.install(requireContext(), childFragmentManager, it) }
+                ?: WidgetOauth2Authorize.launch(
+                    requireContext(),
+                    WidgetOauth2Authorize.authorizeUri(route.parameters),
+                )
             is DeepLinkRoute.OAuthCallback ->
                 StoreStream.getTabsNavigation().selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
             DeepLinkRoute.Home ->

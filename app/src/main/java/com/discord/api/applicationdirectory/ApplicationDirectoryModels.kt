@@ -82,7 +82,7 @@ data class ApplicationDirectoryApplication(
             ?: installParams.takeIf { integrationTypesConfig == null && integrationType == GUILD_INSTALL }
 
     val supportedIntegrationTypes: Set<Int>
-        get() = integrationTypesConfig?.keys
+        get() = integrationTypesConfig?.filter { it.value.oauth2InstallParams != null }?.keys
             ?.filterTo(linkedSetOf()) { it == GUILD_INSTALL || it == USER_INSTALL }
             ?: if (installParams != null) setOf(GUILD_INSTALL) else emptySet()
 

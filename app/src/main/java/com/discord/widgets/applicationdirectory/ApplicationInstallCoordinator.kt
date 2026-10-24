@@ -14,6 +14,10 @@ import com.discord.dialogs.SelectorDialog
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreStream
 import com.discord.utilities.intent.ExternalUriPolicy
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
 import com.discord.widgets.auth.WidgetOauth2Authorize
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -45,7 +49,7 @@ object ApplicationInstallCoordinator {
         context: Context,
         fragmentManager: FragmentManager,
         application: ApplicationDirectoryApplication,
-        oauthLauncher: ActivityResultLauncher<Intent>,
+        oauthLauncher: ActivityResultLauncher<Intent>?,
     ) {
         application.customInstallUrl?.let { customUrl ->
             if (ExternalUriPolicy.isAllowed(customUrl)) UriHandler.handle(context, customUrl)
@@ -69,6 +73,18 @@ object ApplicationInstallCoordinator {
         }
     }
 
+    /**
+     * Installs from a bare `oauth2/authorize?client_id=` link or an app link card: like Discord, it
+     * reads how the application installs from its public profile, then runs [install].
+     */
+    fun install(context: Context, fragmentManager: FragmentManager, applicationId: Long) {
+        val api = RestAPI.applicationDirectoryApiOrNull ?: return
+        api.publicApplication(applicationId).restSubscribeOn().ui().appSubscribe(
+            errorClass = ApplicationInstallCoordinator::class.java,
+            context = context,
+        ) { application -> install(context, fragmentManager, application, null) }
+    }
+
     internal fun installTargets(application: ApplicationDirectoryApplication): List<Int> =
         listOf(USER_INSTALL, GUILD_INSTALL).filter(application.supportedIntegrationTypes::contains)
 
@@ -87,11 +103,11 @@ object ApplicationInstallCoordinator {
         fragmentManager: FragmentManager,
         application: ApplicationDirectoryApplication,
         integrationType: Int,
-        oauthLauncher: ActivityResultLauncher<Intent>,
+        oauthLauncher: ActivityResultLauncher<Intent>?,
     ) {
         val params = application.installParams(integrationType)
         if (integrationType == USER_INSTALL) {
-            WidgetOauth2Authorize.launch(
+            authorize(
                 context, oauthLauncher,
                 InstallRequest(application.id, params?.scopes, params?.permissions, USER_INSTALL).authorizeUri(),
             )
@@ -115,7 +131,7 @@ object ApplicationInstallCoordinator {
             context.getString(R.string.application_directory_choose_guild),
             Array<CharSequence>(guilds.size) { guilds[it].name },
         ) { index ->
-            WidgetOauth2Authorize.launch(
+            authorize(
                 context, oauthLauncher,
                 InstallRequest(
                     application.id,
@@ -127,6 +143,10 @@ object ApplicationInstallCoordinator {
             )
         }
     }
+
+    private fun authorize(context: Context, launcher: ActivityResultLauncher<Intent>?, uri: Uri) =
+        if (launcher != null) WidgetOauth2Authorize.launch(context, launcher, uri)
+        else WidgetOauth2Authorize.launch(context, uri)
 
     private fun showMessage(context: Context, fragmentManager: FragmentManager, message: Int) {
         WidgetNoticeDialog.Builder(context)

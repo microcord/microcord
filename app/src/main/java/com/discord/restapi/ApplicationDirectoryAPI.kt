@@ -45,6 +45,13 @@ interface ApplicationDirectoryAPI {
         @Query("with_localizations") withLocalizations: Boolean = false,
     ): Observable<ApplicationDirectoryApplication>
 
+    /** Any application's public profile, including how it installs; not limited to the directory. */
+    @GET("applications/{applicationId}/public")
+    fun publicApplication(
+        @Path("applicationId") applicationId: Long,
+        @Query("with_guild") withGuild: Boolean = false,
+    ): Observable<ApplicationDirectoryApplication>
+
     @GET("applications/{applicationId}/application-command-index")
     fun applicationCommandIndex(
         @Path("applicationId") applicationId: Long,

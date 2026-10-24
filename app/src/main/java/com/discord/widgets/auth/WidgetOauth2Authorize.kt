@@ -566,6 +566,18 @@ open class WidgetOauth2Authorize : AppFragment(R.layout.widget_oauth_authorize) 
         private fun Map<String, String?>.require(name: String): String =
             get(name) ?: throw IllegalArgumentException(name)
 
+        /**
+         * The application a bare install link (`client_id` and nothing that picks scopes, an
+         * integration type or a redirect) asks to add, or null for an ordinary authorization.
+         * Discord answers such links from the application's own install settings.
+         */
+        fun installApplicationId(parameters: Map<String, String?>): Long? =
+            parameters[QUERY_PARAM_CLIENT_ID]?.toLongOrNull()?.takeIf {
+                parameters[QUERY_PARAM_SCOPE].isNullOrBlank() &&
+                    parameters[QUERY_PARAM_INTEGRATION_TYPE] == null &&
+                    parameters[QUERY_PARAM_REDIRECT] == null
+            }
+
         /** Rebuilds an authorize URL from the query parameters a deep link was parsed into. */
         fun authorizeUri(parameters: Map<String, String>): Uri =
             Uri.parse("https://discord.com/oauth2/authorize").buildUpon()

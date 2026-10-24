@@ -187,6 +187,7 @@ object ChatListRows {
         rows += ChatListEntry.createSpotifyListenTogetherEntries(message)
         rows += ChatListEntry.createInviteEntries(message, state.inviteResolver)
         rows += ChatListEntry.createGuildTemplateEntries(message)
+        rows += ChatListEntry.createApplicationLinkEntries(message)
         rows += ChatListEntry.createGiftEntries(message)
 
         if (UserSettings.renderReactions.get() && message.getReactionsMap().isNotEmpty()) {
