@@ -312,7 +312,8 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
                 channel.parentId,
                 channel.appliedTags.orEmpty(),
                 threadId = channel.id,
-                canManageThreads = model.canManageThread,
+                // The author may retag their post too, but only moderators apply moderated tags.
+                canManageThreads = model.isModerator,
             )
             dismiss()
         }

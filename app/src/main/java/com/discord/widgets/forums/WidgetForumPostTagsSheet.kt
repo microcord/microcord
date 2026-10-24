@@ -62,7 +62,7 @@ class WidgetForumPostTagsSheet : AppBottomSheet() {
                 val isSelected = tag.id in selected
                 pill.isSelected = isSelected
                 // At the cap the remaining tags stop responding rather than reporting a failure.
-                val enabled = canManage && (isSelected || !atMax)
+                val enabled = isSelected || !atMax
                 pill.isEnabled = enabled
                 pill.alpha = if (enabled) 1f else 0.6f
             }
