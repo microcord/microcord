@@ -540,7 +540,7 @@ class AutocompleteViewModel(
     }
 
     companion object {
-        private const val COMMAND_DISCOVER_TOKEN = "/"
+        internal const val COMMAND_DISCOVER_TOKEN = "/"
         private const val COMMAND_LOADING_ITEMS = 3
         private const val REMOTE_AUTOCOMPLETE_DELAY_MS = 500L
 
