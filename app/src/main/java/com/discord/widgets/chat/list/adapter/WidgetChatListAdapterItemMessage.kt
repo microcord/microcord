@@ -5,11 +5,14 @@ import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
+import android.text.Spanned
 import android.text.method.LinkMovementMethod
 import android.text.style.LeadingMarginSpan
 import android.text.style.StyleSpan
+import android.text.style.URLSpan
 import android.text.util.Linkify
 import android.util.Log
+import android.util.Patterns
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -517,13 +520,20 @@ class WidgetChatListAdapterItemMessage(
         )
 
         // The parser already produced link spans; letting Linkify run over the same text would
-        // duplicate or corrupt them, so only the patterns the parser does not handle are left on.
-        textView.autoLinkMask =
-            if (!preprocessor.isLinkifyConflicting && shouldLinkify(message.content)) {
-                Linkify.EMAIL_ADDRESSES or Linkify.PHONE_NUMBERS
-            } else {
-                0
-            }
+        // duplicate or corrupt them, so only the patterns the parser does not handle are added.
+        // Phone numbers are not left to `Linkify.PHONE_NUMBERS`: on current Android it accepts any
+        // "possible" number, so a bare 69 or 420 became a call link.
+        textView.autoLinkMask = 0
+        if (!preprocessor.isLinkifyConflicting && shouldLinkify(message.content)) {
+            Linkify.addLinks(rendered, Patterns.EMAIL_ADDRESS, "mailto:")
+            Linkify.addLinks(
+                rendered,
+                Patterns.PHONE,
+                "tel:",
+                ::isPhoneNumberLink,
+                Linkify.sPhoneNumberTransformFilter,
+            )
+        }
         // The parser always appends a zero-width space, so `rendered` is never empty; an embed-only
         // message would keep a blank line between the author and the embed.
         textView.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
@@ -538,6 +548,11 @@ class WidgetChatListAdapterItemMessage(
      * separators, so a long message dense with dots (a stack trace, a list of file names) is left
      * un-linkified rather than freezing the row while it scans.
      */
+    /** A phone link needs a real number's worth of digits, and must not sit inside another link. */
+    private fun isPhoneNumberLink(text: CharSequence, start: Int, end: Int): Boolean =
+        (start until end).count { Character.isDigit(text[it]) } >= MIN_PHONE_DIGITS &&
+            (text as? Spanned)?.getSpans(start, end, URLSpan::class.java).isNullOrEmpty()
+
     private fun shouldLinkify(content: String?): Boolean {
         if (content == null) return false
         if (content.length < LINKIFY_MAX_SAFE_LENGTH) return true
@@ -1275,6 +1290,7 @@ class WidgetChatListAdapterItemMessage(
 
         private const val LINKIFY_MAX_SAFE_LENGTH = 200
         private const val LINKIFY_MAX_DOTS = 50
+        private const val MIN_PHONE_DIGITS = 7
 
         private val LINE_SEPARATOR: Regex =
             Regex(System.getProperty("line.separator") ?: "\n")
