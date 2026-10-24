@@ -70,6 +70,13 @@ class QueryParserTest {
     }
 
     @Test
+    fun answerValuesAreWholeWords() {
+        assertEquals(listOf(ContentNode("forwardmessages.zip") as QueryNode), parse("forwardmessages.zip"))
+        assertEquals(listOf(ContentNode("linkedin") as QueryNode), parse("linkedin"))
+        assertEquals(HasAnswerOption.FORWARD, (parse("has:forward x")[1] as HasNode).hasAnswerOption)
+    }
+
+    @Test
     fun parsesChannelAnswers() {
         val nodes = parse("in:#general")
         assertEquals(FilterType.IN, (nodes[0] as FilterNode).filterType)

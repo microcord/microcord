@@ -61,8 +61,13 @@ class QueryParser(
 
     companion object {
         private const val ANY_TOKEN_REGEX = """^[\s]*[\S]*[\s]*"""
-        private const val DATE_ANSWER_REGEX = """(?:\s*([0-9]{4}(?:-[0-9]{1,2}){0,2}))"""
-        private const val BOOLEAN_ANSWER_REGEX = """(?:\s*(true|false))"""
+        /**
+         * An answer value must be a whole word: without it `forwardmessages.zip` parsed as the
+         * `forward` value followed by `messages.zip`, and was searched and saved to history split.
+         */
+        private const val WORD_END = """(?=\s|$)"""
+        private const val DATE_ANSWER_REGEX = """(?:\s*([0-9]{4}(?:-[0-9]{1,2}){0,2}))$WORD_END"""
+        private const val BOOLEAN_ANSWER_REGEX = """(?:\s*(true|false))$WORD_END"""
         private const val IN_ANSWER_REGEX = """(?:\s*#([^ ]+))"""
         private const val USER_REGEX = """(?:\s*([^@#:]+)#([0-9]{4}))"""
 
@@ -133,7 +138,7 @@ class QueryParser(
             options.joinToString(
                 separator = "|",
                 prefix = """(?:\s*(-?(?:""",
-                postfix = ")))",
+                postfix = ")))$WORD_END",
             )
     }
 }
