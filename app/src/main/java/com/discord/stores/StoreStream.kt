@@ -3,6 +3,10 @@ package com.discord.stores
 import com.discord.utilities.feature.ClientPreferenceSnapshot
 import com.discord.utilities.feature.LocalSettingsSnapshot
 import com.discord.utilities.feature.ManticordSettingsBackupCodec
+import com.discord.utilities.feature.ManticordSettingsBackup
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.app.ClientSettingsRestoreActivity
+import android.content.Intent
 
 import android.annotation.SuppressLint
 import android.app.Application
@@ -1213,6 +1217,8 @@ class StoreStream private constructor(
 
     private var gatewayInitTimeout: GatewayCancellable? = null
     private var gatewayToken: String? = null
+    /** Set by a login, so the first READY after it puts back the account's Microcord cloud settings. */
+    private var restoreCloudSettingsOnReady = false
     @Volatile private var authGeneration = 0
     /** Drives `StoreNotifications`' foreground/system split. Fed by `Backgrounded.observe()`. */
     @Volatile private var isBackgrounded = false
@@ -3231,6 +3237,28 @@ class StoreStream private constructor(
     private fun handleLoginResultInternal(loginResult: ModelLoginResult) {
         authentication.handleLoginResultInternal(loginResult)
         userSettingsSystem.handleLoginResult(loginResult)
+        if (loginResult.token != null) restoreCloudSettingsOnReady = true
+    }
+
+    /**
+     * Restores the account's Microcord cloud settings backup, if it has one, the way Restore in
+     * Feature Flags does. Finding one turns the cloud settings feature on, since the account uses it.
+     */
+    @StoreThread
+    private fun restoreCloudSettings() {
+        if (!::applicationContext.isInitialized) return
+        val app = applicationContext
+        val auth = authentication.getAuthState() ?: return
+        val backup = ManticordSettingsBackup(RestAPI.api) { authentication.getAuthState() === auth }
+        backup.load().subscribeOn(Schedulers.io()).subscribe({ payload ->
+            backup.checkPermitted()
+            FeatureFlags.setCloudSettingsBackupEnabled(true)
+            ManticordSettingsBackup.stageRestore(app, payload, ManticordSettingsBackup.authFingerprint())
+            app.startActivity(
+                Intent(app, ClientSettingsRestoreActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            )
+        }, {})
     }
 
     /**
@@ -3485,6 +3513,10 @@ class StoreStream private constructor(
         }
         multiAccount.handleConnectionOpen(users.getMeInternal(), authentication.getAuthState()?.token)
         multiAccountSwitch.handleConnectionOpen(users.getMeInternal())
+        if (restoreCloudSettingsOnReady) {
+            restoreCloudSettingsOnReady = false
+            restoreCloudSettings()
+        }
         // Deferred a dispatch: the registration reads the account snapshot, which does not include
         // the account that just connected until this one ends.
         dispatcher.schedule { notifications.handleConnectionOpen() }
