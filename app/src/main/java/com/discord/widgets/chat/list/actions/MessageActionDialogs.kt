@@ -10,6 +10,7 @@ import com.discord.api.channel.isPrivate
 import com.discord.i18n.i18nFormat
 import com.discord.models.message.Message
 import com.discord.stores.StoreStream
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
@@ -24,12 +25,16 @@ object MessageActionDialogs {
     /** `TOO_MANY_PINS_IN_CHANNEL`. */
     private const val ABORT_CODE_TOO_MANY_PINS = 30003
 
+    /** Deletes right away, without the dialog, when the "Delete Without Confirmation" flag is on. */
     fun showDeleteMessageConfirmation(
         fragmentManager: FragmentManager,
         context: Context,
         message: Message,
         onSuccess: () -> Unit,
-    ) = WidgetNoticeDialog.show(
+    ) = if (FeatureFlags.skipDeleteConfirmationEnabled()) {
+        StoreStream.getMessages().deleteMessage(message)
+        onSuccess()
+    } else WidgetNoticeDialog.show(
         fragmentManager = fragmentManager,
         headerText = context.getString(R.string.delete_message_title),
         bodyText = context.getString(R.string.delete_message_body),

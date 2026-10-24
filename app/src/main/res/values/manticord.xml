@@ -227,6 +227,8 @@
     <string name="view_raw_copy_raw">Copy Raw</string>
     <string name="view_raw_copied_content">Copied content to clipboard!</string>
     <string name="view_raw_copied_data">Copied data to clipboard!</string>
+    <string name="feature_skip_delete_confirmation">Delete Without Confirmation</string>
+    <string name="feature_skip_delete_confirmation_description">Deletes messages right away instead of asking first</string>
     <string name="feature_media_mosaic">Media Mosaic</string>
     <string name="feature_media_mosaic_description">Shows several images or videos in one message as a grid</string>
 </resources>

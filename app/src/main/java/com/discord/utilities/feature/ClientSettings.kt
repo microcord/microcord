@@ -95,6 +95,7 @@ object ClientSettings {
     val gifUrlToInput = register(BooleanSetting("feature_gif_url_to_input"))
     val quickMessageActions = register(BooleanSetting("feature_quick_message_actions"))
     val mediaMosaic = register(BooleanSetting("feature_media_mosaic", true))
+    val skipDeleteConfirmation = register(BooleanSetting("feature_skip_delete_confirmation"))
     val messageCustomizations = register(BooleanSetting("feature_message_customizations"))
     val messageLimitCounter = register(BooleanSetting("feature_message_limit_counter"))
     val avatarDecorations = register(BooleanSetting("feature_avatar_decorations", true))

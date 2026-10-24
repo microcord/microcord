@@ -52,7 +52,7 @@ class ClientSettingsTest {
         assertEquals(setOf("voiceMessagesEnabled", "avatarDecorationsEnabled", "nameplatesEnabled",
             "profileEffectsEnabled", "profileFramesEnabled", "maximumRefreshRateEnabled", "capitalizeSentencesEnabled",
             "mediaMosaicEnabled"), defaults.filterValues { it }.keys.map { it.name }.toSet())
-        assertEquals(27, getters.size)
+        assertEquals(28, getters.size)
         assertFalse(FeatureFlags.disableServerProfilesEnabled())
 
         val scopes = Scope.entries.associate { it.id to MemoryPreferences() }

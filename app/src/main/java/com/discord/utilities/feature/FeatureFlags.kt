@@ -32,6 +32,9 @@ object FeatureFlags {
     fun quickMessageActionsEnabled() = enabled(ClientSettings.quickMessageActions)
     fun mediaMosaicEnabled() = enabled(ClientSettings.mediaMosaic)
     fun setMediaMosaicEnabled(enabled: Boolean) = setEnabled(ClientSettings.mediaMosaic, enabled)
+    fun skipDeleteConfirmationEnabled() = enabled(ClientSettings.skipDeleteConfirmation)
+    fun setSkipDeleteConfirmationEnabled(enabled: Boolean) =
+        setEnabled(ClientSettings.skipDeleteConfirmation, enabled)
     fun setQuickMessageActionsEnabled(enabled: Boolean) = setEnabled(ClientSettings.quickMessageActions, enabled)
     fun messageCustomizationsEnabled() = enabled(ClientSettings.messageCustomizations)
     fun setMessageCustomizationsEnabled(enabled: Boolean) = setEnabled(ClientSettings.messageCustomizations, enabled)

@@ -110,6 +110,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.mediaMosaicEnabled()
             setOnCheckedListener(FeatureFlags::setMediaMosaicEnabled)
         }
+        binding.settingsFeatureSkipDeleteConfirmation.apply {
+            isChecked = FeatureFlags.skipDeleteConfirmationEnabled()
+            setOnCheckedListener(FeatureFlags::setSkipDeleteConfirmationEnabled)
+        }
         binding.settingsFeatureQuickMessageActions.apply {
             isChecked = FeatureFlags.quickMessageActionsEnabled()
             setOnCheckedListener(FeatureFlags::setQuickMessageActionsEnabled)
