@@ -47,13 +47,29 @@ class StoreMultiAccount(
 
     enum class TokenStatus { VALID, VALIDATING, INVALID }
 
+    /**
+     * The selected guild with its recent history (oldest first), open guild folders and each guild's
+     * last channel, put back when switching to the account again. [selectedGuildIds] is null in
+     * entries saved before it existed.
+     */
+    data class Navigation(
+        val openFolderIds: Set<Long>,
+        val selectedChannelIds: Map<Long, Long>,
+        val selectedGuildIds: List<Long>?,
+    )
+
     private var accounts: List<Account> = emptyList()
     private var accountsSnapshot: List<Account> = emptyList()
     private val accountsSubject =
         SerializedSubject<List<Account>, List<Account>>(BehaviorSubject.create(emptyList()))
 
+    private val navigation = HashMap<Long, Navigation>()
+
     override fun init(context: Context) {
         accounts = read()
+        sessionDurablePreferences.getString(CACHE_KEY_NAVIGATION, null)
+            ?.let { runCatching { gson.fromJson<Map<Long, Navigation>>(it, NAVIGATION_TYPE) }.getOrNull() }
+            ?.let(navigation::putAll)
         accountsSnapshot = accounts
         accountsSubject.onNext(accounts)
     }
@@ -125,6 +141,7 @@ class StoreMultiAccount(
     @StoreThread
     fun removeAccountInternal(userId: Long) {
         tokens.remove(userId)
+        if (navigation.remove(userId) != null) persistNavigation()
         publish(accounts.filterNot { it.id == userId })
     }
 
@@ -169,6 +186,18 @@ class StoreMultiAccount(
     }
 
     @StoreThread
+    fun saveNavigation(userId: Long, state: Navigation) {
+        navigation[userId] = state
+        persistNavigation()
+    }
+
+    @StoreThread
+    fun getNavigation(userId: Long): Navigation? = navigation[userId]
+
+    private fun persistNavigation() =
+        sessionDurablePreferences.edit().putString(CACHE_KEY_NAVIGATION, gson.toJson(navigation)).apply()
+
+    @StoreThread
     private fun getAccountInternal(userId: Long): Account? = accounts.firstOrNull { it.id == userId }
 
     @StoreThread
@@ -190,7 +219,9 @@ class StoreMultiAccount(
 
     companion object {
         const val CACHE_KEY_ACCOUNTS = "STORE_MULTI_ACCOUNT_ACCOUNTS_V1"
+        const val CACHE_KEY_NAVIGATION = "STORE_MULTI_ACCOUNT_NAVIGATION_V1"
         const val MAX_ACCOUNTS = 5
         private val TYPE = object : TypeToken<List<Account>>() {}.type
+        private val NAVIGATION_TYPE = object : TypeToken<Map<Long, Navigation>>() {}.type
     }
 }

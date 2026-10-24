@@ -178,15 +178,15 @@ class StoreChannelsSelected(
 
     /** Restores the persisted selection after `StoreChannels` has restored its channel snapshot. */
     @StoreThread
-    internal fun restore() {
-        loadFromCache()
+    internal fun restore(selectedChannelIds: Map<Long, Long> = selectedChannelIdsCache.get()) {
+        loadFromCache(selectedChannelIds)
         hasRestoredSelectionState = true
         validateSelectedChannel()
     }
 
     @StoreThread
-    private fun loadFromCache() {
-        selectedChannelIdsCache.get().forEach { (guildId, channelId) ->
+    private fun loadFromCache(selectedChannelIds: Map<Long, Long> = selectedChannelIdsCache.get()) {
+        selectedChannelIds.forEach { (guildId, channelId) ->
             userChannelSelections[guildId] = UserChannelSelection.SelectedChannel(channelId)
         }
     }
@@ -215,6 +215,10 @@ class StoreChannelsSelected(
     }
 
     // -- Reads ----------------------------------------------------------------------------------
+
+    @StoreThread
+    internal fun getSelectedChannelIdsInternal(): Map<Long, Long> =
+        userChannelSelections.mapValues { it.value.id }
 
     fun getId(): Long = selectedChannelSnapshot.id
 

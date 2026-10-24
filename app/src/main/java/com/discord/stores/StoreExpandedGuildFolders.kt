@@ -32,9 +32,9 @@ class StoreExpandedGuildFolders(
 
     override fun init(context: Context) = restore()
 
-    internal fun restore() {
+    internal fun restore(ids: Set<Long> = openFolderIdsCache.get()) {
         openFolderIds.clear()
-        openFolderIds.addAll(openFolderIdsCache.get())
+        openFolderIds.addAll(ids)
         markChanged()
     }
 

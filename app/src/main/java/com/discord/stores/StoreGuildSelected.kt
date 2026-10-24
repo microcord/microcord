@@ -39,6 +39,7 @@ class StoreGuildSelected(
     fun getSelectedGuildId(): Long = selectedGuildIdsSnapshot.firstOrNull() ?: UNSELECTED
     fun getRecentlySelectedGuildIds(): List<Long> = selectedGuildIdsSnapshot
     internal fun getSelectedGuildIdInternal(): Long = selectedGuildIds.lastOrNull() ?: UNSELECTED
+    internal fun getSelectedGuildIdsInternal(): List<Long> = selectedGuildIds.toList()
 
     fun observeSelectedGuildId(): Observable<Long> =
         observationDeck.connectRx(this, generator = ::getSelectedGuildId).distinctUntilChanged()
@@ -68,9 +69,9 @@ class StoreGuildSelected(
 
     override fun init(context: Context) = restore()
 
-    internal fun restore() {
+    internal fun restore(guildIds: Collection<Long> = readPersistedIds()) {
         selectedGuildIds.clear()
-        selectedGuildIds.addAll(readPersistedIds())
+        selectedGuildIds.addAll(guildIds)
         markChanged()
     }
 

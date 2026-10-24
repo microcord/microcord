@@ -3215,6 +3215,11 @@ class StoreStream private constructor(
             if (authentication.isSwitchingAccount()) {
                 Persister.reset(includeDeviceScoped = false)
                 SharedPreferencesProvider.clearUserScoped()
+                multiAccountSwitch.getPending()?.let { multiAccount.getNavigation(it.targetUserId) }?.let {
+                    it.selectedGuildIds?.let(guildSelected::restore)
+                    expandedGuildFolders.restore(it.openFolderIds)
+                    channelsSelected.restore(it.selectedChannelIds)
+                }
             } else {
                 Persister.reset()
                 preferences.edit().clear().apply()
@@ -3252,8 +3257,18 @@ class StoreStream private constructor(
         // Read before the user store is reset, and only for a real logout: a switch is expected to
         // leave the account it is stepping away from on the list.
         val switching = authentication.isSwitchingAccount()
+        val userId = users.getMeInternal().id.takeUnless { it == 0L }
         if (!switching) {
-            users.getMeInternal().id.takeUnless { it == 0L }?.let(multiAccount::removeAccountInternal)
+            userId?.let(multiAccount::removeAccountInternal)
+        } else if (userId != null) {
+            multiAccount.saveNavigation(
+                userId,
+                StoreMultiAccount.Navigation(
+                    expandedGuildFolders.getOpenFolderIds(),
+                    channelsSelected.getSelectedChannelIdsInternal(),
+                    guildSelected.getSelectedGuildIdsInternal(),
+                ),
+            )
         }
         authGeneration++
         savedMessages.handlePreLogout()
