@@ -11,6 +11,7 @@ import com.discord.utilities.networking.Backoff
 import com.discord.utilities.rest.FileUpload
 import com.discord.utilities.attachments.CloudUploader
 import com.discord.utilities.attachments.UploadAttachment
+import com.discord.utilities.attachments.UploadAttachmentPreprocessor
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.rest.SendUtils
 import com.discord.utilities.rest.contextPropertiesOf
@@ -237,30 +238,38 @@ class MessageQueue @JvmOverloads constructor(
         val captchaPolicy = CaptchaRequestPolicy.preSolved(message.captchaSolution)
         val uploadInline = DeveloperSettings.isLegacyMessageUploadsEnabled()
 
-        SendUtils.getSendPayload(contentResolver, body, request.attachments, inlineFileBodies = uploadInline)
-            .doOnNext { payload ->
-                when (payload) {
-                    is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
-                    is SendUtils.SendPayload.ReadyToSend ->
-                        if (payload.uploads.isNotEmpty()) request.onProgress(payload.uploads)
+        // HEIC photos become JPEGs on the I/O thread the send runs on. A retry converts again, and
+        // each attempt's JPEGs are deleted when that attempt ends.
+        Observable.fromCallable {
+            contentResolver?.let { UploadAttachmentPreprocessor.convertHeif(it, request.attachments) }
+                ?: request.attachments
+        }.flatMap { attachments ->
+            SendUtils.getSendPayload(contentResolver, body, attachments, inlineFileBodies = uploadInline)
+                .doOnNext { payload ->
+                    when (payload) {
+                        is SendUtils.SendPayload.Preprocessing -> request.onPreprocessing(payload)
+                        is SendUtils.SendPayload.ReadyToSend ->
+                            if (payload.uploads.isNotEmpty()) request.onProgress(payload.uploads)
 
-                    is SendUtils.SendPayload.ReadyToSendCommand -> Unit
+                        is SendUtils.SendPayload.ReadyToSendCommand -> Unit
+                    }
                 }
-            }
-            .filterIs<SendUtils.SendPayload.ReadyToSend>()
-            .take(1)
-            .flatMap { ready ->
-                sendReadyPayload(
-                    message.channelId,
-                    ready,
-                    request.attachments,
-                    captchaPolicy,
-                    contextPropertiesOf("location" to request.location),
-                    api,
-                    request.onProgress,
-                    uploadInline,
-                )
-            }
+                .filterIs<SendUtils.SendPayload.ReadyToSend>()
+                .take(1)
+                .flatMap { ready ->
+                    sendReadyPayload(
+                        message.channelId,
+                        ready,
+                        attachments,
+                        captchaPolicy,
+                        contextPropertiesOf("location" to request.location),
+                        api,
+                        request.onProgress,
+                        uploadInline,
+                    )
+                }
+                .doAfterTerminate { UploadAttachmentPreprocessor.deleteConverted(attachments, request.attachments) }
+        }
             .restSubscribeOn(retry = message.nonce != null)
             .appSubscribe(
                 errorClass = MessageQueue::class.java,

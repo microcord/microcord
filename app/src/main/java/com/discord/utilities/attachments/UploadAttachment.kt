@@ -6,8 +6,11 @@ import android.content.Intent
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.os.Build
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.annotation.RequiresApi
 import com.discord.api.message.LocalAttachment
 import com.discord.api.message.attachment.MessageAttachment
 import com.lytefast.flexinput.model.Attachment
@@ -142,12 +145,60 @@ internal fun uniqueUploadFileNamesFromSanitized(names: List<String>): List<Strin
 
 object UploadAttachmentPreprocessor {
     private const val MAX_DIMENSION = 4096
+    private val HEIF_MIME_TYPES = setOf("image/heic", "image/heif")
+    private val HEIF_EXTENSIONS = setOf("heic", "heif")
 
     fun compressImages(context: Context, attachments: List<UploadAttachment>): List<UploadAttachment> =
         attachments.map { attachment ->
             if (!attachment.mimeType.startsWith("image/") || attachment.mimeType == "image/gif") attachment
             else compressJpeg(context, attachment)
         }
+
+    /**
+     * HEIC/HEIF photos are sent as JPEGs: Discord shows HEIC only as a file to download. Android
+     * decodes HEIF from 9 on, so older phones send the original, as does a photo that fails to
+     * decode. The JPEGs are temporary files; [deleteConverted] removes them after the send.
+     */
+    fun convertHeif(resolver: ContentResolver, attachments: List<UploadAttachment>?): List<UploadAttachment>? =
+        attachments?.map { attachment ->
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || !isHeif(attachment)) attachment
+            else runCatching { heifToJpeg(resolver, attachment) }.getOrDefault(attachment)
+        }
+
+    fun deleteConverted(converted: List<UploadAttachment>?, originals: List<UploadAttachment>?) {
+        val originalUris = originals.orEmpty().mapTo(HashSet()) { it.uri }
+        converted.orEmpty().filter { it.uri !in originalUris }.forEach { it.uri.path?.let(::File)?.delete() }
+    }
+
+    private fun isHeif(attachment: UploadAttachment): Boolean =
+        attachment.mimeType.lowercase(Locale.ROOT) in HEIF_MIME_TYPES ||
+            attachment.fileName.substringAfterLast('.', "").lowercase(Locale.ROOT) in HEIF_EXTENSIONS
+
+    @RequiresApi(Build.VERSION_CODES.P)
+    private fun heifToJpeg(resolver: ContentResolver, attachment: UploadAttachment): UploadAttachment {
+        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, attachment.uri)) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            var sample = 1
+            while (maxOf(info.size.width, info.size.height) / sample > MAX_DIMENSION) sample *= 2
+            decoder.setTargetSampleSize(sample)
+        }
+        val output = File.createTempFile("upload-", ".jpg")
+        try {
+            output.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it)) }
+        } catch (failure: Exception) {
+            output.delete()
+            throw failure
+        } finally {
+            bitmap.recycle()
+        }
+        return attachment.copy(
+            uri = Uri.fromFile(output),
+            displayName = attachment.fileName.substringBeforeLast('.', attachment.fileName) + ".jpg",
+            mimeType = "image/jpeg",
+            size = output.length(),
+            permissionPersisted = false,
+        )
+    }
 
     private fun compressJpeg(context: Context, attachment: UploadAttachment): UploadAttachment {
         val resolver = context.contentResolver
