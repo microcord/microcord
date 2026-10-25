@@ -129,7 +129,7 @@ class DiscordMarkdownRulesTest {
         // brackets stay as literal text instead of being absorbed into the link.
         val source = "[label](https://example.com)"
         assertEquals("[label]()", plainText(parse(source, legacy)))
-        assertEquals("", plainText(parse(source, DiscordParser.ParserOptions.DEFAULT)))
+        assertEquals("label", plainText(parse(source, DiscordParser.ParserOptions.DEFAULT)))
     }
 
     /**
@@ -261,6 +261,15 @@ class DiscordMarkdownRulesTest {
         val unsafe = "[unsafe](javascript:alert(1))"
         assertTrue(parse(unsafe).none { it is UrlNode<*> })
         assertEquals(unsafe, plainText(parse(unsafe)))
+    }
+
+    @Test
+    fun maskedLinkLabelIsMarkdown() {
+        val link = parse("[**Red Dead Redemption 2**](https://example.com) by artgirl")
+            .filterIsInstance<UrlNode<*>>()
+            .single()
+        assertEquals("Red Dead Redemption 2", plainText(listOf(link)))
+        assertTrue(link.getChildren().orEmpty().none { it is TextNode<*> })
     }
 
     @Test

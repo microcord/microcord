@@ -11,7 +11,8 @@ import com.discord.utilities.textprocessing.toPunyCodeAsciiUrl
 
 /**
  * A bare `https://...` link, a `<https://...>` no-embed link, or a `[label](https://...)` masked
- * link, in which case [mask] holds the label that is shown instead of the URL.
+ * link, in which case [mask] holds the label that is shown instead of the URL. A masked link's label
+ * is parsed as markdown into the node's children, which are rendered in place of [mask].
  *
  * The URL is always converted to its punycode ASCII form before it is shown or opened so a
  * homograph host cannot masquerade as a different one. If that conversion fails the raw text is
@@ -44,7 +45,8 @@ class UrlNode<T : UrlNode.RenderContext>(
         ) { view -> renderContext.onClickUrl(view.context, safeUrl, mask) }
 
         val start = builder.length
-        builder.append(mask ?: safeUrl)
+        val label = getChildren()
+        if (label.isNullOrEmpty()) builder.append(mask ?: safeUrl) else label.forEach { it.render(builder, renderContext) }
         builder.setSpan(style, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
 }

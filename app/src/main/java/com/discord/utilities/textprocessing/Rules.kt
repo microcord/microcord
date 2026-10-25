@@ -725,7 +725,8 @@ object Rules {
             ): ParseSpec<T, S> {
                 val mask = matcher.group(1).orEmpty()
                 val url = matcher.group(2).orEmpty()
-                return ParseSpec(UrlNode(url, mask), state)
+                // The label is markdown too (`[**bold**](url)`), so it is parsed into children.
+                return ParseSpec(UrlNode(url, mask), state, matcher.start(1), matcher.end(1))
             }
         }
 
