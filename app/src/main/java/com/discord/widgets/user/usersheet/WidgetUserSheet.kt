@@ -53,6 +53,7 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.guilds.computeShortName
 import com.discord.utilities.icon.IconUtils
 import com.discord.views.PileView
 import com.discord.utilities.images.MGImages
@@ -498,6 +499,13 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileTabs.setSelectedTabIndicatorColor(tabSelected)
         binding.userSheetProfileTabsRule.setBackgroundColor(border)
         profileCards().forEach { it.setCardBackgroundColor(card) }
+        binding.userSheetNoteText.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = binding.aboutMeCard.radius
+            setColor(card)
+        }
+        binding.userSheetNoteText.setHintTextColor(
+            colors?.textMuted ?: ColorCompat.getThemedColor(requireContext(), R.attr.colorTextMuted),
+        )
         profileTextViews().forEach { text ->
             text.setTextColor(
                 if (colors != null && text !is Button) ColorStateList.valueOf(colors.textDefault)
@@ -990,9 +998,9 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetMemberSinceGuild.show(showGuild)
         if (showGuild) {
             binding.userSheetMemberSinceGuild.text = TimeUtils.toMediumDate(guildJoined!!)
-            IconUtils.setIcon(
-                binding.userSheetMemberSinceGuildIcon,
+            binding.userSheetMemberSinceGuildIcon.configure(
                 IconUtils.getForGuild(guildId, state.guildIcon, allowAnimation = false),
+                state.guildName?.let(::computeShortName),
             )
         }
 
