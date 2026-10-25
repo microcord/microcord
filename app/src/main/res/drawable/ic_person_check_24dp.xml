@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traced from Discord's mobile UserCheckIcon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="24dp" android:width="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#ffffff" android:pathData="M12,2a4,4 0,1 1,0 8a4,4 0,1 1,0 -8zM3,22V20C3,15 7,11 12,11C15.6,11 18.4,12.7 19.9,15.3L19.8,16.6C18,15.6 15.5,15.6 13.8,17C12.6,18 12,19.5 12,22ZM5,22L5.6,18.6H6.2L5.7,22Z" android:fillType="evenOdd"/>
+    <path android:strokeColor="#ffffff" android:strokeWidth="2.2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M15.3,18.9L17.6,21.2L22.6,16.2"/>
+</vector>

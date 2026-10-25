@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traced from Discord's mobile PhoneCallIcon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="24dp" android:width="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#ffffff" android:pathData="M5.6,2.2L7.6,2.2C8,2.2 8.3,2.4 8.4,2.8L10,7.2C10.1,7.5 10,7.8 9.8,8L7.6,9.6C7.3,9.8 7.2,10.2 7.3,10.6C8.1,13.4 10.5,15.9 13.4,16.7C13.8,16.8 14.2,16.7 14.4,16.4L16,14.4C16.2,14.1 16.5,14 16.9,14.1L21.2,15.6C21.6,15.8 21.8,16.1 21.8,16.5V19.8C21.8,20.9 20.9,21.8 19.8,21.8H15.5C8.1,21.8 2.2,15.8 2.2,8.4V5.6C2.2,3.7 3.7,2.2 5.6,2.2Z"/>
+    <path android:strokeColor="#ffffff" android:strokeWidth="2.2" android:strokeLineCap="round" android:pathData="M14.35,3.24A7.4,7.4 0,0 1,21 9.85M14.35,7.18A3.5,3.5 0,0 1,17.02 9.85"/>
+</vector>

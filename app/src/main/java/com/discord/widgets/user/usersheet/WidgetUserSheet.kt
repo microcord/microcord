@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.ViewCompat
 import androidx.core.view.children
@@ -563,28 +564,31 @@ class WidgetUserSheet : AppBottomSheet() {
     )
 
     /**
-     * Add friend is the only filled button on a plain profile; a custom theme fills every one of
-     * them with the contrast corrected profile colour instead.
+     * Discord's current mobile profile buttons (`UserProfileContactButtons`): add friend is the
+     * primary button and pending the secondary one. Message and call are secondary on a plain
+     * profile; on a themed one they take the profile colour, translucent so the theme shows through.
      */
     private fun styleActionButtons(colors: ProfileThemeColors?) {
-        val radius = binding.aboutMeCard.radius.toInt()
-        val secondaryFill =
-            ColorCompat.getThemedColorStateListDefault(requireContext(), R.attr.colorButtonSecondary)
-        val secondaryText = ColorCompat.getThemedColor(requireContext(), R.attr.colorInteractiveActive)
-        val border = borderColor()
+        val context = requireContext()
+        val brand = colors?.button ?: ContextCompat.getColor(context, R.color.brand_500)
+        val secondaryFill = when {
+            colors == null -> ColorCompat.getThemedColorStateListDefault(context, R.attr.colorButtonSecondary)
+            colors.isDark -> ColorUtils.setAlphaComponent(Color.WHITE, 0x3D)
+            else -> ColorUtils.setAlphaComponent(Color.WHITE, 0xB8)
+        }
+        val secondaryText = colors?.textDefault ?: ColorCompat.getThemedColor(context, R.attr.colorInteractiveActive)
         profileActionButtons().forEach { button ->
-            val filled = colors != null || button.id == R.id.user_sheet_add_friend_action_button
-            val fill = when {
-                !filled -> secondaryFill
-                else -> colors?.button ?: ContextCompat.getColor(requireContext(), R.color.brand_500)
+            val (fill, content) = when (button.id) {
+                R.id.user_sheet_add_friend_action_button -> brand to Color.WHITE
+                R.id.user_sheet_pending_friend_request_action_button -> secondaryFill to secondaryText
+                else -> if (colors != null) ColorUtils.setAlphaComponent(brand, 0x99) to Color.WHITE
+                else secondaryFill to secondaryText
             }
-            val content = if (filled) Color.WHITE else secondaryText
-            button.cornerRadius = radius
+            button.cornerRadius = dpToPixels(8)
             button.backgroundTintList = ColorStateList.valueOf(fill)
             button.setTextColor(content)
             button.iconTint = ColorStateList.valueOf(content)
-            button.strokeWidth = if (filled) 0 else 1
-            button.strokeColor = ColorStateList.valueOf(border)
+            button.strokeWidth = 0
         }
     }
 
@@ -597,7 +601,7 @@ class WidgetUserSheet : AppBottomSheet() {
             button.text = if (compact) "" else getString(label)
             button.iconPadding = if (compact) 0 else dpToPixels(6)
             button.updateLayoutParams<LinearLayout.LayoutParams> {
-                width = if (compact) dpToPixels(48) else 0
+                width = if (compact) dpToPixels(40) else 0
                 weight = if (compact) 0f else 1f
             }
         }
