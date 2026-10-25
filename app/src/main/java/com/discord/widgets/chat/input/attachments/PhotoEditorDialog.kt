@@ -28,6 +28,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.os.bundleOf
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.view.ViewCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -341,10 +342,31 @@ class PhotoEditorDialog : DialogFragment() {
         var flipH = false
         var flipV = false
         var preview = source
+        // The crop overlay works in the preview's own coordinates, so the preview keeps the photo's
+        // aspect ratio: as wide as the sheet, and up to [CROP_PREVIEW_MAX_HEIGHT] of the screen tall.
+        fun fitPreview() {
+            val box = cropBinding.photoEditorCropBox
+            if (box.width == 0) return
+            val maxHeight = resources.displayMetrics.heightPixels * CROP_PREVIEW_MAX_HEIGHT
+            val scale = minOf(box.width.toFloat() / preview.width, maxHeight / preview.height)
+            val width = (preview.width * scale).toInt()
+            val height = (preview.height * scale).toInt()
+            box.post {
+                box.updateLayoutParams<ViewGroup.LayoutParams> { this.height = height }
+                cropBinding.photoEditorCropFrame.updateLayoutParams<ViewGroup.LayoutParams> {
+                    this.width = width
+                    this.height = height
+                }
+            }
+        }
+        cropBinding.photoEditorCropBox.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) fitPreview()
+        }
         fun updatePreview() {
             val matrix = Matrix().apply { postRotate(rotation); postScale(if (flipH) -1f else 1f, if (flipV) -1f else 1f) }
             preview = Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
             cropBinding.photoEditorCropPreview.setImageBitmap(preview)
+            fitPreview()
         }
         cropBinding.photoEditorCropRotation.addOnChangeListener { _, value, _ -> rotation = value; updatePreview() }
         cropBinding.photoEditorCropFlipH.setOnClickListener { flipH = !flipH; it.isSelected = flipH; updatePreview() }
@@ -504,6 +526,8 @@ class PhotoEditorDialog : DialogFragment() {
         internal const val TEXT_DELETE = "delete"
         private const val DANGER = 0xffda373c.toInt()
         private const val EDITOR_CHROME_COLOR = 0xff1e1f22.toInt()
+        /** Share of the screen height a tall photo may take in the crop sheet. */
+        private const val CROP_PREVIEW_MAX_HEIGHT = 0.55f
         private val FILTERS = arrayOf(PhotoFilter.NONE, PhotoFilter.AUTO_FIX, PhotoFilter.BRIGHTNESS, PhotoFilter.CONTRAST, PhotoFilter.DOCUMENTARY, PhotoFilter.DUE_TONE, PhotoFilter.FILL_LIGHT, PhotoFilter.FISH_EYE, PhotoFilter.GRAIN, PhotoFilter.GRAY_SCALE, PhotoFilter.LOMISH, PhotoFilter.NEGATIVE, PhotoFilter.POSTERIZE, PhotoFilter.SATURATE, PhotoFilter.SEPIA, PhotoFilter.SHARPEN, PhotoFilter.TEMPERATURE, PhotoFilter.TINT, PhotoFilter.VIGNETTE)
 
         fun show(fragmentManager: androidx.fragment.app.FragmentManager, uri: Uri, name: String?, spoiler: Boolean) {

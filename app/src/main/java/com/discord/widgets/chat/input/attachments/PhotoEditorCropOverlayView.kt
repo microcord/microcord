@@ -18,7 +18,7 @@ class PhotoEditorCropOverlayView @JvmOverloads constructor(context: Context, att
     private var lastX = 0f
     private var lastY = 0f
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) = crop.set(w * 0.1f, h * 0.1f, w * 0.9f, h * 0.9f)
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) = crop.set(0f, 0f, w.toFloat(), h.toFloat())
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawRect(0f, 0f, width.toFloat(), crop.top, shade)
