@@ -36,6 +36,7 @@ import com.discord.dialogs.useractions.UserActionsDialog
 import com.discord.app.AppLog
 import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
+import com.discord.i18n.i18nPlural
 import com.discord.i18n.i18nRender
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.stores.StoreNavigation
@@ -53,6 +54,7 @@ import com.discord.utilities.analytics.AnalyticsTracker
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.icon.IconUtils
+import com.discord.views.PileView
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
@@ -297,6 +299,7 @@ class WidgetUserSheet : AppBottomSheet() {
         configureHeader(loaded)
         configureRichPresence(loaded)
         configureProfileActionButtons(loaded)
+        configureMutuals(loaded)
         configureStageActions(loaded)
         configurePrivateProfile(loaded)
         configureAboutMe(loaded)
@@ -473,6 +476,7 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileAddToServerContainer.setBackgroundColor(block)
         binding.userSheetProfileEditContainer.setBackgroundColor(block)
         binding.userSheetProfileActionsContainer.setBackgroundColor(block)
+        binding.userSheetMutuals.setBackgroundColor(block)
         binding.userSheetAdminHeader.setBackgroundColor(block)
         binding.userSheetProfileTabsContainer.setBackgroundColor(block)
         val tabText = colors?.textDefault
@@ -1074,6 +1078,39 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetAdminView.apply {
             visibility = if (showAdmin) View.VISIBLE else View.GONE
             adminState?.let(::updateView)
+        }
+    }
+
+    /** Mutual friends and servers under the name, as in Discord's current mobile profile. */
+    private fun configureMutuals(state: WidgetUserSheetViewModel.ViewState.Loaded) {
+        val profile = state.userProfile
+        val friends = profile.mutualFriends.orEmpty()
+        val friendCount = profile.mutualFriendsCount ?: friends.size
+        val guildCount = profile.mutualGuilds.size
+        val show = !state.isMe && !state.user.isSystemUser && !state.user.isWebhook && (friendCount > 0 || guildCount > 0)
+        binding.userSheetMutuals.show(show)
+        if (!show) return
+        binding.userSheetMutualFriendsPile.show(friends.isNotEmpty())
+        binding.userSheetMutualFriendsPile.setItems(
+            friends.map { friend ->
+                PileView.Item(
+                    { size -> IconUtils.getForUser(friend.id, friend.avatar?.value, friend.discriminator.toIntOrNull(), size = size) },
+                    null,
+                )
+            },
+        )
+        binding.userSheetMutualFriends.show(friendCount > 0)
+        binding.userSheetMutualFriends.text =
+            requireContext().i18nPlural(R.plurals.user_profile_mutual_friends_count, friendCount, "count" to friendCount)
+        binding.userSheetMutualFriends.setOnClickListener {
+            WidgetUserMutualFriends.show(requireContext(), state.user)
+        }
+        binding.userSheetMutualsSeparator.show(friendCount > 0 && guildCount > 0)
+        binding.userSheetMutualGuilds.show(guildCount > 0)
+        binding.userSheetMutualGuilds.text =
+            requireContext().i18nPlural(R.plurals.user_profile_mutual_guilds_count, guildCount, "count" to guildCount)
+        binding.userSheetMutualGuilds.setOnClickListener {
+            WidgetUserMutualGuilds.show(requireContext(), state.user.id)
         }
     }
 

@@ -358,11 +358,7 @@ class WidgetUserSheetViewModel(
                 guildIcon = storeState.guild?.icon,
                 userRelationshipType =
                     storeState.userRelationshipType ?: ModelUserRelationship.TYPE_NONE,
-                connectionsViewState = createConnectionsViewState(
-                    userProfile = storeState.userProfile,
-                    isMe = isMe,
-                    isSystemUser = user.isSystemUser || user.isWebhook,
-                ),
+                connectionsViewState = createConnectionsViewState(storeState.userProfile),
                 userNoteFetchState = note,
                 userNote = userNote,
                 userInSameVoiceChannel = userInSameVoiceChannel,
@@ -458,22 +454,15 @@ class WidgetUserSheetViewModel(
     }
 
     /**
-     * Linked accounts, plus the mutual-guilds/friends rows.
-     *
-     * The mutual rows are meaningless for yourself and unavailable for system accounts, which is
-     * the only thing that can hide them.
+     * Linked accounts. The mutual-guilds/friends rows moved under the name, as in Discord's current
+     * mobile profile, so they stay hidden here.
      */
-    private fun createConnectionsViewState(
-        userProfile: UserProfile,
-        isMe: Boolean,
-        isSystemUser: Boolean,
-    ): UserProfileConnectionsView.ViewState {
+    private fun createConnectionsViewState(userProfile: UserProfile): UserProfileConnectionsView.ViewState {
         val items = userProfile.connectedAccounts
             .map(UserProfileConnectionsView::ConnectedAccountItem)
-        val showMutuals = !isMe && !isSystemUser
         return UserProfileConnectionsView.ViewState(
-            showConnectionsSection = showMutuals || items.isNotEmpty(),
-            showMutualGuildsAndFriends = showMutuals,
+            showConnectionsSection = items.isNotEmpty(),
+            showMutualGuildsAndFriends = false,
             connectedAccountItems = items,
         )
     }

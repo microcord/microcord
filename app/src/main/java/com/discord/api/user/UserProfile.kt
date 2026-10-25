@@ -56,6 +56,9 @@ data class UserProfile(
      */
     @SerializedName("private")
     val isPrivate: Boolean = false,
+    /** Modern profile fields, sent only with `with_mutual_friends` / `with_mutual_friends_count`. */
+    val mutualFriends: List<User>? = null,
+    val mutualFriendsCount: Int? = null,
 ) {
     /**
      * The frame this profile is wearing, if any.

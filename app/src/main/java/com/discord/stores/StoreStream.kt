@@ -487,7 +487,7 @@ class StoreStream private constructor(
         observationDeck,
         fetchProfile = { userId, guildId, mutual, success, failure ->
             if (!::restApi.isInitialized) failure() else
-                restApi.userProfileGet(userId, mutual, guildId).subscribeOn(Schedulers.io()).subscribe(
+                restApi.userProfileGet(userId, mutual, guildId, mutual, mutual).subscribeOn(Schedulers.io()).subscribe(
                     { profile ->
                         success(profile)
                         dispatcher.schedule { users.handleUserUpdated(profile.user) }

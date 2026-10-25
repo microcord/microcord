@@ -412,6 +412,8 @@ interface RestAPIInterface {
         @Path("userId") userId: Long,
         @Query("with_mutual_guilds") withMutualGuilds: Boolean = false,
         @Query("guild_id") guildId: Long? = null,
+        @Query("with_mutual_friends") withMutualFriends: Boolean = false,
+        @Query("with_mutual_friends_count") withMutualFriendsCount: Boolean = false,
     ): Observable<UserProfile>
 
     @GET("users/{userId}/application-identities")
