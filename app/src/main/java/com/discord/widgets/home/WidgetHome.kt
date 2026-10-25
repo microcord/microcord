@@ -378,6 +378,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             return
         }
         val selected = resolved as? StoreChannelsSelected.ResolvedSelectedChannel.Channel
+        if (WidgetSearch.reopenAfterJump(requireContext(), selected?.channel?.id)) return
         val peekParent = selected?.peekParent
         if (selected != null && peekParent != null) {
             StoreStream.selectChannel(selected.channel.guildId, peekParent)
@@ -491,9 +492,10 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
                 else -> null
             },
         )
+        val isBack = isForumPost || threadDraft != null || isMessageRequest || WidgetSearch.canReopenFrom(channel.id)
         setActionBarDisplayHomeAsUpEnabled(
-            iconRes = if (isForumPost || threadDraft != null || isMessageRequest) null else R.drawable.ic_menu_24dp,
-            iconAccessibilityLabel = if (isForumPost || threadDraft != null || isMessageRequest) {
+            iconRes = if (isBack) null else R.drawable.ic_menu_24dp,
+            iconAccessibilityLabel = if (isBack) {
                 R.string.back
             } else {
                 R.string.toggle_drawer
@@ -561,6 +563,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        // Leaving search changes whether the chat's toolbar leads back to it.
+        refreshChatToolbar()
         AccessibilityDetectionNavigator.enqueueNoticeWhenEnabled(this)
         viewModel.observeEvents()
             .bindToComponentLifecycle(this)

@@ -57,7 +57,17 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
             .getStringExtra(INTENT_EXTRA_TARGET_TYPE)
             ?.let { runCatching { TargetType.valueOf(it) }.getOrNull() }
 
-        if (!isRecreated) showKeyboard(searchInputEditText)
+        // Back from a result jump: the store still holds the query and its results, so put the
+        // query back in the box and show them as they were.
+        val reopened = mostRecentIntent.getBooleanExtra(INTENT_EXTRA_REOPEN, false)
+        if (!isRecreated && reopened) {
+            searchStore.storeSearchInput.currentInput.take(1).subscribe { query ->
+                searchInputEditText.setText(query)
+                searchInputEditText.setSelection(searchInputEditText.length())
+            }
+        } else if (!isRecreated) {
+            showKeyboard(searchInputEditText)
+        }
 
         val stringProvider = ContextSearchStringProvider(requireContext())
         when (targetType) {
@@ -100,7 +110,13 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
 
     override fun onDestroy() {
         super.onDestroy()
-        searchStore.clear()
+        if (returnTo == null) searchStore.clear()
+    }
+
+    /** Closes search for a result jump; Back from [channelId] then reopens these results. */
+    internal fun closeForJump(channelId: Long, scrollPosition: Int, scrollOffset: Int) {
+        returnTo = targetType?.let { ReturnTo(targetId, it, channelId, scrollPosition, scrollOffset) }
+        appActivity?.finish()
     }
 
     private fun configureSearchInput() {
@@ -184,6 +200,43 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
         const val INTENT_EXTRA_TARGET_ID = "INTENT_EXTRA_TARGET_ID"
         const val INTENT_EXTRA_TARGET_TYPE = "INTENT_EXTRA_SEARCH_TYPE"
         const val INTENT_EXTRA_INITIAL_QUERY = "INTENT_EXTRA_INITIAL_QUERY"
+        private const val INTENT_EXTRA_REOPEN = "INTENT_EXTRA_REOPEN"
+        const val INTENT_EXTRA_SCROLL_POSITION = "INTENT_EXTRA_SCROLL_POSITION"
+        const val INTENT_EXTRA_SCROLL_OFFSET = "INTENT_EXTRA_SCROLL_OFFSET"
+
+        private data class ReturnTo(
+            val targetId: Long,
+            val targetType: TargetType,
+            val channelId: Long,
+            val scrollPosition: Int,
+            val scrollOffset: Int,
+        )
+
+        /** The search a result jump left, while its results are still held by the store. */
+        private var returnTo: ReturnTo? = null
+
+        /**
+         * Back from the chat: reopens the search whose result jump led to [channelId]. One-shot, so
+         * any other Back from the chat forgets it.
+         */
+        fun reopenAfterJump(context: Context, channelId: Long?): Boolean {
+            val target = returnTo ?: return false
+            if (target.channelId != channelId) {
+                discardReturn()
+                return false
+            }
+            returnTo = null
+            launch(target.targetId, target.targetType, context, reopen = target)
+            return true
+        }
+
+        fun canReopenFrom(channelId: Long): Boolean = returnTo?.channelId == channelId
+
+        private fun discardReturn() {
+            if (returnTo == null) return
+            returnTo = null
+            SearchStoreProvider.get().clear()
+        }
 
         fun launchForGuild(guildId: Long, context: Context) =
             launch(guildId, TargetType.GUILD, context)
@@ -200,14 +253,19 @@ class WidgetSearch : AppFragment(R.layout.widget_search) {
             targetType: TargetType,
             context: Context,
             initialQuery: String? = null,
+            reopen: ReturnTo? = null,
         ) {
+            if (reopen == null) discardReturn()
             AppScreenRouter.launch(
                 context,
                 WidgetSearch::class.java,
                 Intent()
                     .putExtra(INTENT_EXTRA_TARGET_ID, targetId)
                     .putExtra(INTENT_EXTRA_TARGET_TYPE, targetType.name)
-                    .putExtra(INTENT_EXTRA_INITIAL_QUERY, initialQuery),
+                    .putExtra(INTENT_EXTRA_INITIAL_QUERY, initialQuery)
+                    .putExtra(INTENT_EXTRA_REOPEN, reopen != null)
+                    .putExtra(INTENT_EXTRA_SCROLL_POSITION, reopen?.scrollPosition ?: 0)
+                    .putExtra(INTENT_EXTRA_SCROLL_OFFSET, reopen?.scrollOffset ?: 0),
             )
         }
 

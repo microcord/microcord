@@ -1,6 +1,7 @@
 package com.discord.widgets.search.results
 
 import android.view.View
+import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.appViewModels
@@ -14,12 +15,13 @@ import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.search.SearchStore
 import com.discord.widgets.search.SearchStoreProvider
+import com.discord.widgets.search.WidgetSearch
 
 /**
  * The result half of the search screen.
  *
  * Rows are the ordinary chat rows, but every interaction collapses to one thing: jump to the message
- * in its real channel and close the search screen. A search result is a pointer, not a live message,
+ * in its real channel and close the search screen, keeping the results for Back from that channel. A search result is a pointer, not a live message,
  * so reacting, replying and long-press actions are all deliberately inert here.
  */
 class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
@@ -40,7 +42,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
                 parentFragmentManager,
                 SearchResultAdapterEventHandler(
                     searchStore = SearchStoreProvider.get(),
-                    closeSearch = { activity?.finish() },
+                    closeSearch = ::closeForJump,
                 ),
                 stickToBottom = false,
             ),
@@ -49,6 +51,35 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
             // viewer's own mentions.
             mentionMeMessageLevelHighlighting = false
         }
+        if (!isRecreated) {
+            restoreScroll(
+                mostRecentIntent.getIntExtra(WidgetSearch.INTENT_EXTRA_SCROLL_POSITION, 0),
+                mostRecentIntent.getIntExtra(WidgetSearch.INTENT_EXTRA_SCROLL_OFFSET, 0),
+            )
+        }
+    }
+
+    private fun closeForJump(channelId: Long) {
+        val layoutManager = adapter?.layoutManager
+        val position = layoutManager?.findFirstVisibleItemPosition()?.coerceAtLeast(0) ?: 0
+        val offset = layoutManager?.findViewByPosition(position)?.let { it.top - layoutManager.paddingTop } ?: 0
+        (parentFragment as? WidgetSearch)?.closeForJump(channelId, position, offset)
+    }
+
+    /** Back from a result jump: scrolls to where the user was once the kept results are bound. */
+    private fun restoreScroll(position: Int, offset: Int) {
+        val adapter = adapter ?: return
+        if (position <= 0 && offset == 0) return
+        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+            override fun onChanged() = restore()
+            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) = restore()
+
+            private fun restore() {
+                if (adapter.itemCount <= position) return
+                adapter.unregisterAdapterDataObserver(this)
+                adapter.layoutManager?.scrollToPositionWithOffset(position, offset)
+            }
+        })
     }
 
     override fun onViewBoundOrOnResume() {
@@ -79,14 +110,14 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
      */
     internal class SearchResultAdapterEventHandler(
         private val searchStore: SearchStore,
-        private val closeSearch: () -> Unit,
+        private val closeSearch: (channelId: Long) -> Unit,
     ) : WidgetChatListAdapter.EventHandler {
 
         private var oldestMessageId: Long = 0L
 
         private fun jumpToChat(message: Message) {
             StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
-            closeSearch()
+            closeSearch(message.channelId)
         }
 
         override fun onOldestMessageId(channelId: Long, oldestMessageId: Long) {
