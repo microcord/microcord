@@ -466,6 +466,13 @@ class UserProfileContractsTest {
         )
     }
 
+    @Test
+    fun pronounsAreOneLine() {
+        val state = loaded(banner = null, reducedMotion = false)
+            .copy(userProfile = UserProfile(userProfile = UserProfile.ProfileMetadata(pronouns = " she\n\nher \r\n ")))
+        assertEquals("she her", state.pronouns)
+    }
+
     private fun loaded(
         banner: String?,
         reducedMotion: Boolean,

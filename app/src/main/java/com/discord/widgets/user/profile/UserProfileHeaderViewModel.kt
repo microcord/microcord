@@ -92,11 +92,14 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
                 ?.takeIf { it.size == 2 }
                 ?.mapNotNull(::profileColorToArgb)
                 ?.takeIf { it.size == 2 }
-            /** A guild profile's pronouns fall back to the account's, as its bio does not. */
+            /**
+             * A guild profile's pronouns fall back to the account's, as its bio does not. They are
+             * one line, as in Discord's clients, so line breaks the API lets through are flattened.
+             */
             val pronouns: String? = (
                 userProfile.guildMemberProfile?.pronouns?.takeIf(String::isNotBlank)
                     ?: userProfile.userProfile?.pronouns
-                )?.takeIf(String::isNotBlank)
+                )?.replace(WHITESPACE_RUN, " ")?.trim()?.takeIf(String::isNotBlank)
 
             val avatarDecoration = userProfile.guildMember?.avatarDecorationData
                 ?: userProfile.user.avatarDecorationData?.value
@@ -135,6 +138,7 @@ class UserProfileHeaderViewModel @JvmOverloads constructor(
 
     companion object {
         const val ME = -1L
+        private val WHITESPACE_RUN = Regex("\\s+")
 
         internal fun profileColorToArgb(color: Int): Int? =
             color.takeIf { it in 0..0xFFFFFF }?.or(0xFF000000.toInt())
