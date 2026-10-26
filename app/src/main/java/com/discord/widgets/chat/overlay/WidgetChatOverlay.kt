@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.overlay
 
 import android.os.Bundle
+import android.text.Spanned
 import android.view.View
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.lifecycle.Lifecycle
@@ -12,6 +13,7 @@ import com.discord.models.guild.UserGuildMember
 import com.discord.stores.StoreStream
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.images.setVitoSpan
 import com.discord.utilities.time.TimeUtils
 import com.facebook.drawee.drawable.ScalingUtils
@@ -23,6 +25,7 @@ import com.discord.i18n.FormatUtils
 import com.discord.i18n.I18nSpans
 import com.discord.utilities.color.ColorCompat
 import com.discord.widgets.chat.input.AppFlexInputViewModel
+import com.discord.widgets.user.usersheet.WidgetUserSheet
 
 class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
     data class State(
@@ -133,6 +136,9 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
         binding.chatTypingUsersTyping.apply {
             if (hasTyping) setDraweeSpanStringBuilder(typingText(users))
             visibility = if (hasTyping) View.VISIBLE else View.INVISIBLE
+            // Past three the bar stops naming people, so the names move to a sheet.
+            setOnClickListener { WidgetTypingUsersSheet.show(parentFragmentManager) }
+            isClickable = users.size > 3
         }
         val slowmodeText = when {
             typing != null && typing.cooldownSecs > 0 ->
@@ -176,14 +182,24 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             ),
         )
         val builder = DraweeSpanStringBuilder(rendered)
-        if (!FeatureFlags.typingUserAvatarsEnabled() || users.size > 3) return builder
-
         var searchFrom = 0
         val positions = names.map { name ->
             builder.indexOf(name.toString(), searchFrom).also { index ->
                 if (index >= 0) searchFrom = index + name.length
             }
         }
+        positions.forEachIndexed { index, position ->
+            if (position < 0) return@forEachIndexed
+            val userId = users[index].user.id
+            builder.setSpan(
+                ClickableSpan(color = null, underline = false) { openProfile(userId) },
+                position,
+                position + names[index].length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+        if (!FeatureFlags.typingUserAvatarsEnabled() || users.size > 3) return builder
+
         val size = (16 * resources.displayMetrics.density).toInt()
         users.indices.reversed().forEach { index ->
             val position = positions[index]
@@ -209,6 +225,11 @@ class WidgetChatOverlay : AppFragment(R.layout.widget_chat_overlay) {
             )
         }
         return builder
+    }
+
+    private fun openProfile(userId: Long) {
+        val channel = StoreStream.getChannelsSelected().getSelectedChannel()
+        WidgetUserSheet.show(parentFragmentManager, userId, channel?.id, channel?.guildId?.takeIf { it != 0L })
     }
 
     companion object {
