@@ -2031,7 +2031,21 @@ class StoreStream private constructor(
     fun handleStageInstanceCreate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceCreate(stageInstance) }
     fun handleStageInstanceUpdate(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceUpdate(stageInstance) }
     fun handleStageInstanceDelete(stageInstance: StageInstance) = dispatcher.schedule { stageInstances.handleStageInstanceDelete(stageInstance) }
-    fun handleGatewayAuthenticationFailure() = authentication.invalidate()
+    /**
+     * The gateway refused the token. Mid-switch it is the account being switched to that was
+     * refused, not the one the user was on: that row is marked and the session goes back to the
+     * account being left, rather than signing the user out of both.
+     */
+    fun handleGatewayAuthenticationFailure() = dispatcher.schedule {
+        val switch = multiAccountSwitch.getPending()
+        val previousUserId = switch?.previousUserId
+        val previousToken = previousUserId?.let(accountTokens::get)
+        if (switch == null || previousToken == null) return@schedule authentication.invalidate()
+        multiAccount.handleTokenStatus(switch.targetUserId, StoreMultiAccount.TokenStatus.INVALID)
+        multiAccountSwitch.handleSwitchFailedInternal()
+        multiAccountSwitch.handleSwitchStart(previousUserId, null, switch.location)
+        authentication.switchAccountToken(previousToken)
+    }
 
     /**
      * Ingress for a gateway dispatch. Publishes onto the matching subject in

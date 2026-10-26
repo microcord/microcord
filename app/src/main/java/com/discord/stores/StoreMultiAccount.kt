@@ -136,6 +136,8 @@ class StoreMultiAccount(
         )
     }
 
+    fun hasToken(userId: Long): Boolean = tokens.get(userId) != null
+
     fun removeAccount(userId: Long) = dispatcher.schedule { removeAccountInternal(userId) }
 
     @StoreThread

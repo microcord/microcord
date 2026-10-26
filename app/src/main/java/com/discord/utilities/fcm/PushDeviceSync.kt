@@ -92,8 +92,8 @@ internal object PushDeviceSync {
             }
     }
 
-    private fun isAuthFailure(error: Throwable): Boolean =
-        error is HttpException && (error.code() == 401 || error.code() == 403)
+    /** A 403 refuses the request for some other reason (a restriction, a missing verification), not the token. */
+    internal fun isAuthFailure(error: Throwable): Boolean = error is HttpException && error.code() == 401
 
     fun registerDevice(pushToken: String?, persisted: (Boolean) -> Unit) {
         val api = RestAPI.apiOrNull ?: return persisted(false)

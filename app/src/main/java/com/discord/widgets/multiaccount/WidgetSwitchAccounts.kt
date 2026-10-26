@@ -92,8 +92,10 @@ class WidgetSwitchAccounts : AppBottomSheet() {
     private fun onAccountClicked(account: StoreMultiAccount.Account, isCurrent: Boolean) {
         when {
             editing -> Unit
-            // The list outlived the credential, so the row offers to sign in rather than switch.
-            account.tokenStatus == StoreMultiAccount.TokenStatus.INVALID -> openLogin()
+            // A marked row still tries its stored token: the mark can come from a failure that
+            // was not the token's fault. Only a row with no token left goes straight to sign-in.
+            account.tokenStatus == StoreMultiAccount.TokenStatus.INVALID &&
+                !StoreStream.getMultiAccount().hasToken(account.id) -> openLogin()
             isCurrent -> dismiss()
             else -> {
                 StoreStream.switchAccount(account.id, StoreMultiAccountSwitch.Location.CHOOSE_ACCOUNT)

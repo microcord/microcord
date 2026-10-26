@@ -38,7 +38,6 @@ import com.discord.i18n.I18nHooks
 import com.discord.stores.IntentRouteResult
 import com.discord.stores.MainRoute
 import com.discord.stores.RequiredAction
-import com.discord.stores.StoreMultiAccount
 import com.discord.stores.StoreMultiAccountSwitch
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreNotices
@@ -471,13 +470,9 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
                 mapOf("username" to result.username),
             ),
         )
-        is StoreMultiAccountSwitch.Result.Failure -> {
-            // The stored token was refused or never produced a session for the account asked for,
-            // so the row has to stop offering a switch that cannot happen.
-            StoreStream.getMultiAccount()
-                .handleTokenStatusAsync(result.targetUserId, StoreMultiAccount.TokenStatus.INVALID)
-            AppToast.show(this, R.string.switch_accounts_toast_login_error)
-        }
+        // A timeout or a slow network is not a refused token; the store marks the row itself when
+        // the gateway actually rejects it.
+        is StoreMultiAccountSwitch.Result.Failure -> AppToast.show(this, R.string.switch_accounts_toast_login_error)
     }
 
     override fun onPause() {
