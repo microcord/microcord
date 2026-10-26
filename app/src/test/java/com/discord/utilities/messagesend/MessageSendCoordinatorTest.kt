@@ -2,6 +2,7 @@ package com.discord.utilities.messagesend
 
 import android.net.Uri
 import com.discord.api.message.Message as ApiMessage
+import com.discord.api.message.MessageFlags
 import com.discord.api.message.MessageReference
 import com.discord.api.sticker.Sticker
 import com.discord.api.sticker.StickerFormatType
@@ -76,6 +77,18 @@ class MessageSendCoordinatorTest {
         assertEquals(5_000L, reconciled.message.id)
         // The optimistic id is replaced by the server id, but the nonce still ties them together.
         assertEquals(nonce, reconciled.message.nonce)
+    }
+
+    @Test
+    fun silentPrefixIsStrippedAndSuppressesNotifications() {
+        coordinator.send(MessageSendCoordinator.Send(channelId = CHANNEL_ID, content = "@silent  hi there"))
+        val body = restApi.sendCalls.single().body
+        assertEquals("hi there", body?.content)
+        assertEquals(MessageFlags.SUPPRESS_NOTIFICATIONS, body?.flags)
+
+        assertEquals(null, MessageSendCoordinator.stripSilentPrefix("@silently"))
+        assertEquals(null, MessageSendCoordinator.stripSilentPrefix("hi @silent"))
+        assertEquals("", MessageSendCoordinator.stripSilentPrefix("@silent"))
     }
 
     @Test

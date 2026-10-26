@@ -1,6 +1,7 @@
 package com.discord.utilities.messagesend
 
 import android.content.ContentResolver
+import com.discord.api.message.MessageFlags
 import com.discord.api.message.MessageReference
 import com.discord.api.application.Application
 import com.discord.api.premium.PremiumTier
@@ -183,6 +184,10 @@ class MessageSendCoordinator @JvmOverloads constructor(
     }
 
     fun send(input: Send): Submission {
+        val silentContent = stripSilentPrefix(input.content)
+        if (silentContent != null) {
+            return send(input.copy(content = silentContent, flags = (input.flags ?: 0L) or MessageFlags.SUPPRESS_NOTIFICATIONS))
+        }
         val nonce = input.nonce ?: nonceGenerator.nonce().toString()
         val reference = input.messageReference ?: input.reply?.messageReference
         val base = Message(
@@ -486,6 +491,22 @@ class MessageSendCoordinator @JvmOverloads constructor(
         const val TYPE_FAILED = -2
         const val TYPE_CAPTCHA = -6
         const val TYPE_AUTOMOD = -8
+
+        private const val SILENT_PREFIX = "@silent"
+
+        /**
+         * The content without a leading `@silent`, or null when it has none. As in the reference
+         * client the keyword must stand alone (followed by whitespace or nothing), and the message
+         * it prefixes is sent with notifications suppressed.
+         */
+        internal fun stripSilentPrefix(content: String): String? =
+            if (content.startsWith(SILENT_PREFIX) &&
+                (content.length == SILENT_PREFIX.length || content[SILENT_PREFIX.length].isWhitespace())
+            ) {
+                content.substring(SILENT_PREFIX.length).trim()
+            } else {
+                null
+            }
     }
 }
 

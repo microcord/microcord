@@ -1,6 +1,9 @@
 package com.discord.widgets.chat.list.adapter
 
 import android.content.Context
+import androidx.core.content.ContextCompat
+import com.discord.api.message.MessageFlags
+import com.discord.utilities.dimen.dpToPixels
 import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
@@ -257,6 +260,7 @@ class WidgetChatListAdapterItemMessage(
             itemView.context,
             message.timestamp?.dateTimeMillis ?: 0L,
         )
+        itemTimestamp?.let { configureSilentIcon(it, message.hasFlag(MessageFlags.SUPPRESS_NOTIFICATIONS)) }
 
         // An interaction that is still running replaces the body with a status line; otherwise the
         // body is parsed. Whichever view ends up carrying the text is the one accessibility reads.
@@ -380,6 +384,21 @@ class WidgetChatListAdapterItemMessage(
      * relaying a followed channel, `OP` for the author of a forum post, `BOT` otherwise. Verified
      * bots additionally get the tick.
      */
+    /** A sleeping bell after the timestamp marks a message sent with `@silent`, as RN shows it. */
+    private fun configureSilentIcon(timestamp: TextView, silent: Boolean) {
+        val icon = if (silent) {
+            ContextCompat.getDrawable(timestamp.context, R.drawable.ic_bell_z_24dp)?.mutate()?.apply {
+                val size = dpToPixels(SILENT_ICON_DP)
+                setBounds(0, 0, size, size)
+                setTint(timestamp.currentTextColor)
+            }
+        } else {
+            null
+        }
+        timestamp.compoundDrawablePadding = dpToPixels(SILENT_ICON_PADDING_DP)
+        timestamp.setCompoundDrawablesRelative(null, null, icon, null)
+    }
+
     private fun configureItemTag(message: Message, isGuildForumPostAuthor: Boolean) {
         val itemTag = itemTag ?: return
         val author = message.author ?: return
@@ -1269,6 +1288,8 @@ class WidgetChatListAdapterItemMessage(
 
     private companion object {
         private const val TAG = "ChatListAdapterMessage"
+        private const val SILENT_ICON_DP = 14
+        private const val SILENT_ICON_PADDING_DP = 4
 
         private const val TYPE_DEFAULT = 0
         private const val TYPE_GUILD_MEMBER_JOIN = 7
