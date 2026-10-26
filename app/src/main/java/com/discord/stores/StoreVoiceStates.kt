@@ -30,10 +30,19 @@ class StoreVoiceStates(
     private var myUserId: Long? = null
     private var sessionId: String? = null
 
+    /**
+     * Our own voice state from another client, as `guildId to state`. Kept apart from [voiceStates]
+     * so nothing mistakes it for this device's call; only the sidebar shows it. An account is in one
+     * voice channel at a time, so one entry is enough.
+     */
+    private var otherSessionSelfState: Pair<Long, VoiceState>? = null
+    private var otherSessionSelfStateSnapshot: Pair<Long, VoiceState>? = null
+
     @StoreThread
     private fun clear() {
         dirtyGuildIds.addAll(voiceStates.keys)
         voiceStates.clear()
+        otherSessionSelfState = null
         markChanged()
     }
 
@@ -62,7 +71,10 @@ class StoreVoiceStates(
             if (guildStates != null && guildStates.remove(userId) != null) {
                 dirtyGuildIds.add(effectiveGuildId)
             }
+            setOtherSessionSelfState(voiceState.takeUnless { it.isRemoveSignal }?.let { effectiveGuildId to it })
         } else {
+            // Joining from this device ends the other client's session.
+            if (userId == myUserId && !voiceState.isRemoveSignal) setOtherSessionSelfState(null)
             var changed = false
             var affectedChannelId = 0L
             val guildStates = voiceStates[effectiveGuildId] ?: HashMap()
@@ -89,7 +101,19 @@ class StoreVoiceStates(
         if (dirtyGuildIds.isNotEmpty()) markChanged()
     }
 
+    @StoreThread
+    private fun setOtherSessionSelfState(state: Pair<Long, VoiceState>?) {
+        if (state == otherSessionSelfState) return
+        otherSessionSelfState = state
+        markChanged()
+    }
+
     fun get(): Map<Long, Map<Long, VoiceState>> = voiceStatesSnapshot
+
+    /** Our voice state in [guildId] when it belongs to another of our clients, not this one. */
+    fun observeOtherSessionSelfState(guildId: Long): Observable<VoiceState?> =
+        observationDeck.connectRx(this) { otherSessionSelfStateSnapshot?.takeIf { it.first == guildId }?.second }
+            .distinctUntilChanged()
 
     fun getForChannel(guildId: Long, channelId: Long): Map<Long, VoiceState> =
         voiceStatesSnapshot[guildId].orEmpty().filterValues { it.channelId == channelId }
@@ -156,6 +180,7 @@ class StoreVoiceStates(
             }
         }
         voiceStatesSnapshot = updated
+        otherSessionSelfStateSnapshot = otherSessionSelfState
         dirtyGuildIds.clear()
     }
 

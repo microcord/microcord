@@ -10,6 +10,9 @@ import com.discord.api.commands.GuildApplicationCommandIndexUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.emoji.GuildEmojisUpdate
+import com.discord.api.channel.ChannelInfo
+import com.discord.api.channel.VoiceChannelStartTimeUpdate
+import com.discord.api.channel.VoiceChannelStatusUpdate
 import com.discord.api.forum.ForumUnreads
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.friendsuggestions.FriendSuggestionDelete
@@ -209,6 +212,9 @@ class StoreGatewayConnection(
     val threadMembersUpdate = behavior<ThreadMembersUpdate>()
     val threadMemberListUpdate = behavior<ThreadMemberListUpdate>()
     val forumUnreads = behavior<ForumUnreads>()
+    val channelInfo = behavior<ChannelInfo>()
+    val voiceChannelStatusUpdate = behavior<VoiceChannelStatusUpdate>()
+    val voiceChannelStartTimeUpdate = behavior<VoiceChannelStartTimeUpdate>()
 
     // Messages
     // Account-scoped mutations must not replay a prior account's saved content to late subscribers.
@@ -357,6 +363,10 @@ class StoreGatewayConnection(
 
     fun updateTimeSpentSessionId(initializationTimestamp: Long, sessionId: String, clientLaunchId: String) {
         socket?.handleUpdateTimeSpentSessionId(initializationTimestamp, sessionId, clientLaunchId)
+    }
+
+    fun requestChannelInfo(guildId: Long): Boolean = requestIfSessionEstablished {
+        it.requestChannelInfo(guildId, listOf("status", "voice_start_time"))
     }
 
     fun requestSoundboardSounds(guildIds: List<Long>): Boolean = requestIfSessionEstablished {
@@ -590,6 +600,9 @@ class StoreGatewayConnection(
             "THREAD_MEMBERS_UPDATE" -> threadMembersUpdate.emit(data)
             "THREAD_MEMBER_LIST_UPDATE" -> threadMemberListUpdate.emit(data)
             "FORUM_UNREADS" -> forumUnreads.emit(data)
+            "CHANNEL_INFO" -> channelInfo.emit(data)
+            "VOICE_CHANNEL_STATUS_UPDATE" -> voiceChannelStatusUpdate.emit(data)
+            "VOICE_CHANNEL_START_TIME_UPDATE" -> voiceChannelStartTimeUpdate.emit(data)
 
             // Messages
             "SAVED_MESSAGE_CREATE" -> savedMessageCreate.emit(data)

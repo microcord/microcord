@@ -51,6 +51,10 @@ import com.discord.models.guild.UserGuildMember
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
+import com.discord.utilities.textprocessing.AstRenderer
+import com.discord.utilities.textprocessing.DiscordParser
+import com.discord.utilities.textprocessing.MessageParseState
+import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.feature.DmListCustomization
@@ -100,10 +104,12 @@ import com.discord.widgets.user.presence.ModelRichPresence
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
 import com.discord.views.VitoImageView
 import com.discord.views.typing.TypingDots
+import com.discord.stores.StoreVoiceChannelInfo
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textview.MaterialTextView
 import com.discord.utilities.user.UserUtils.getDisplayName
 import rx.Subscription
+import java.util.Locale
 
 /**
  * The channels sidebar adapter: one view holder per [ChannelListItem] type.
@@ -120,6 +126,21 @@ class WidgetChannelsListAdapter(
     private var bottomNavHeight: Int = 0
 
     var selectedGuildId: Long = 0L
+
+    /** Voice channel statuses and session start times; only rows whose entry changed are rebound. */
+    var voiceChannelInfo: Map<Long, StoreVoiceChannelInfo.Info> = emptyMap()
+        set(value) {
+            val previous = field
+            field = value
+            internalData.forEachIndexed { index, item ->
+                if (item is ChannelListItemVoiceChannel && previous[item.channel.id] != value[item.channel.id]) {
+                    notifyItemChanged(index)
+                }
+            }
+        }
+
+    /** Tap on the status line of the voice channel the user is connected to. */
+    var onEditVoiceChannelStatus: (Channel, String?) -> Unit = { _, _ -> }
 
     /** Channels someone is typing in; only the rows whose state flipped are rebound. */
     var typingChannelIds: Set<Long> = emptySet()
@@ -668,7 +689,18 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_item_voice_channel_speaker)
         private val userLimit: VoiceUserLimitView =
             itemView.findViewById(R.id.channels_item_voice_channel_user_limit)
+        private val status: SimpleDraweeSpanTextView = itemView.findViewById(R.id.channels_item_voice_channel_status)
+        private var renderedStatus: String? = null
+        private val duration: TextView = itemView.findViewById(R.id.channels_item_voice_channel_duration)
         private var boundItem: ChannelListItemVoiceChannel? = null
+        private var startTimeMs: Long? = null
+        private val tick = object : Runnable {
+            override fun run() {
+                val start = startTimeMs ?: return
+                duration.text = formatElapsed(System.currentTimeMillis() - start)
+                itemView.postDelayed(this, 1000L)
+            }
+        }
 
         init {
             root.setOnClickListener {
@@ -687,6 +719,15 @@ class WidgetChannelsListAdapter(
             root.setOnLongClickListenerConsumeClick {
                 boundItem?.let { adapter.onSelectChannelOptions(it.channel) }
             }
+            status.setOnClickListener {
+                boundItem?.let { adapter.onEditVoiceChannelStatus(it.channel, adapter.voiceChannelInfo[it.channel.id]?.status) }
+            }
+            itemView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(view: View) = restartTick()
+                override fun onViewDetachedFromWindow(view: View) {
+                    itemView.removeCallbacks(tick)
+                }
+            })
         }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
@@ -732,6 +773,56 @@ class WidgetChannelsListAdapter(
             speaker.imageTintList = ColorStateList.valueOf(iconColor)
 
             configureUserLimit(item, canConnect)
+            configureChannelInfo(item, adapter.voiceChannelInfo[item.channel.id])
+        }
+
+        /**
+         * The status line, and the time since the channel's current session began, which takes the
+         * user-limit slot when the channel has no limit. Connected members who may set the status
+         * get a prompt when there is none.
+         */
+        private fun configureChannelInfo(item: ChannelListItemVoiceChannel, info: StoreVoiceChannelInfo.Info?) {
+            val canSetStatus = item.voiceSelected &&
+                PermissionUtils.can(Permission.SET_VOICE_CHANNEL_STATUS, item.permission)
+            val statusText = info?.status?.takeIf(String::isNotBlank)
+            if (statusText == null) {
+                renderedStatus = null
+                status.text = if (canSetStatus) root.context.getString(R.string.voice_channel_set_status) else null
+            } else if (statusText != renderedStatus) {
+                // Emoji and light markdown, as the desktop client renders it; no links or mentions.
+                renderedStatus = statusText
+                status.setDraweeSpanStringBuilder(
+                    AstRenderer.render(
+                        STATUS_PARSER.parse(statusText, MessageParseState.initialState),
+                        MessageRenderContext(
+                            context = root.context,
+                            myId = 0L,
+                            isAnimationEnabled = StoreStream.getUserSettings().getIsAnimatedEmojisEnabled(),
+                        ),
+                    ),
+                )
+            }
+            status.visibility = if (statusText != null || canSetStatus) View.VISIBLE else View.GONE
+            status.isClickable = canSetStatus
+            val pencil = if (canSetStatus) {
+                ContextCompat.getDrawable(root.context, R.drawable.ic_edit_24dp)?.mutate()?.apply {
+                    val size = (STATUS_EDIT_ICON_DP * root.resources.displayMetrics.density).toInt()
+                    setBounds(0, 0, size, size)
+                    setTint(status.currentTextColor)
+                }
+            } else {
+                null
+            }
+            status.setCompoundDrawablesRelative(null, null, pencil, null)
+
+            startTimeMs = info?.startTimeMs?.takeIf { userLimit.visibility != View.VISIBLE }
+            duration.visibility = if (startTimeMs != null) View.VISIBLE else View.GONE
+            restartTick()
+        }
+
+        private fun restartTick() {
+            itemView.removeCallbacks(tick)
+            if (startTimeMs != null) tick.run()
         }
 
         /**
@@ -975,6 +1066,9 @@ class WidgetChannelsListAdapter(
                 } else {
                     View.GONE
                 }
+
+            // Our own entry from another client: shown, but faded so it does not read as this device's call.
+            binding.root.alpha = if (item.isOtherSession) OTHER_SESSION_ALPHA else 1f
 
             bindActivityIcon(null)
             if (itemView.isAttachedToWindow) observeActivity()
@@ -1643,6 +1737,32 @@ class WidgetChannelsListAdapter(
     companion object {
         /** Badges saturate at 99; the reference prints the raw clamp, not "99+". */
         private const val MAX_MENTION_COUNT = 99
+        private const val STATUS_EDIT_ICON_DP = 14
+        private const val OTHER_SESSION_ALPHA = 0.5f
+
+        private val STATUS_PARSER by lazy {
+            DiscordParser.createParser(
+                allowMaskedLinks = false,
+                supportEntityMentions = false,
+                renderBlockQuotes = false,
+                renderCodeBlocks = false,
+                renderSubtext = false,
+                renderLinks = false,
+            )
+        }
+
+        /** `M:SS`, or `H:MM:SS` from the first hour on, as the desktop client shows it. */
+        internal fun formatElapsed(elapsedMs: Long): String {
+            val seconds = maxOf(0L, elapsedMs / 1000L)
+            val h = seconds / 3600
+            val m = seconds % 3600 / 60
+            val s = seconds % 60
+            return if (h > 0) {
+                String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
+            } else {
+                String.format(Locale.ROOT, "%d:%02d", m, s)
+            }
+        }
     }
 }
 

@@ -864,6 +864,13 @@ interface RestAPIInterface {
     @GET("channels/{channelId}")
     fun getChannel(@Path("channelId") channelId: Long): Observable<Channel>
 
+    /** An empty [RestAPIParams.VoiceChannelStatus.status] clears it. */
+    @PUT("channels/{channelId}/voice-status")
+    fun updateVoiceChannelStatus(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.VoiceChannelStatus,
+    ): Observable<Unit>
+
     @GET("soundboard-default-sounds")
     fun getDefaultSoundboardSounds(): Observable<List<SoundboardSound>>
 

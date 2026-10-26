@@ -819,6 +819,11 @@ class StoreStream private constructor(
     private val tabsNavigation = StoreTabsNavigation(dispatcher, this, observationDeck)
 
     // -- Stores that need the gateway socket ------------------------------------------------------
+    private val voiceChannelInfo = StoreVoiceChannelInfo(
+        dispatcher = dispatcher,
+        observationDeck = observationDeck,
+        requestOverGateway = gatewayConnection::requestChannelInfo,
+    )
     private val forumPostReadStates = StoreForumPostReadStates(
         dispatcher = dispatcher,
         requestForumUnreadsOverGateway = gatewayConnection::requestForumUnreads,
@@ -1146,6 +1151,7 @@ class StoreStream private constructor(
         forumPostMessages,
         forumPostReadStates,
         archivedThreads,
+        voiceChannelInfo,
         // Chat and messages
         chat,
         messageReplies,
@@ -2280,6 +2286,13 @@ class StoreStream private constructor(
             )
         }
         dispatchSubscribe(events.forumUnreads, "streamForumUnreads", forumPostReadStates::handleForumUnreads)
+        dispatchSubscribe(events.channelInfo, "streamChannelInfo", voiceChannelInfo::handleChannelInfo)
+        dispatchSubscribe(events.voiceChannelStatusUpdate, "streamVoiceChannelStatusUpdate", voiceChannelInfo::handleStatusUpdate)
+        dispatchSubscribe(
+            events.voiceChannelStartTimeUpdate,
+            "streamVoiceChannelStartTimeUpdate",
+            voiceChannelInfo::handleStartTimeUpdate,
+        )
 
         // Users, relationships and presence
         dispatchSubscribe(events.userUpdate, "streamUserUpdated") { user ->
@@ -3388,6 +3401,7 @@ class StoreStream private constructor(
         threadDraft.clearDraftState()
         forumPostMessages.reset()
         forumPostReadStates.reset()
+        voiceChannelInfo.reset()
         archivedThreads.reset()
         chat.handlePreLogout()
         messageReplies.handlePreLogout()
@@ -3611,6 +3625,7 @@ class StoreStream private constructor(
         embeddedActivities.handleConnectionOpen(payload)
         forumPostMessages.handleConnectionOpen(payload)
         forumPostReadStates.handleConnectionOpen(payload)
+        voiceChannelInfo.handleConnectionOpen()
         archivedThreads.handleConnectionOpen()
         dmMessagePreload.preloadIfEnabled(
             DmListCustomization.visible(DmListCustomization.Component.MESSAGE),
@@ -4229,6 +4244,7 @@ class StoreStream private constructor(
         @JvmStatic fun getThreadDraft() = requireInstance().threadDraft
         @JvmStatic fun getForumPostMessages() = requireInstance().forumPostMessages
         @JvmStatic fun getForumPostReadStates() = requireInstance().forumPostReadStates
+        @JvmStatic fun getVoiceChannelInfo() = requireInstance().voiceChannelInfo
         @JvmStatic fun getArchivedThreads() = requireInstance().archivedThreads
 
         // Chat and messages

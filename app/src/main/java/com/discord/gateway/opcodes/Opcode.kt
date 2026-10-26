@@ -24,7 +24,8 @@ enum class Opcode(val apiInt: Int) {
     REQUEST_SOUNDBOARD_SOUNDS(31),
 
     QOS_HEARTBEAT(40),
-    UPDATE_TIME_SPENT_SESSION_ID(41);
+    UPDATE_TIME_SPENT_SESSION_ID(41),
+    REQUEST_CHANNEL_INFO(43);
 
     companion object {
         private val byApiInt = entries.associateBy(Opcode::apiInt)

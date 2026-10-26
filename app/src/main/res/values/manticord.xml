@@ -231,4 +231,8 @@
     <string name="feature_skip_delete_confirmation_description">Deletes messages right away instead of asking first</string>
     <string name="feature_media_mosaic">Media Mosaic</string>
     <string name="feature_media_mosaic_description">Shows several images or videos in one message as a grid</string>
+    <string name="voice_channel_set_status">Set a channel status</string>
+    <string name="voice_channel_status_title">Voice Channel Status</string>
+    <string name="voice_channel_status_body">Let everyone know what\'s going on. Leave it empty to clear the status.</string>
+    <string name="voice_channel_status_hint">What\'s happening?</string>
 </resources>

@@ -427,6 +427,8 @@ object RestAPIParams {
         override fun toString(): String = "EmptyBody"
     }
 
+    data class VoiceChannelStatus(val status: String)
+
     data class SendSoundboardSound(
         val soundId: Long,
         val sourceGuildId: Long? = null,

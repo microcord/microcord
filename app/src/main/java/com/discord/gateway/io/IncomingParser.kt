@@ -9,6 +9,9 @@ import com.discord.api.commands.GuildApplicationCommandIndexUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInboundUpdate
 import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.emoji.GuildEmojisUpdate
+import com.discord.api.channel.ChannelInfo
+import com.discord.api.channel.VoiceChannelStartTimeUpdate
+import com.discord.api.channel.VoiceChannelStatusUpdate
 import com.discord.api.forum.ForumUnreads
 import com.discord.api.friendsuggestions.FriendSuggestion
 import com.discord.api.friendsuggestions.FriendSuggestionDelete
@@ -272,6 +275,9 @@ class IncomingParser(private val gson: Gson) {
         "THREAD_MEMBERS_UPDATE" -> gson.fromJson(data, ThreadMembersUpdate::class.java)
         "THREAD_MEMBER_LIST_UPDATE" -> gson.fromJson(data, ThreadMemberListUpdate::class.java)
         "FORUM_UNREADS" -> gson.fromJson(data, ForumUnreads::class.java)
+        "CHANNEL_INFO" -> gson.fromJson(data, ChannelInfo::class.java)
+        "VOICE_CHANNEL_STATUS_UPDATE" -> gson.fromJson(data, VoiceChannelStatusUpdate::class.java)
+        "VOICE_CHANNEL_START_TIME_UPDATE" -> gson.fromJson(data, VoiceChannelStartTimeUpdate::class.java)
 
         // Messages
         "SAVED_MESSAGE_CREATE" -> gson.fromJson(data, SavedMessage::class.java)

@@ -36,7 +36,12 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.persister.Persister
+import com.discord.i18n.i18nFormat
+import com.discord.utilities.rest.RestAPI
+import com.discord.restapi.RestAPIParams
 import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.utilities.rx.bindToComponentLifecycle
 import com.discord.utilities.rx.ui
 import com.discord.utilities.view.rounded.RoundedCoordinatorLayout
@@ -154,6 +159,10 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             .ui(this)
             .appSubscribe(WidgetChannelsList::class.java) { adapter.typingChannelIds = it }
 
+        StoreStream.getVoiceChannelInfo().observeInfo()
+            .ui(this)
+            .appSubscribe(WidgetChannelsList::class.java) { adapter.voiceChannelInfo = it }
+
         storeNavigation.observeLeftPanelState()
             .ui(this)
             .appSubscribe(WidgetChannelsList::class.java) { state ->
@@ -236,6 +245,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             selectedGuildId?.let { WidgetChannelsAndRoles.launch(requireContext(), it) }
         }
         adapter.onCollapseCategory = ::collapseCategory
+        adapter.onEditVoiceChannelStatus = ::editVoiceChannelStatus
         adapter.onSelectInvite = { anchor ->
             ChannelListNavigation.copyGuildInvite(this, anchor, selectedGuildId)
         }
@@ -368,9 +378,34 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
         ChannelListNavigation.ackPremiumGuildHint()
     }
 
+    private fun editVoiceChannelStatus(channel: Channel, current: String?) {
+        val activity = appActivity ?: return
+        WidgetNoticeDialog.showInputModal(
+            activity = activity,
+            headerText = getString(R.string.voice_channel_status_title),
+            bodyText = getString(R.string.voice_channel_status_body),
+            hintText = getString(R.string.voice_channel_status_hint),
+            initialText = current,
+            inputValidator = { value ->
+                if (value.trim().length > MAX_VOICE_CHANNEL_STATUS_LENGTH) {
+                    activity.i18nFormat(R.string.maximum_length_error, "maxLength" to MAX_VOICE_CHANNEL_STATUS_LENGTH)
+                } else {
+                    null
+                }
+            },
+            onOKClicked = { context, value ->
+                RestAPI.api.updateVoiceChannelStatus(channel.id, RestAPIParams.VoiceChannelStatus(value.trim()))
+                    .restSubscribeOn()
+                    .ui(this)
+                    .appSubscribe(WidgetChannelsList::class.java, context) { }
+            },
+        )
+    }
+
     private fun configureUI(model: WidgetChannelListModel) {
         lastModelCache.set(model)
         val guild = model.selectedGuild
+        guild?.let { StoreStream.getVoiceChannelInfo().fetchChannelInfo(it.id) }
         val hasBanner = guild?.banner != null
 
         emptyFriendsState.visibility = if (model.showEmptyState) View.VISIBLE else View.GONE
@@ -564,6 +599,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
 
     companion object {
         const val ANALYTICS_SOURCE = "Channels List"
+        private const val MAX_VOICE_CHANNEL_STATUS_LENGTH = 500
         const val BANNER_TEXT_SHADOW_RADIUS = 1f
         const val BANNER_TEXT_SHADOW_DX = 0f
         const val BANNER_TEXT_SHADOW_DY = 4f

@@ -141,6 +141,9 @@ sealed class OutgoingPayload private constructor() {
 
     data class SoundboardSoundsRequest(val guildIds: List<Long>) : OutgoingPayload()
 
+    /** [fields] names what to return per channel: `status` and/or `voice_start_time`. */
+    data class ChannelInfoRequest(val guildId: Long, val fields: List<String>) : OutgoingPayload()
+
     data class DeletedEntityIdsRequest(
         val guildId: Long,
         val channelIdsHash: String,
@@ -174,6 +177,7 @@ typealias IdentifyClientState = OutgoingPayload.IdentifyClientState
 typealias PresenceUpdate = OutgoingPayload.PresenceUpdate
 typealias Resume = OutgoingPayload.Resume
 typealias SoundboardSoundsRequest = OutgoingPayload.SoundboardSoundsRequest
+typealias ChannelInfoRequest = OutgoingPayload.ChannelInfoRequest
 typealias DeletedEntityIdsRequest = OutgoingPayload.DeletedEntityIdsRequest
 typealias StreamPing = OutgoingPayload.StreamPing
 typealias UpdateTimeSpentSessionId = OutgoingPayload.UpdateTimeSpentSessionId

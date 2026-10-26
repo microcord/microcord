@@ -12,6 +12,8 @@ data class ChannelListItemVoiceUser(
     val computed: GuildMember,
     val isApplicationStreaming: Boolean,
     val hasChannelConnectPermission: Boolean,
+    /** The current user, connected from another of their clients rather than this one. */
+    val isOtherSession: Boolean = false,
 ) : ChannelListItem {
     override val type: Int = ChannelListItem.TYPE_CHANNEL_VOICE_USER
     override val key: String = "$type${voiceState.channelId}${voiceState.userId}"

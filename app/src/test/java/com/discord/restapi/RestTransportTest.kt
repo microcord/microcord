@@ -281,6 +281,21 @@ class RestTransportTest {
     }
 
     @Test
+    fun voiceChannelStatusUsesDefaultTransportHeaders() {
+        server.enqueue(MockResponse().setResponseCode(204))
+        installDefaultApi()
+
+        RestAPI.api.updateVoiceChannelStatus(5, RestAPIParams.VoiceChannelStatus("gaming")).toBlocking().subscribe()
+        val request = server.takeRequest()
+        assertEquals("PUT", request.method)
+        assertEquals("/api/v9/channels/5/voice-status", request.path)
+        assertEquals("""{"status":"gaming"}""", request.body.readUtf8())
+        assertEquals("fixture-token", request.getHeader("Authorization"))
+        assertFalse(request.getHeader("X-Super-Properties").isNullOrBlank())
+        assertFalse(request.getHeader("X-Discord-Timezone").isNullOrBlank())
+    }
+
+    @Test
     fun gameMetadataUsesDefaultTransportHeaders() {
         server.enqueue(MockResponse().setBody("[]"))
         installDefaultApi()

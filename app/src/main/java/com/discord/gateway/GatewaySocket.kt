@@ -6,6 +6,7 @@ import android.util.Log
 import com.discord.app.AppLog
 import com.discord.api.activity.Activity
 import com.discord.api.presence.ClientStatus
+import com.discord.gateway.io.ChannelInfoRequest
 import com.discord.gateway.io.CreateStream
 import com.discord.gateway.io.DeleteStream
 import com.discord.gateway.io.ForumUnreadsRequest
@@ -248,6 +249,10 @@ class GatewaySocket(
 
     fun requestForumUnreads(request: ForumUnreadsRequest) = scheduleSend {
         send(Opcode.REQUEST_FORUM_UNREADS, request, omitNulls = true)
+    }
+
+    fun requestChannelInfo(guildId: Long, fields: List<String>) = scheduleSend {
+        send(Opcode.REQUEST_CHANNEL_INFO, ChannelInfoRequest(guildId, fields))
     }
 
     fun requestSoundboardSounds(guildIds: List<Long>) = scheduleSend {

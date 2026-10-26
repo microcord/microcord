@@ -232,6 +232,7 @@ data class WidgetChannelListModel(
             streamingUserIds: Set<Long>,
             guildPermissions: Map<Long, Long>,
             comparator: Comparator<ChannelListItemVoiceUser> = voiceUserComparator,
+            otherSessionUserId: Long? = null,
         ): Map<Long, List<ChannelListItemVoiceUser>> {
             val byChannel = HashMap<Long, MutableList<ChannelListItemVoiceUser>>()
             for (voiceState in voiceStates.values) {
@@ -251,6 +252,7 @@ data class WidgetChannelListModel(
                             Permission.CONNECT,
                             guildPermissions[channelId],
                         ),
+                        isOtherSession = userId == otherSessionUserId,
                     ),
                 )
             }
@@ -284,12 +286,19 @@ data class WidgetChannelListModel(
         fun get(guildId: Long): Observable<Map<Long, List<ChannelListItemVoiceUser>>> {
             val gateway = StoreStream.getGatewayConnection()
             val subscriptions = StoreStream.getGuildSubscriptions()
+            val otherSessionSelfState = StoreStream.getVoiceStates().observeOtherSessionSelfState(guildId)
             val voiceStates = Observable.combineLatest(
                 StoreStream.getVoiceStates().observe(guildId)
                     .leadingEdgeThrottle(VOICE_STATE_THROTTLE_MS, TimeUnit.MILLISECONDS),
+                otherSessionSelfState,
                 StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
-            ) { states, permissions ->
-                states.filterValues { state ->
+            ) { states, otherSelf, permissions ->
+                val merged = if (otherSelf != null && otherSelf.userId !in states) {
+                    states + (otherSelf.userId to otherSelf)
+                } else {
+                    states
+                }
+                merged.filterValues { state ->
                     state.channelId != null && PermissionUtils.can(Permission.VIEW_CHANNEL, permissions[state.channelId])
                 }
             }
@@ -307,7 +316,8 @@ data class WidgetChannelListModel(
                 StoreStream.getGuilds().observeComputed(guildId),
                 StoreStream.getChannels().observeChannelsForGuild(guildId),
                 StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
-            ) { streams, voiceStates, users, guildMembers, guildChannels, guildPermissions ->
+                otherSessionSelfState,
+            ) { streams, voiceStates, users, guildMembers, guildChannels, guildPermissions, otherSelf ->
                 createVoiceStates(
                     voiceStates = voiceStates,
                     users = users,
@@ -315,6 +325,7 @@ data class WidgetChannelListModel(
                     guildChannels = guildChannels,
                     streamingUserIds = streams.keys,
                     guildPermissions = guildPermissions,
+                    otherSessionUserId = otherSelf?.userId,
                 )
             }.computationLatest().distinctUntilChanged()
         }

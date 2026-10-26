@@ -283,6 +283,7 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
             okText: CharSequence? = null,
             shouldHideKeyboard: Boolean = false,
             inputValidator: ((String) -> CharSequence?)? = null,
+            initialText: CharSequence? = null,
         ) {
             val inputLayout = if (isPassword) {
                 R.layout.view_input_modal_password
@@ -296,6 +297,7 @@ class WidgetNoticeDialog : AppDialog(R.layout.widget_notice_dialog) {
                     input = view.findViewById<TextInputLayout>(R.id.view_input)?.also {
                         it.hint = hintText
                         if (isPassword) it.editText?.isSaveEnabled = false
+                        initialText?.let { text -> it.editText?.setText(text) }
                     }
                 },
                 R.id.notice_ok to { view ->
