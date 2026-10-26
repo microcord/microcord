@@ -27,6 +27,7 @@ class Hook(
     spans: List<Any> = emptyList(),
     var onClick: ((View) -> Unit)? = null,
     @ColorInt var clickColor: Int? = null,
+    var onLongClick: ((View) -> Unit)? = null,
 ) {
     val spans: MutableList<Any> = spans.toMutableList()
 
@@ -185,7 +186,7 @@ object I18nHooks {
             hook.spans.forEach { builder.setSpan(it, start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
             hook.onClick?.let { onClick ->
                 builder.setSpan(
-                    ClickableSpan(hook.clickColor, underline = false, onClickListener = onClick),
+                    ClickableSpan(hook.clickColor, underline = false, hook.onLongClick, onClickListener = onClick),
                     start,
                     end,
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,

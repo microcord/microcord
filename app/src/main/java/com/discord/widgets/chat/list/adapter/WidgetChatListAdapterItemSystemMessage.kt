@@ -221,6 +221,7 @@ class WidgetChatListAdapterItemSystemMessage(
         val authorHook = Hook(
             spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(authorRoleColor)),
             onClick = { adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId) },
+            onLongClick = { adapter.eventHandler.onMessageAuthorLongClicked(message, adapter.data.guildId) },
         )
         val otherHook = Hook(
             spans = listOf(StyleSpan(Typeface.BOLD), ForegroundColorSpan(otherRoleColor)),
