@@ -150,6 +150,10 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             .ui(this)
             .appSubscribe(WidgetChannelsList::class.java, onNext = ::configureUI)
 
+        StoreStream.getUsersTyping().observeTypingChannelIds()
+            .ui(this)
+            .appSubscribe(WidgetChannelsList::class.java) { adapter.typingChannelIds = it }
+
         storeNavigation.observeLeftPanelState()
             .ui(this)
             .appSubscribe(WidgetChannelsList::class.java) { state ->

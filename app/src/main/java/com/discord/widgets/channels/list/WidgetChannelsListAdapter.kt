@@ -99,6 +99,7 @@ import com.discord.widgets.channels.list.items.ChannelListVocalItem
 import com.discord.widgets.user.presence.ModelRichPresence
 import com.discord.widgets.guildscheduledevent.GuildScheduledEventLocationInfo
 import com.discord.views.VitoImageView
+import com.discord.views.typing.TypingDots
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textview.MaterialTextView
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -119,6 +120,23 @@ class WidgetChannelsListAdapter(
     private var bottomNavHeight: Int = 0
 
     var selectedGuildId: Long = 0L
+
+    /** Channels someone is typing in; only the rows whose state flipped are rebound. */
+    var typingChannelIds: Set<Long> = emptySet()
+        set(value) {
+            val flipped = (field - value) + (value - field)
+            field = value
+            if (flipped.isEmpty()) return
+            internalData.forEachIndexed { index, item ->
+                val channelId = when (item) {
+                    is ChannelListItemTextChannel -> item.channel.id
+                    is ChannelListItemThread -> item.channel.id
+                    is ChannelListItemPrivate -> item.channel.id
+                    else -> return@forEachIndexed
+                }
+                if (channelId in flipped) notifyItemChanged(index)
+            }
+        }
 
     /** `null` clears the current selection (used by the hub "back to DMs" path). */
     var onSelectChannel: (Channel?) -> Unit = {}
@@ -232,6 +250,12 @@ class WidgetChannelsListAdapter(
         @LayoutRes layoutResId: Int,
         adapter: WidgetChannelsListAdapter,
     ) : MGRecyclerViewHolder<WidgetChannelsListAdapter, ChannelListItem>(layoutResId, adapter) {
+
+        protected fun TypingDots.bindTyping(channel: Channel) {
+            val typing = channel.id in adapter.typingChannelIds
+            visibility = if (typing) View.VISIBLE else View.GONE
+            if (typing) start() else stop()
+        }
 
         protected fun View.setChannelBackground(selected: Boolean, channel: Channel) {
             val attribute = if (selected && !channel.isGuildVocalChannel()) {
@@ -361,6 +385,7 @@ class WidgetChannelsListAdapter(
         private val mentions: TextView = itemView.findViewById(R.id.channels_item_channel_mentions)
         private val roleSubscriptionIcon: ImageView =
             itemView.findViewById(R.id.channels_item_channel_guild_role_subscription_icon)
+        private val typing: TypingDots = itemView.findViewById(R.id.channels_item_channel_typing)
         private var boundItem: ChannelListItemTextChannel? = null
 
         init {
@@ -404,6 +429,7 @@ class WidgetChannelsListAdapter(
                 },
             )
             hash.imageTintList = ColorStateList.valueOf(hashColor(item))
+            typing.bindTyping(item.channel)
 
             mentions.visibility = if (item.mentionCount > 0) View.VISIBLE else View.GONE
             mentions.text = minOf(MAX_MENTION_COUNT, item.mentionCount).toString()
@@ -534,6 +560,7 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_item_thread_content)
         private val name: TextView = itemView.findViewById(R.id.channels_item_thread_name)
         private val mentions: TextView = itemView.findViewById(R.id.channels_item_thread_mentions)
+        private val typing: TypingDots = itemView.findViewById(R.id.channels_item_thread_typing)
         private val spine: ImageView = itemView.findViewById(R.id.channels_item_thread_spine)
         private val unread: ImageView = itemView.findViewById(R.id.channels_item_thread_unread)
         private var boundItem: ChannelListItemThread? = null
@@ -553,6 +580,7 @@ class WidgetChannelsListAdapter(
             content.contentDescription = contentDescription(item)
 
             name.text = item.channel.name
+            typing.bindTyping(item.channel)
             name.setTextColor(textColor(item))
             name.typeface = root.context.themedFont(
                 if (!(item.isUnread && item.isUnreadImportant) && !item.selected) {
@@ -1009,6 +1037,7 @@ class WidgetChannelsListAdapter(
             itemView.findViewById(R.id.channels_list_item_private_avatar_decoration)
         private val content: View = itemView.findViewById(R.id.channels_list_item_private_content)
         private val pin: ImageView = itemView.findViewById(R.id.channels_list_item_private_pin)
+        private val typing: TypingDots = itemView.findViewById(R.id.channels_list_item_private_typing)
         private var boundChannel: Channel? = null
 
         init {
@@ -1053,6 +1082,7 @@ class WidgetChannelsListAdapter(
                 textColor(item),
             )
             pin.setColorFilter(textColor(item))
+            typing.bindTyping(channel)
             guildTag.bind(channel.getDMRecipient()?.primaryGuild)
             if (!DmListCustomization.visible(DmListCustomization.Component.GUILD_TAG)) {
                 guildTag.visibility = View.GONE

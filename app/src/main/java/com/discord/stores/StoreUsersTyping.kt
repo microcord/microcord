@@ -101,6 +101,10 @@ class StoreUsersTyping(
     fun observeTypingUsers(channelId: Long): Observable<Set<Long>> =
         observationDeck.connectRx(this) { typingUsersSnapshot[channelId].orEmpty() }.distinctUntilChanged()
 
+    /** Channels someone other than the current user is typing in; empty channels are dropped from the map. */
+    fun observeTypingChannelIds(): Observable<Set<Long>> =
+        observationDeck.connectRx(this) { typingUsersSnapshot.keys }.distinctUntilChanged()
+
     fun observeTypingUsersForChannels(channelIds: Set<Long>): Observable<Map<Long, Set<Long>>> =
         observationDeck.connectRx(this) { typingUsersSnapshot.filterKeys(channelIds::contains) }.distinctUntilChanged()
 
