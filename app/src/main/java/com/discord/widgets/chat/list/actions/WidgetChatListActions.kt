@@ -169,7 +169,8 @@ class WidgetChatListActions : AppBottomSheet() {
             }
         }
         bind(binding.dialogChatActionsManageReactions, hasReactions) {
-            WidgetManageReactions.create(channelId, messageId, requireContext())
+            WidgetManageReactions.show(parentFragmentManager, channelId, messageId)
+            dismiss()
         }
         bind(binding.dialogChatActionsRemoveAllReactions, hasReactions && manage.canManageMessages) {
             removeAllReactions(message)

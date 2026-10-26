@@ -26,7 +26,7 @@ import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
-import com.discord.widgets.chat.list.reactions.WidgetManageReactions
+import com.discord.widgets.chat.managereactions.WidgetManageReactions
 import com.discord.widgets.forums.ForumUtils
 import rx.Observable
 
@@ -142,7 +142,7 @@ class WidgetForumPostStatusViewModel(
         isArchivedThread: Boolean,
         reaction: MessageReaction,
     ) = doPress(context, fragmentManager, guildId, isArchivedThread) {
-        WidgetManageReactions.create(channelId, messageId, context, reaction)
+        WidgetManageReactions.show(fragmentManager, channelId, messageId, reaction)
     }
 
     private fun doPress(

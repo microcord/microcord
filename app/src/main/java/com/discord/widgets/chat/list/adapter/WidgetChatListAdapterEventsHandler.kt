@@ -60,7 +60,7 @@ import com.discord.widgets.chat.input.sticker.StickerMessageSender
 import com.discord.widgets.chat.list.actions.MessageActionCoordinator
 import com.discord.widgets.chat.list.actions.MessageActions
 import com.discord.widgets.chat.list.actions.WidgetChatListActions
-import com.discord.widgets.chat.list.reactions.WidgetManageReactions
+import com.discord.widgets.chat.managereactions.WidgetManageReactions
 import com.discord.widgets.chat.list.sheet.WidgetApplicationCommandBottomSheet
 import com.discord.widgets.guild_automod.WidgetReportIssueWithAutoMod
 import com.discord.widgets.guild_automod.WidgetAutoModIncidentActions
@@ -300,7 +300,7 @@ class WidgetChatListAdapterEventsHandler(
         channelId: Long,
         messageId: Long,
         reaction: MessageReaction,
-    ) = WidgetManageReactions.create(channelId, messageId, host.requireContext(), reaction)
+    ) = WidgetManageReactions.show(fragmentManager, channelId, messageId, reaction)
 
     override fun onReportIssueWithAutoMod(context: Context, message: Message) =
         WidgetReportIssueWithAutoMod.launch(context, message.channelId, message.id)

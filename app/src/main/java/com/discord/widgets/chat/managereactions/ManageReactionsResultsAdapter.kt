@@ -21,6 +21,8 @@ import com.discord.utilities.user.UserUtils.getDisplayName
 class ManageReactionsResultsAdapter(recycler: RecyclerView) :
     MGRecyclerAdapterSimple<MGRecyclerDataPayload>(recycler, deferredDiffs = false) {
 
+    var onUserClicked: (ReactionUserItem) -> Unit = {}
+
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int,
@@ -101,6 +103,7 @@ class ManageReactionsResultsAdapter(recycler: RecyclerView) :
             )
             IconUtils.setIcon(avatar, item.user, R.dimen.avatar_size_standard, guildMember = item.guildMember)
             remove.visibility = if (item.canDelete) View.VISIBLE else View.GONE
+            itemView.setOnClickListener { adapter.onUserClicked(item) }
             remove.setOnClickListener {
                 StoreStream.getMessageReactions().deleteEmoji(
                     item.channelId,
