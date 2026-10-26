@@ -98,7 +98,9 @@ object MessageTextRenderer {
         onEmojiClicked: ((EmojiNode.EmojiIdAndType) -> Unit)? = null,
         onCommandMentionClicked: ((Long, String) -> Unit)? = null,
     ): MessageRenderContext {
-        val guildId = message.guildId
+        // History loaded over REST carries no guild id, so the channel supplies it; without it every
+        // role mention renders as a deleted role.
+        val guildId = message.guildId ?: StoreStream.getChannels().getChannel(message.channelId)?.guildId?.takeIf { it != 0L }
         val members = guildId?.let { StoreStream.getGuilds().getMembers()[it] }.orEmpty()
         val userNames = StoreStream.getUsers().getUsers().mapValuesTo(HashMap()) { it.value.displayName }
         message.mentions.orEmpty().forEach { user ->
