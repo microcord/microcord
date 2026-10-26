@@ -418,6 +418,7 @@ class WidgetChatListAdapterItemForwardedMessage(
         )
         val navigable = ForwardedSourcePrivacy.isNavigable(
             visibility = sourceVisibility,
+            channelKnown = channel != null,
             messageKnown = channelId != null && messageId != null && messageId > 0L,
             sourceDeleted = entry.parentMessage.hasFlag(MessageFlags.SOURCE_MESSAGE_DELETED),
         )

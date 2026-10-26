@@ -90,6 +90,7 @@ class ForwardedMessageEntryTest {
         assertTrue(
             ForwardedSourcePrivacy.isNavigable(
                 ForwardedSourcePrivacy.Visibility.CHANNEL,
+                channelKnown = true,
                 messageKnown = true,
                 sourceDeleted = false,
             ),
@@ -97,6 +98,16 @@ class ForwardedMessageEntryTest {
         assertFalse(
             ForwardedSourcePrivacy.isNavigable(
                 ForwardedSourcePrivacy.Visibility.GUILD,
+                channelKnown = true,
+                messageKnown = true,
+                sourceDeleted = false,
+            ),
+        )
+        // An archived thread is never cached, but the jump can still fetch it.
+        assertTrue(
+            ForwardedSourcePrivacy.isNavigable(
+                ForwardedSourcePrivacy.Visibility.GUILD,
+                channelKnown = false,
                 messageKnown = true,
                 sourceDeleted = false,
             ),
@@ -104,6 +115,7 @@ class ForwardedMessageEntryTest {
         assertFalse(
             ForwardedSourcePrivacy.isNavigable(
                 ForwardedSourcePrivacy.Visibility.CHANNEL,
+                channelKnown = true,
                 messageKnown = true,
                 sourceDeleted = true,
             ),

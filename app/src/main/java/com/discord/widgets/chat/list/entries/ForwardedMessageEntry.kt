@@ -164,11 +164,20 @@ object ForwardedSourcePrivacy {
         else -> Visibility.HIDDEN
     }
 
+    /**
+     * An uncached channel in a guild the user is in is still worth jumping to: archived threads and
+     * forum posts are never in the cache, and the jump fetches the channel itself. A channel that is
+     * cached but inaccessible stays inert.
+     */
     fun isNavigable(
         visibility: Visibility,
+        channelKnown: Boolean,
         messageKnown: Boolean,
         sourceDeleted: Boolean,
-    ): Boolean = visibility == Visibility.CHANNEL && messageKnown && !sourceDeleted
+    ): Boolean {
+        val reachable = visibility == Visibility.CHANNEL || (visibility == Visibility.GUILD && !channelKnown)
+        return reachable && messageKnown && !sourceDeleted
+    }
 
     fun label(visibility: Visibility, channelName: String?, guildName: String?): String? = when (visibility) {
         Visibility.CHANNEL -> guildName ?: channelName
