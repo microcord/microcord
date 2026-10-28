@@ -220,9 +220,13 @@ class WidgetChannelTopic : AppFragment(R.layout.widget_channel_topic) {
             ),
         )
         // Linkify would rewrite the whole CharSequence and drop the spans just installed, so it is
-        // only allowed over short topics that contain nothing it could conflict with.
-        val autoLinkMask =
-            if (rendered.length <= MAX_AUTOLINK_LENGTH && !viewState.isLinkifyConflicting) Linkify.ALL else 0
+        // only allowed over short topics that contain nothing it could conflict with. Phone numbers
+        // are left out: bare numbers are never turned into call links.
+        val autoLinkMask = if (rendered.length <= MAX_AUTOLINK_LENGTH && !viewState.isLinkifyConflicting) {
+            Linkify.WEB_URLS or Linkify.EMAIL_ADDRESSES
+        } else {
+            0
+        }
         return RenderedTopic(
             channelName = viewState.channel.getDisplayNameOrDefault(requireContext(), false),
             topic = rendered,
