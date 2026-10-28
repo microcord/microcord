@@ -326,6 +326,8 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             return
         }
         isTouchedSinceLastJump = false
+        // A fling still running would keep dragging the list away while the jump pulls it back.
+        recycler.stopScroll()
         scrollToWithHighlight?.cancel()
         scrollToWithHighlight = ScrollToWithHighlight(this, messageId) {
             scrollToWithHighlight = null
@@ -709,6 +711,9 @@ class WidgetChatListAdapter @JvmOverloads constructor(
                 return
             }
             val centreOffset = (adapter.recycler.height / 2f).toInt()
+            // The layout manager's scroll does not stop a fling; one that started while this
+            // attempt waited would otherwise fight every retry.
+            adapter.recycler.stopScroll()
             val layoutManager = adapter.layoutManager
             layoutManager?.scrollToPositionWithOffset(index, centreOffset)
             val view = layoutManager?.findViewByPosition(index)
