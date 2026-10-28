@@ -173,7 +173,7 @@ class GuildProfileViewModelsTest {
     )
 
     private fun member(nick: String? = "nick", avatar: String? = null) = GuildMember(
-        color = 0, hoistRoleId = 0, roles = emptyList(), nick = nick, premiumSince = null,
+        roleColor = 0, hoistRoleId = 0, roles = emptyList(), nick = nick, premiumSince = null,
         pending = false, joinedAt = null, guildId = 1, userId = 7, avatarHash = avatar,
     )
 

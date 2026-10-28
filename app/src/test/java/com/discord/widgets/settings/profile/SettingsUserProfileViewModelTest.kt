@@ -51,7 +51,7 @@ class SettingsUserProfileViewModelTest {
 
     @Test fun `guild nickname and bio compare against member`() {
         val member = GuildMember(
-            color = 0,
+            roleColor = 0,
             hoistRoleId = 0,
             roles = emptyList(),
             nick = "guild nick",
@@ -229,7 +229,7 @@ class SettingsUserProfileViewModelTest {
         UserProfile(userProfile = UserProfile.ProfileMetadata(pronouns = pronouns))
 
     private fun member(nick: String? = "guild nick", bio: String? = "guild bio") = GuildMember(
-        color = 0,
+        roleColor = 0,
         hoistRoleId = 0,
         roles = emptyList(),
         nick = nick,

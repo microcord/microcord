@@ -23,7 +23,7 @@ class UserMutualGuildsManagerTest {
     }
 
     private fun member(guildId: Long, userId: Long) = GuildMember(
-        color = 0,
+        roleColor = 0,
         hoistRoleId = 0,
         roles = emptyList(),
         nick = null,

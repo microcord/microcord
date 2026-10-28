@@ -14,6 +14,8 @@ import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.RoleColorMode
+import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MarkupEligibility
@@ -68,14 +70,15 @@ class WidgetChatListAdapterItemAutoModSystemMessageEmbed(
             binding.username.text = GuildMember.getNickOrUsername(entry.author, coreUser)
         }
         val memberRoles = entry.author?.getRoles().orEmpty().takeIf { isMember }.orEmpty()
+        val roleColorMode = RoleColors.mode()
         val coloredRole = entry.roles.orEmpty().values
             .filter { it.id in memberRoles && it.color != 0 }
             .maxWithOrNull(compareBy<com.discord.api.role.GuildRole>({ it.position }, { it.id }))
-        val roleColor = coloredRole?.color
-            ?: ThemedColor.resolve(binding.root.context, R.attr.colorHeaderPrimary)
-        binding.username.setTextColor(roleColor)
+        val defaultColor = ThemedColor.resolve(binding.root.context, R.attr.colorHeaderPrimary)
+        val roleColor = coloredRole?.color ?: defaultColor
+        binding.username.setTextColor(if (roleColorMode == RoleColorMode.NAMES) roleColor else defaultColor)
         binding.roleDot.apply {
-            visibility = if (coloredRole == null) View.GONE else View.VISIBLE
+            visibility = if (coloredRole == null || roleColorMode == RoleColorMode.NONE) View.GONE else View.VISIBLE
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(roleColor)

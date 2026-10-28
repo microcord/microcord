@@ -399,7 +399,7 @@ class IconUtilsTest {
     }
 
     private fun guildMember(avatarHash: String?) = GuildMember(
-        color = 0,
+        roleColor = 0,
         hoistRoleId = 0L,
         roles = null,
         nick = null,

@@ -15,6 +15,7 @@ import com.discord.api.user.PrimaryGuild
 import com.discord.databinding.ViewUsernameBinding
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
+import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.setVitoSpan
 import com.facebook.drawee.drawable.ScalingUtils
@@ -95,6 +96,9 @@ class UsernameView @JvmOverloads constructor(
     fun setUsernameColor(color: Int) {
         binding.usernameText.setTextColor(color)
     }
+
+    /** The dot after the name for the "next to names" role colour mode; see [RoleColors.applyDot]. */
+    fun setRoleDot(roleColor: Int?) = RoleColors.applyDot(binding.usernameText, roleColor)
 
     /**
      * Draws the name in its owner's chosen font, colour and effect.

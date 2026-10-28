@@ -67,7 +67,7 @@ class WidgetUserSheetActionsTest {
             guildBadges = emptyList(),
         )
         val member = GuildMember(
-            color = 0x123456, hoistRoleId = 9L, roles = listOf(9L), nick = "server name",
+            roleColor = 0x123456, hoistRoleId = 9L, roles = listOf(9L), nick = "server name",
             premiumSince = null, pending = false, joinedAt = null, guildId = 1L, userId = 2L,
             avatarHash = "server avatar", bannerHash = "server banner", bio = "cached server bio",
         )

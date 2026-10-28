@@ -165,7 +165,7 @@ class UserProfileContractsTest {
     fun profileHeaderStateKeepsDerivedAvatarAndReducedMotionState() {
         val user = CoreUser(id = 2, username = "target", avatar = "avatar")
         val member = GuildMember(
-            color = 0,
+            roleColor = 0,
             hoistRoleId = 0,
             roles = emptyList(),
             nick = "guild nick",
@@ -229,7 +229,7 @@ class UserProfileContractsTest {
         val guildBanner = reduced.copy(
             banner = null,
             guildMember = GuildMember(
-                color = 0,
+                roleColor = 0,
                 hoistRoleId = 0,
                 roles = emptyList(),
                 nick = null,
@@ -249,7 +249,7 @@ class UserProfileContractsTest {
     @Test
     fun guildProfileBannerKeepsGuildScopeWithoutBreakingGlobalFallback() {
         val member = GuildMember(
-            color = 0,
+            roleColor = 0,
             hoistRoleId = 0,
             roles = emptyList(),
             nick = null,

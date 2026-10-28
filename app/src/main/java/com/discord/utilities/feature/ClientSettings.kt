@@ -114,6 +114,7 @@ object ClientSettings {
     val chatInputLayout = register(StringSetting(CHAT_INPUT_LAYOUT_KEY))
     val messageLayout = register(StringSetting("message_customization_layout"))
     val gifProvider = register(StringSetting("feature_gif_provider"))
+    val roleColorMode = register(StringSetting("role_color_mode"))
 
     // Enum key getters must remain computed: enum construction must not call back into this registry.
     private val headerLayouts = HeaderCustomization.Surface.entries.associateWith {

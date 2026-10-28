@@ -387,7 +387,7 @@ class PermissionUtilsTest {
             GuildRole(0, "role", id, 0, false, permissions, false, false, null, null, null)
 
         fun member(vararg roles: Long) = GuildMember(
-            color = 0, hoistRoleId = 0, roles = roles.toList(), nick = null, premiumSince = null,
+            roleColor = 0, hoistRoleId = 0, roles = roles.toList(), nick = null, premiumSince = null,
             pending = false, joinedAt = UtcDateTime(0), guildId = GUILD, userId = USER,
         )
 

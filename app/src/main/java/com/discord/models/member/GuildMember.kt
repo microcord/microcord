@@ -11,9 +11,12 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.user.User
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.RoleColorMode
+import com.discord.utilities.feature.RoleColors
 
 data class GuildMember(
-    @ColorInt val color: Int,
+    /** The highest coloured role's colour, kept even while role colours are hidden. */
+    @ColorInt val roleColor: Int,
     val hoistRoleId: Long,
     private val roles: List<Long>?,
     val nick: String?,
@@ -32,6 +35,10 @@ data class GuildMember(
     val flags: Int = 0,
 ) {
     constructor() : this(0, 0, null, null, null, false, null, 0, 0)
+
+    /** [roleColor] when names are drawn in role colours, otherwise "no colour"; see [RoleColors]. */
+    @get:ColorInt
+    val color: Int get() = if (RoleColors.mode() == RoleColorMode.NAMES) roleColor else Color.BLACK
 
     fun getRoles(): List<Long> = roles ?: emptyRoles
 
@@ -64,7 +71,7 @@ data class GuildMember(
             val colorRole = resolvedRoles.filter { it.color != 0 }.maxWithOrNull(roleComparator)
             val hoistRole = resolvedRoles.filter(GuildRole::hoist).maxWithOrNull(roleComparator)
             return GuildMember(
-                color = colorRole?.color?.or(Color.BLACK) ?: Color.BLACK,
+                roleColor = colorRole?.color?.or(Color.BLACK) ?: Color.BLACK,
                 hoistRoleId = hoistRole?.id ?: 0,
                 roles = roles.takeIf(List<Long>::isNotEmpty),
                 nick = apiGuildMember.nick,

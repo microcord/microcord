@@ -499,7 +499,7 @@ class WidgetChannelListModelTest {
             ),
             user = CoreUser(id = 1L, username = "user", discriminator = 1),
             computed = GuildMember(
-                color = 0,
+                roleColor = 0,
                 hoistRoleId = 0L,
                 roles = null,
                 nick = null,

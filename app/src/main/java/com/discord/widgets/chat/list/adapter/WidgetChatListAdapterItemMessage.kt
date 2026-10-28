@@ -49,6 +49,7 @@ import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer
 import com.discord.utilities.displaynamestyles.DisplayNameStyleUtils
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.feature.MessageCustomization
 import com.discord.utilities.feature.MessageCustomization.CoreElement
 import com.discord.utilities.icon.IconUtils
@@ -369,6 +370,8 @@ class WidgetChatListAdapterItemMessage(
             DisplayNameStyleUtils.resolve(message.author, entry.author.takeIf { guildIdentityEnabled }),
             DisplayNameStyleRenderer.Mode.FONT,
         )
+        // After the style: the dot is centred on the final font's capitals.
+        RoleColors.applyDot(itemName, entry.author?.roleColor)
         itemName.setOnClickListener {
             adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId)
         }

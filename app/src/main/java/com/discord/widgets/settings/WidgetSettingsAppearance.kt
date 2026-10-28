@@ -14,6 +14,8 @@ import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.databinding.WidgetSettingsAppearanceBinding
 import com.discord.models.domain.ModelUserSettings
+import com.discord.utilities.feature.RoleColorMode
+import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.rx.ui
 import com.discord.utilities.theme.ThemeRuntime
@@ -61,6 +63,8 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
                 binding.settingsAppearanceThemeMaterialYouRadio,
             ),
         )
+
+        configureRoleColors()
 
         binding.settingsAppearanceFontScalingSeekbar.max = SettingsAppearanceViewModel.MAX_FONT_SCALING -
             SettingsAppearanceViewModel.MIN_FONT_SCALING
@@ -147,6 +151,23 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         ThemeRuntime.enable(activity, emptyList())
         pick()
         AppScreenRouter.recreate(activity)
+    }
+
+    /** Desktop's three role colour choices; read at bind time, so new rows pick the choice up. */
+    private fun configureRoleColors() {
+        val radios = mapOf(
+            RoleColorMode.NAMES to binding.settingsAppearanceRoleColorsNamesRadio,
+            RoleColorMode.DOT to binding.settingsAppearanceRoleColorsDotRadio,
+            RoleColorMode.NONE to binding.settingsAppearanceRoleColorsNoneRadio,
+        )
+        val manager = RadioManager(radios.values.toList())
+        manager.setChecked(radios.getValue(RoleColors.mode()))
+        radios.forEach { (mode, radio) ->
+            radio.setContainerClickListener {
+                RoleColors.setMode(mode)
+                manager.setChecked(radio)
+            }
+        }
     }
 
     private fun configureFontScalingUI(fontScale: Int) {

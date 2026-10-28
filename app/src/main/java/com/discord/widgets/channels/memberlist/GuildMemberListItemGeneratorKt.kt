@@ -82,7 +82,7 @@ internal fun ChannelMemberListRow.toAdapterItem(guildId: Long? = null): ChannelM
         if (user.isSystemUser) R.string.system_dm_tag_system else R.string.bot_tag_bot,
         user.publicFlags and VERIFIED_BOT_FLAG != 0,
         presence,
-        guildMember?.color,
+        guildMember?.roleColor,
         IconUtils.getForGuildMemberOrUser(user, guildMember),
         isOwner,
         guildMember?.premiumSince,

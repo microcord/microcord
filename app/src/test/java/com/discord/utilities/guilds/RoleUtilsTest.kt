@@ -108,7 +108,7 @@ class RoleUtilsTest {
     ) = GuildRole(position, "role", id, color, hoist, permissions, false, false, null, tags, null)
 
     private fun member(vararg roles: Long) = GuildMember(
-        color = 0, hoistRoleId = 0, roles = roles.toList(), nick = null, premiumSince = null,
+        roleColor = 0, hoistRoleId = 0, roles = roles.toList(), nick = null, premiumSince = null,
         pending = false, joinedAt = UtcDateTime(0), guildId = 1, userId = 7,
     )
 }

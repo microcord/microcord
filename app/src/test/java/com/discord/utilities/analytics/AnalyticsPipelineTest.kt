@@ -185,7 +185,7 @@ class AnalyticsPipelineTest {
             gameName = "Game",
             gamePlatform = ActivityPlatform.XBOX,
             guildMember = GuildMember(
-                color = 0,
+                roleColor = 0,
                 hoistRoleId = 0,
                 roles = null,
                 nick = "Nick",
