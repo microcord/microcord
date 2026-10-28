@@ -154,6 +154,9 @@ open class ModelEmojiCustom : Emoji {
 
     override fun isUsable(): Boolean = FeatureFlags.nitroSpoofEnabled() || usable
 
+    /** Usable without Fake-Nitro's link substitution, which reactions cannot take. */
+    fun isGenuinelyUsable(): Boolean = usable && (available ?: true)
+
     override fun requiresColons(): Boolean = true
 
     fun toApiEmoji(): GuildEmoji =

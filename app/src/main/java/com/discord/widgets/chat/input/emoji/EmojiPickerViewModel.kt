@@ -8,6 +8,7 @@ import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.EmojiCategory
 import com.discord.models.domain.emoji.EmojiSet
 import com.discord.models.domain.emoji.ModelEmojiCustom
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.models.guild.Guild
 import com.discord.stores.StoreEmoji
 import com.discord.stores.StoreStream
@@ -76,7 +77,14 @@ class EmojiPickerViewModel(
             guildsSource(),
             animationsSource(),
         ) { emojiSet, guilds, animationsEnabled ->
-            buildItems(emojiSet, guilds, animationsEnabled, contextType)
+            buildItems(
+                emojiSet,
+                guilds,
+                animationsEnabled,
+                contextType,
+                // Fake-Nitro makes every emoji look usable, but a reaction cannot be a link.
+                genuineOnly = forReaction && FeatureFlags.nitroSpoofEnabled(),
+            )
         }.ui(this).subscribe({ onItemsChanged(it) }, { /* keep whatever is already on screen */ })
     }
 
@@ -172,8 +180,13 @@ class EmojiPickerViewModel(
             guilds: Map<Long, Guild>,
             allowEmojisToAnimate: Boolean,
             contextType: EmojiPickerContextType,
+            genuineOnly: Boolean = false,
         ): List<Item> = buildList {
-            fun addSection(category: EmojiCategory, emojis: Collection<Emoji>) {
+            fun Collection<Emoji>.shown(): List<Emoji> =
+                if (genuineOnly) filter { (it as? ModelEmojiCustom)?.isGenuinelyUsable() != false } else toList()
+
+            fun addSection(category: EmojiCategory, rawEmojis: Collection<Emoji>) {
+                val emojis = rawEmojis.shown()
                 if (emojis.isEmpty()) return
                 add(Item.HeaderItem.StandardHeaderItem(category))
                 addAll(emojis.map { emoji ->
@@ -187,7 +200,7 @@ class EmojiPickerViewModel(
 
             for ((guildId, emojis) in emojiSet.customEmojis) {
                 val guild = guilds[guildId] ?: continue
-                val nonFavorites = emojis.filterNot { it.getUniqueId() in favoriteIds }
+                val nonFavorites = emojis.shown().filterNot { it.getUniqueId() in favoriteIds }
                 if (nonFavorites.isEmpty()) continue
                 add(Item.HeaderItem.GuildHeaderItem(guild))
                 addAll(nonFavorites.map { emoji ->

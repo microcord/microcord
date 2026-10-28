@@ -157,6 +157,23 @@ class EmojiPickerViewModelTest {
     }
 
     @Test
+    fun genuineOnlyDropsLockedCustomEmojiForReactions() {
+        val locked = ModelEmojiCustom(
+            42L, "locked", emptyList(), true, false, 0, null,
+            animated = false, usable = false, available = true, guildId = 10L,
+        )
+        val owned = ModelEmojiCustom(
+            43L, "owned", emptyList(), true, false, 0, null,
+            animated = false, usable = true, available = true, guildId = 10L,
+        )
+        val set = EmojiSet(emptyMap(), mapOf(10L to listOf(locked, owned)), emptyMap(), listOf(locked), emptySet())
+
+        val emojis = EmojiPickerViewModel.buildItems(set, guilds, true, EmojiPickerContextType.Chat, genuineOnly = true)
+            .filterIsInstance<Item.EmojiItem>().map { it.emoji }
+        assertEquals(listOf<Emoji>(owned), emojis)
+    }
+
+    @Test
     fun favoritesAreNotRepeatedInRecent() {
         val favorite = unicodeEmoji("favorite")
         val set = EmojiSet(
