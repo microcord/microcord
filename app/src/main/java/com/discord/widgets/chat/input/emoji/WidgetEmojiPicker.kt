@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.panels.PanelsChildGestureRegionObserver
 import com.discord.app.AppFragment
 import com.discord.databinding.WidgetEmojiPickerBinding
 import com.discord.models.domain.emoji.Emoji
@@ -50,6 +51,9 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
 
     /** Set when the picker is embedded in a sheet that wants the selection itself. */
     internal var onPicked: ((Emoji) -> Unit)? = null
+
+    /** Whether this picker's server rail claims horizontal drags from the home panels. */
+    private var railRegistered = false
 
     /** Suppresses the scroll listener while the rail drives the grid. */
     private var scrollingToCategory = false
@@ -147,6 +151,8 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     }
 
     override fun onDestroyView() {
+        if (railRegistered) _binding?.emojiPickerCategoryRecycler?.let(PanelsChildGestureRegionObserver.Provider.get()::unregister)
+        railRegistered = false
         _binding?.chatInputEmojiPickerRecycler?.adapter = null
         _binding?.emojiPickerCategoryRecycler?.adapter = null
         _binding = null
@@ -183,6 +189,12 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
         binding.emojiPickerCategoryRecycler.apply {
             layoutManager = LinearLayoutManager(context, RecyclerView.HORIZONTAL, false)
             adapter = categoryAdapter
+            // Inline, the picker sits inside the home panels, which would take a sideways drag on
+            // the server rail as a swipe to the member list.
+            if (arguments?.getSerializable(ARG_MODE) as? EmojiPickerMode != EmojiPickerMode.BOTTOM_SHEET) {
+                PanelsChildGestureRegionObserver.Provider.get().register(this)
+                railRegistered = true
+            }
         }
     }
 
