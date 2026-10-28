@@ -36,6 +36,8 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
     @Suppress("unused")
     private var showOverflowItem = false
     private var overflowBackgroundColor = 0
+    private var overflowTextColor = 0
+    private var overflowText: TextView? = null
     private val cutoutStyle: CutoutView.Style
 
     init {
@@ -69,8 +71,16 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
         )
     }
 
+    /** Recolours the "+N" pill, for hosts whose surface is not the app theme's (themed profiles). */
+    fun setOverflowColors(background: Int, text: Int) {
+        overflowBackgroundColor = background
+        overflowTextColor = text
+        overflowText?.let(::styleOverflow)
+    }
+
     fun setItems(items: Collection<Item>) {
         removeAllViews()
+        overflowText = null
         val overflowCount = if (items.size > maxItems) items.size - maxItems + 1 else 0
         val ordinaryCount = if (overflowCount > 0) maxItems - 1 else items.size
         items.take(ordinaryCount).forEachIndexed { index, item ->
@@ -116,6 +126,12 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
         }
         text.text = "+$overflowCount"
         text.setTextSize(TypedValue.COMPLEX_UNIT_PX, overflowTextSizePx.toFloat())
+        styleOverflow(text)
+        overflowText = text
+        addView(root)
+    }
+
+    private fun styleOverflow(text: TextView) {
         val shape = MaterialShapeDrawable(
             ShapeAppearanceModel.builder().setAllCornerSizes(ShapeAppearanceModel.PILL).build(),
         )
@@ -123,7 +139,7 @@ class PileView(context: Context, attrs: AttributeSet?) : FrameLayout(context, at
             overflowBackgroundColor.takeIf { it != 0 } ?: itemBackgroundColor,
         )
         text.background = shape
-        addView(root)
+        if (overflowTextColor != 0) text.setTextColor(overflowTextColor)
     }
 
 }

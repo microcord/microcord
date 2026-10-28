@@ -498,6 +498,7 @@ class WidgetUserSheet : AppBottomSheet() {
         binding.userSheetProfileTabs.setTabTextColors(tabMuted, tabSelected)
         binding.userSheetProfileTabs.setSelectedTabIndicatorColor(tabSelected)
         binding.userSheetProfileTabsRule.setBackgroundColor(border)
+        binding.userSheetMutualFriendsPile.setOverflowColors(card, tabText)
         profileCards().forEach { it.setCardBackgroundColor(card) }
         binding.userSheetNoteText.background = android.graphics.drawable.GradientDrawable().apply {
             cornerRadius = binding.aboutMeCard.radius
