@@ -88,6 +88,26 @@ class GuildNavigationStoresTest {
         assertEquals(listOf(4L, 1L, 2L), store.getOrderedGuilds().keys.toList())
     }
 
+    @Test fun guildsMissingFromFoldersGoOnTopNewestJoinFirst() {
+        val scheduler = TestScheduler()
+        val dispatcher = Dispatcher(scheduler)
+        val deck = ObservationDeck()
+        val store = StoreGuildsSorted(deck, dispatcher, scheduler)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        store.subscribeToStores()
+        val guilds = listOf(Guild(id = 1, name = "Saved"), Guild(id = 2, name = "Old join"), Guild(id = 3, name = "New join"))
+            .associateBy(Guild::id)
+
+        dispatcher.schedule {
+            store.update(
+                guilds, emptySet(), emptySet(), listOf(ModelGuildFolder(null, listOf(1))),
+                emptySet(), mapOf(1L to 100L, 2L to 200L, 3L to 300L),
+            )
+        }
+        scheduler.triggerActions()
+        assertEquals(listOf(3L, 2L, 1L), store.getOrderedGuilds().keys.toList())
+    }
+
     @Test fun userReorderAppliesWithoutWaitingForTheRebuildThrottle() {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)

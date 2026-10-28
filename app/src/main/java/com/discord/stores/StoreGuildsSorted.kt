@@ -147,9 +147,12 @@ class StoreGuildsSorted(
     ).map { ModelGuildFolder(null, listOf(it)) }
 
     private fun validateAndRebuild() {
+        // Guilds missing from the saved folders (usually just joined) go on top, newest join first,
+        // the way current clients place them until the user drags one.
         val positionedIds = positions.flatMapTo(HashSet(), ModelGuildFolder::guildIds)
-        guilds.keys.filter { it !in positionedIds && it !in lurkingGuildIds }
-            .sorted().asReversed().forEach { positions.add(0, ModelGuildFolder(null, listOf(it))) }
+        val unpositioned = guilds.keys.filter { it !in positionedIds && it !in lurkingGuildIds }
+            .sortedWith(compareByDescending<Long> { guildsJoinedAt[it] ?: 0L }.thenByDescending { it })
+        positions.addAll(0, unpositioned.map { ModelGuildFolder(null, listOf(it)) })
 
         val seenGuildIds = HashSet<Long>()
         positions.indices.forEach { index ->
