@@ -85,6 +85,12 @@ class StoreVoiceParticipants(
         val isBooster: Boolean,
         private val voiceConfiguration: VoiceConfiguration?,
         private val _isSpeaking: Boolean,
+        /**
+         * Our own state in this channel from another of our clients. Kept out of [voiceState] so
+         * [isConnected] keeps meaning "this device is in the call"; only the participant list
+         * shows it, faded.
+         */
+        val otherSessionVoiceState: VoiceState? = null,
     ) {
         // A guild nick wins in a guild channel; in a private call there is no member, so the
         // friend nickname is what applies.
@@ -126,6 +132,7 @@ class StoreVoiceParticipants(
         streamSpectators: Map<String, List<Long>>,
         voiceConfiguration: VoiceConfiguration,
         streamContexts: Map<Long, StreamContext?>,
+        otherSessionSelfState: VoiceState? = null,
     ): Map<Long, VoiceUser> {
         fun watchedStreamKey(userId: Long): String? =
             streamSpectators.entries.firstOrNull { userId in it.value }?.key
@@ -145,6 +152,7 @@ class StoreVoiceParticipants(
             isBooster = guildMembers[meUser.id]?.premiumSince != null,
             voiceConfiguration = voiceConfiguration,
             _isSpeaking = speakingUsers.contains(meUser.id),
+            otherSessionVoiceState = otherSessionSelfState,
         )
         otherUsers.forEach { user ->
             participants[user.id] = VoiceUser(
@@ -204,12 +212,16 @@ class StoreVoiceParticipants(
             .switchMap<Map<Long, VoiceUser>> { channel ->
                 if (channel == null) return@switchMap Observable.just(emptyMap<Long, VoiceUser>())
                 val guildId = if (channel.isPrivate) StoreVoiceStates.PRIVATE_CHANNELS_GUILD_ID else channel.guildId
+                val otherSessionSelfState = voiceStatesStore.observeOtherSessionSelfState(guildId)
+                    .map { state -> state?.takeIf { it.channelId == channel.id } }
+                    .distinctUntilChanged()
                 voiceStatesStore.observe(guildId, channel.id).switchMap { voiceStates ->
                     Observable.combineLatest(
                         usersStore.observeMe(),
                         getOtherVoiceUsers(channel, voiceStates),
-                    ) { meUser, otherUsers -> meUser to otherUsers }
-                        .switchMap { (meUser, otherUsers) ->
+                        otherSessionSelfState,
+                    ) { meUser, otherUsers, otherSelf -> Triple(meUser, otherUsers, otherSelf) }
+                        .switchMap { (meUser, otherUsers, otherSelf) ->
                             val otherUserIds = otherUsers.map(User::id)
                             Observable.combineLatest(
                                 voiceSpeakingStore.observeSpeakingUsers()
@@ -234,6 +246,7 @@ class StoreVoiceParticipants(
                                     streamSpectators,
                                     voiceConfig,
                                     streamContexts,
+                                    otherSelf,
                                 )
                             }
                         }

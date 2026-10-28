@@ -289,6 +289,7 @@ class CallParticipantsAdapter @JvmOverloads constructor(
 
             avatar.setVoiceUser(voiceUser, R.dimen.avatar_size_standard)
             name.text = voiceUser.displayName
+            itemView.alpha = if (!voiceUser.isConnected && voiceUser.otherSessionVoiceState != null) OTHER_SESSION_ALPHA else 1f
             itemView.setOnClickListener { adapter.onVoiceUserClicked(voiceUser) }
 
             configureRinging(voiceUser, data.canRing)
@@ -366,6 +367,9 @@ class CallParticipantsAdapter @JvmOverloads constructor(
         private const val VIEW_TYPE_INVITE = 4
         private const val VIEW_TYPE_EVENT = 5
         private const val VIEW_TYPE_EMBEDDED_ACTIVITY = 6
+
+        /** Dims the row for yourself when you are in the call only from another client. */
+        private const val OTHER_SESSION_ALPHA = 0.5f
 
         /**
          * Rows are declared with an opaque background so they can be reused by the call preview,

@@ -61,7 +61,10 @@ object ParticipantsListItemGenerator {
 
         // In a DM the other party is listed even before they pick up, so the caller can see who is
         // being rung; in a guild channel only people actually connected are shown.
-        val participants = voiceParticipants.values.filter { it.isConnected || channel.isPrivate() }
+        // We are also listed, faded, when we are in this channel from another client.
+        val participants = voiceParticipants.values.filter {
+            it.isConnected || channel.isPrivate() || it.otherSessionVoiceState != null
+        }
         if (participants.isNotEmpty()) {
             listItems += participants
                 .sortedWith(createUserItemsComparator(mySpectatingStreamKey))
