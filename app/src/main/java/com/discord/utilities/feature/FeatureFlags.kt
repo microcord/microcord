@@ -58,6 +58,8 @@ object FeatureFlags {
     fun setSmoothKeyboardEnabled(enabled: Boolean) = setEnabled(ClientSettings.smoothKeyboard, enabled)
     fun maximumRefreshRateEnabled() = enabled(ClientSettings.maximumRefreshRate)
     fun setMaximumRefreshRateEnabled(enabled: Boolean) = setEnabled(ClientSettings.maximumRefreshRate, enabled)
+    fun folderIconOnlyEnabled() = enabled(ClientSettings.folderIconOnly)
+    fun setFolderIconOnlyEnabled(enabled: Boolean) = setEnabled(ClientSettings.folderIconOnly, enabled)
     fun cloudSettingsBackupEnabled() = enabled(ClientSettings.cloudSettingsBackup)
     fun setCloudSettingsBackupEnabled(enabled: Boolean) = setEnabled(ClientSettings.cloudSettingsBackup, enabled)
 

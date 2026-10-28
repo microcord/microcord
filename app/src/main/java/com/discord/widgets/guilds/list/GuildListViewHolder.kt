@@ -18,6 +18,7 @@ import com.discord.i18n.i18nPlural
 import com.discord.models.guild.Guild
 import com.discord.tooltips.SparkleView
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
@@ -249,13 +250,19 @@ sealed class GuildListViewHolder(itemView: View) : RecyclerView.ViewHolder(itemV
                 folderView.isOpen != data.isOpen
             folderView.folderId = data.folderId
             folderView.isOpen = data.isOpen
+            val tint = data.color ?: ColorCompat.getThemedColor(folderView.context, R.attr.color_brand_500)
+            folderView.folderImage.imageTintList = ColorStateList.valueOf(tint or ALPHA_OPAQUE)
+            val iconOnly = FeatureFlags.folderIconOnlyEnabled()
+            // With icon-only folders the glyph is the only open/closed cue, so the two states differ.
+            folderView.folderImage.setImageResource(
+                if (iconOnly && data.isOpen) R.drawable.ic_guild_folder_open else R.drawable.ic_guild_folder,
+            )
 
-            if (data.isOpen) {
+            if (iconOnly) {
+                folderView.showFolderImageOnly()
+            } else if (data.isOpen) {
                 if (shouldAnimate) folderView.animateState(R.anim.anim_folder_slide_in_down)
                 else folderView.showCurrentState()
-                val tint = data.color ?: ColorCompat.getThemedColor(folderView.context, R.attr.color_brand_500)
-                folderView.folderImage.imageTintList =
-                    ColorStateList.valueOf(tint or ALPHA_OPAQUE)
             } else {
                 if (shouldAnimate) folderView.animateState(R.anim.anim_folder_slide_out_up)
                 else folderView.showCurrentState()

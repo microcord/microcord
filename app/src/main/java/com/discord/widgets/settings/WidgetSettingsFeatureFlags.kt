@@ -138,6 +138,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.smoothKeyboardEnabled()
             setOnCheckedListener(FeatureFlags::setSmoothKeyboardEnabled)
         }
+        binding.settingsFeatureFolderIconOnly.apply {
+            isChecked = FeatureFlags.folderIconOnlyEnabled()
+            setOnCheckedListener(FeatureFlags::setFolderIconOnlyEnabled)
+        }
         binding.settingsFeatureMaximumRefreshRate.apply {
             isChecked = FeatureFlags.maximumRefreshRateEnabled()
             setOnCheckedListener { enabled ->
