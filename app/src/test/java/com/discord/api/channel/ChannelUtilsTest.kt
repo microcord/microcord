@@ -183,6 +183,14 @@ class ChannelUtilsTest {
         assertEquals(listOf(1L, 2L, 3L), sorted.map(Channel::id))
     }
 
+    @Test fun `announcement and forum channels sort above voice regardless of position`() {
+        val voice = channel(id = 1, type = Channel.GUILD_VOICE, position = 0)
+        val announcement = channel(id = 2, type = Channel.GUILD_ANNOUNCEMENT, position = 4)
+        val forum = channel(id = 3, type = Channel.GUILD_FORUM, position = 7)
+        val sorted = listOf(voice, forum, announcement).sortedWith(Channel.getSortByNameAndType())
+        assertEquals(listOf(2L, 3L, 1L), sorted.map(Channel::id))
+    }
+
     @Test fun `sort by most recent prefers the newest known message`() {
         val a = channel(id = 1, type = Channel.DM)
         val b = channel(id = 2, type = Channel.DM)

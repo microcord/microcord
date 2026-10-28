@@ -223,8 +223,11 @@ fun Channel.isDMStatusVisible(presence: Presence?): Boolean {
 }
 
 /**
- * The channel-list ordering: categories first by position, then text channels, then
+ * The channel-list ordering: categories first by position, then every non-voice channel, then
  * voice channels, each by position, with the channel id breaking ties.
+ *
+ * 126.21 only lifted plain text channels above voice, so an announcement or forum channel could
+ * land below a voice channel with a lower position; current clients lift every non-voice type.
  */
 fun Channel.Companion.getSortByNameAndType(): Comparator<Channel?> = Comparator { first, second ->
     when {
@@ -233,8 +236,8 @@ fun Channel.Companion.getSortByNameAndType(): Comparator<Channel?> = Comparator 
         first.isCategory() && second.isCategory() -> compareByPositionThenId(first, second)
         first.isCategory() -> -1
         second.isCategory() -> 1
-        first.type == Channel.GUILD_TEXT && second.isGuildVocalChannel() -> -1
-        first.isGuildVocalChannel() && second.type == Channel.GUILD_TEXT -> 1
+        !first.isGuildVocalChannel() && second.isGuildVocalChannel() -> -1
+        first.isGuildVocalChannel() && !second.isGuildVocalChannel() -> 1
         else -> compareByPositionThenId(first, second)
     }
 }
