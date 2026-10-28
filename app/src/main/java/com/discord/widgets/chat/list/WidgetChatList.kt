@@ -14,6 +14,21 @@ import com.discord.widgets.chat.list.entries.MediaMosaicEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.StickerEntry
+import com.discord.widgets.chat.list.entries.ReactionsEntry
+import com.discord.widgets.chat.list.entries.PollEntry
+import com.discord.widgets.chat.list.entries.BotUiComponentEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
+import com.discord.widgets.chat.list.entries.ThreadEmbedEntry
+import com.discord.widgets.chat.list.entries.InviteEntry
+import com.discord.widgets.chat.list.entries.GiftEntry
+import com.discord.widgets.chat.list.entries.GuildTemplateEntry
+import com.discord.widgets.chat.list.entries.GuildScheduledEventInviteEntry
+import com.discord.widgets.chat.list.entries.StageInviteEntry
+import com.discord.widgets.chat.list.entries.GameInviteEntry
+import com.discord.widgets.chat.list.entries.SpotifyListenTogetherEntry
+import com.discord.widgets.chat.list.entries.ApplicationLinkEntry
+import com.discord.widgets.chat.list.entries.UploadProgressEntry
+import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
 import com.discord.widgets.forums.WidgetForumPostTagsSheet
 import com.discord.api.channel.Channel
 import com.discord.models.message.Message
@@ -136,6 +151,22 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
             is MediaMosaicEntry -> entry.message
             is EmbedEntry -> entry.message
             is StickerEntry -> entry.message
+            // Everything drawn under a message moves with it, reactions included.
+            is ReactionsEntry -> entry.message
+            is PollEntry -> entry.message
+            is BotUiComponentEntry -> entry.message
+            is ForwardedMessageEntry -> entry.parentMessage
+            is ThreadEmbedEntry -> entry.parentMessage
+            is InviteEntry -> entry.message
+            is GiftEntry -> entry.message
+            is GuildTemplateEntry -> entry.message
+            is GuildScheduledEventInviteEntry -> entry.message
+            is StageInviteEntry -> entry.message
+            is GameInviteEntry -> entry.message
+            is SpotifyListenTogetherEntry -> entry.message
+            is ApplicationLinkEntry -> entry.message
+            is UploadProgressEntry -> entry.message
+            is EphemeralMessageEntry -> entry.message
             else -> null
         }
     }
