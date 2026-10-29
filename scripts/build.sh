@@ -246,9 +246,10 @@ spawn_gradle() {
 
 # A daemon that ran out of heap or vanished says nothing about the code, so it is not a result
 # worth handing back. Concurrent builds were the usual cause of this and are now serialised,
-# but a stale daemon from an earlier session still has to be cleared out once.
+# but a stale daemon from an earlier session still has to be cleared out once. Case-insensitive:
+# Gradle reports a killed daemon as "Gradle build daemon disappeared unexpectedly".
 is_daemon_failure() {
-  grep -qE "OutOfMemoryError|GC overhead limit exceeded|Daemon (has disappeared|disappeared)|Unable to start the daemon" "$1" 2>/dev/null
+  grep -qiE "OutOfMemoryError|GC overhead limit exceeded|daemon (has )?disappeared|Unable to start the daemon" "$1" 2>/dev/null
 }
 
 run_one() {

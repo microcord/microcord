@@ -52,12 +52,6 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
     private val showSystemLogsSubject: BehaviorSubject<Boolean> = BehaviorSubject.create(false)
     private var logsAdapter: Adapter? = null
 
-    private data class Model(
-        val logs: List<LogRow>,
-        val isFiltered: Boolean,
-        val showSystemLogs: Boolean,
-    )
-
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val recycler: RecyclerView = view.findViewById(R.id.debugging_logs)
@@ -70,6 +64,7 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
         }
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.debug)
+        configureMenu()
     }
 
     override fun onViewBoundOrOnResume() {
@@ -83,19 +78,23 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
             filterSubject.distinctUntilChanged(),
             showSystemLogsSubject.distinctUntilChanged(),
         ) { logs, isFiltered, showSystemLogs ->
-            Model(
-                filterDebugLogs(logs, isFiltered, showSystemLogs).map(::LogRow) + headerRows,
-                isFiltered,
-                showSystemLogs,
-            )
+            filterDebugLogs(logs, isFiltered, showSystemLogs).map(::LogRow) + headerRows
         }
             .computationBuffered()
             .ui(this)
             .appSubscribe(errorClass = WidgetDebugging::class.java, onNext = ::configureUI)
     }
 
-    private fun configureUI(model: Model) {
-        logsAdapter?.setData(model.logs)
+    private fun configureUI(logs: List<LogRow>) {
+        logsAdapter?.setData(logs)
+    }
+
+    /**
+     * Set once per view, not per log update: re-inflating the menu dismisses an open export
+     * submenu, and while logs stream in (a voice call heartbeats every few seconds) it closed
+     * before the user could pick anything. The checkable items toggle themselves.
+     */
+    private fun configureMenu() {
         setActionBarOptionsMenu(
             menuResId = R.menu.menu_debugging,
             onSelected = { menuItem ->
@@ -121,8 +120,8 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
                 }
             },
             onConfigured = { menu ->
-                menu.findItem(R.id.menu_debugging_filter).isChecked = model.isFiltered
-                menu.findItem(R.id.menu_debugging_system_logs).isChecked = model.showSystemLogs
+                menu.findItem(R.id.menu_debugging_filter).isChecked = filterSubject.value == true
+                menu.findItem(R.id.menu_debugging_system_logs).isChecked = showSystemLogsSubject.value == true
             },
         )
     }
