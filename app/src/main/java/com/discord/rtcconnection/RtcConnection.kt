@@ -924,6 +924,7 @@ class RtcConnection(
                             it.name, it.priority, it.type, it.payloadType, it.rtxPayloadType, it.encode, it.decode,
                         )
                     },
+                    engineModes = connection.encryptionModes,
                 )
             }
 

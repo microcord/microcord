@@ -124,8 +124,15 @@ class RtcVoiceGatewayV8Test {
 
     @Test
     fun closeRecoveryAndTransportFallbackAreDeterministic() {
-        assertEquals(TransportModes.AES256_GCM, TransportModes.select(listOf(TransportModes.XCHACHA20, TransportModes.AES256_GCM), false))
-        assertEquals(TransportModes.XCHACHA20, TransportModes.select(listOf(TransportModes.AES256_GCM), true))
+        val both = listOf(TransportModes.XCHACHA20, TransportModes.AES256_GCM)
+        assertEquals(TransportModes.AES256_GCM, TransportModes.select(both, emptyList(), false))
+        assertEquals(TransportModes.XCHACHA20, TransportModes.select(listOf(TransportModes.AES256_GCM), emptyList(), true))
+        // 32-bit ARM engines can't do AES-GCM and leave it out of their list.
+        assertEquals(TransportModes.XCHACHA20, TransportModes.select(both, listOf(TransportModes.XCHACHA20), false))
+        assertEquals(
+            TransportModes.AES256_GCM,
+            TransportModes.select(both, listOf(TransportModes.AES256_GCM, TransportModes.XCHACHA20), false),
+        )
         assertEquals(VoiceCloseRecovery.RETRY_WITH_XCHACHA20, VoiceCloseRecovery.from(4016))
         assertEquals(VoiceCloseRecovery.RETRY_WITH_DAVE, VoiceCloseRecovery.from(4017))
         assertEquals(VoiceCloseRecovery.NONE, VoiceCloseRecovery.from(4004))

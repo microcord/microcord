@@ -234,8 +234,14 @@ internal class RtcControlSocket(
     }
 
     /** Sends `SELECT_PROTOCOL` once the media engine has bound its transport. */
-    fun selectProtocol(address: String, port: Int, codecs: List<Payloads.Protocol.CodecInfo>) {
+    fun selectProtocol(
+        address: String,
+        port: Int,
+        codecs: List<Payloads.Protocol.CodecInfo>,
+        engineModes: List<String>,
+    ) {
         executor.assertOnEngineThread()
+        transportMode = chooseTransportMode(engineModes)
         send(
             Opcodes.SELECT_PROTOCOL,
             Payloads.Protocol(
@@ -669,7 +675,8 @@ internal class RtcControlSocket(
         }
     }
 
-    private fun chooseTransportMode(): String = TransportModes.select(supportedModes, forceTransportFallback)
+    private fun chooseTransportMode(engineModes: List<String> = emptyList()): String =
+        TransportModes.select(supportedModes, engineModes, forceTransportFallback)
 
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = onEngineThread {
         if (webSocket === socket) handleClosed(true, code, reason)

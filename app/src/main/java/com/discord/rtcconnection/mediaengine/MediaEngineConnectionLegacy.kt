@@ -60,6 +60,9 @@ internal class MediaEngineConnectionLegacy(
     /** Codecs actually in play: `opus` plus whatever video codecs this device offered. */
     private val negotiatedCodecs: MutableList<Codec> = mutableListOf()
 
+    override var encryptionModes: List<String> = emptyList()
+        private set
+
     private val connection: Connection = nativeEngine.run {
         Discord.nextConnectionIsStream = type == MediaEngineConnection.Type.STREAM
         connectToServer(
@@ -110,7 +113,15 @@ internal class MediaEngineConnectionLegacy(
             negotiatedCodecs += Codec(AUDIO_CODEC_NAME, 1, "audio", AUDIO_PAYLOAD_TYPE, null)
             negotiatedCodecs += supportedVideoCodecs
 
-            notifyListeners { it.onConnected(this, transportInfo, negotiatedCodecs) }
+            withConnection {
+                it.getEncryptionModes { modes ->
+                    onEngineThread {
+                        encryptionModes = modes.orEmpty().filterNotNull()
+                        AppLog.i(TAG, "Encryption modes: $encryptionModes")
+                        notifyListeners { listener -> listener.onConnected(this, transportInfo, negotiatedCodecs) }
+                    }
+                }
+            }
             return
         }
 

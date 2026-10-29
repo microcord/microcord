@@ -96,6 +96,9 @@ interface MediaEngineConnection {
     /** Applies the RTP encryption mode and secret key from the server's `SELECT_PROTOCOL_ACK`. */
     fun setEncryptionSettings(mode: String, secretKey: IntArray)
 
+    /** Transport encryption modes the engine can run on this device, best first; known once connected. */
+    val encryptionModes: List<String> get() = emptyList()
+
     /**
      * Resolves the codec names the server chose against the codecs this device advertised, and
      * configures the encoder/decoder pair.
