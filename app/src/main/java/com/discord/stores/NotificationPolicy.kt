@@ -40,9 +40,13 @@ object NotificationPolicy {
         ) return emptySet()
 
         val guildSettings = input.guildSettings
-        val override = guildSettings?.getChannelOverride(channel.id)
-            ?: input.parentChannel?.let { guildSettings?.getChannelOverride(it.id) }
-        if ((override?.isMuted ?: guildSettings?.isMuted) == true) return emptySet()
+        val channelOverride = guildSettings?.getChannelOverride(channel.id)
+        val parentOverride = input.parentChannel?.let { guildSettings?.getChannelOverride(it.id) }
+        // A mute anywhere up the chain wins: an unmuted channel override never unmutes its server.
+        if (guildSettings?.isMuted == true || channelOverride?.isMuted == true || parentOverride?.isMuted == true) {
+            return emptySet()
+        }
+        val override = channelOverride ?: parentOverride
 
         if (channel.guildId != 0L || message.guildId != null) {
             val frequency = override?.messageNotifications

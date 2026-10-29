@@ -44,6 +44,11 @@ class StoreNotificationsTest {
         assertEquals(foreground, evaluate(permissions = 0))
         assertTrue(evaluate(dnd = true).isEmpty())
         assertTrue(evaluate(settings = setting(muted = true)).isEmpty())
+        // An unmuted channel override (e.g. a custom level on one channel) must not unmute the server.
+        assertTrue(evaluate(settings = setting(muted = true, overrides = listOf(ModelNotificationSettings.ChannelOverride(
+            messageNotifications = ModelNotificationSettings.FREQUENCY_ALL,
+            channelId = CHANNEL,
+        )))).isEmpty())
         assertEquals(foreground, evaluate(settings = setting(mobilePush = false)))
         assertTrue(evaluate(settings = setting(frequency = ModelNotificationSettings.FREQUENCY_NOTHING)).isEmpty())
         assertTrue(evaluate(settings = setting(frequency = ModelNotificationSettings.FREQUENCY_MENTIONS)).isEmpty())
