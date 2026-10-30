@@ -581,6 +581,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         // configureLoaded, whose "channel changed" test is false when re-rendering the same state.
         state?.let {
             restoreInput(it)
+            swapChannelAttachments(null, it.channelId)
             configureLoaded(it)
         }
     }
@@ -875,11 +876,13 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             onAttachmentsChanged = {
                 hasAttachments = it
                 updateSendButtonVisibility()
+                saveChannelAttachments()
             },
         )
         (flex as? AppFlexInputFragment)?.onAttachmentsCleared = {
             hasAttachments = false
             updateSendButtonVisibility()
+            saveChannelAttachments()
         }
         expressionTray = attachments?.configureFlexInputFragment(this)
         hasAttachments = flex.selectionAggregator.size > 0
@@ -1635,6 +1638,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             drafts.setTextChannelInput(previous.channelId, input?.text)
         }
         state = next
+        if (previous == null || previous.channelId != next.channelId) {
+            swapChannelAttachments(previous?.channelId, next.channelId)
+        }
         updateMessageLimitCounter()
 
         binding.chatInputWrap.visibility =
@@ -1933,6 +1939,35 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         )
         GuildVerificationLevel.HIGHEST -> context.getString(R.string.guild_verification_text_not_phone_verified)
         GuildVerificationLevel.NONE -> null
+    }
+
+    /**
+     * Attachments are part of a channel's draft: park [from]'s and bring back whatever [to] had,
+     * skipping any file that has gone away since. On the first load ([from] is `null`) a composer
+     * that already restored its own attachments is left alone.
+     */
+    private fun swapChannelAttachments(from: Long?, to: Long) {
+        // Until the composer is bound there is neither a preview strip nor anything in it.
+        if (attachments == null) return
+        val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
+        val current = ArrayList(flex.selectionAggregator.attachments)
+        if (from == null && current.isNotEmpty()) return
+        val incoming = drafts.getAttachments(to).filter(::isReadable)
+        // [state] already points at [to], so the change listener saves to [to] from here on.
+        if (from != null) drafts.setAttachments(from, current)
+        if (current.isNotEmpty()) flex.clearAttachments()
+        incoming.forEach(flex::addExternalAttachment)
+        if (incoming.isEmpty()) drafts.setAttachments(to, emptyList())
+    }
+
+    private fun isReadable(attachment: Attachment<*>): Boolean = runCatching {
+        requireContext().contentResolver.openAssetFileDescriptor(attachment.uri, "r")?.close() != null
+    }.getOrDefault(false)
+
+    private fun saveChannelAttachments() {
+        val channelId = state?.channelId ?: return
+        val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
+        drafts.setAttachments(channelId, flex.selectionAggregator.attachments)
     }
 
     private fun restoreInput(next: ChatInputViewModel.ViewState.Loaded) {
