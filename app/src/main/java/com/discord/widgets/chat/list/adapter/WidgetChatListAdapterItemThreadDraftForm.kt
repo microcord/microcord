@@ -9,6 +9,7 @@ import android.text.style.StyleSpan
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.ImageView
+import android.widget.EditText
 import android.widget.TextView
 import com.discord.R
 import com.discord.api.permission.Permission
@@ -60,7 +61,9 @@ class WidgetChatListAdapterItemThreadDraftForm(
         configureNameHint(entry)
         configureTagPicker(entry)
         configurePrivateThreadOption(entry)
-        nameInput.requestFocus()
+        // The row is rebound whenever the draft or list changes, so only take focus when the user
+        // is not already typing somewhere else (the message box below, most of all).
+        if (itemView.rootView.findFocus() !is EditText) nameInput.requestFocus()
     }
 
     private fun configureThreadNameInput(entry: ThreadDraftFormEntry) {
