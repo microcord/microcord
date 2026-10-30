@@ -191,6 +191,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var expressionTray: WidgetExpressionTray? = null
     private var autocomplete: InputAutocomplete? = null
     private var attachments: WidgetChatInputAttachments? = null
+
+    /** Whether the user can type here at all; a mention tap must not pop the keyboard otherwise. */
+    private var canCompose = false
     private var flexInputBinding: FlexInputWidgetBinding? = null
     private var voiceMessageRecorder: VoiceMessageRecorder? = null
     private var voiceRecordingUi: VoiceRecordingUi? = null
@@ -1597,6 +1600,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun insertMention(userId: Long) {
+        if (!canCompose) return
         val editor = input ?: return
         val start = editor.selectionStart.coerceAtLeast(0)
         editor.text?.insert(start, "<@$userId> ")
@@ -1605,6 +1609,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     }
 
     private fun handleChatEvent(event: StoreChat.Event) {
+        if (!canCompose) return
         val editor = input ?: return
         when (event) {
             is StoreChat.Event.AppendChatText -> {
@@ -1653,6 +1658,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             else -> PermissionUtils.hasAccessWrite(next.channel, channelPermissions)
         }
         flexInputBinding?.renderSendPermission(ableToSendMessages)
+        canCompose = next.isInputShowing && ableToSendMessages
         configureChatGuard(next)
         configureContextBar(next)
 
