@@ -15,6 +15,7 @@ import com.discord.stores.StoreThreadMessages
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
+import com.discord.utilities.textprocessing.Rules
 import com.discord.utilities.user.NicknameUtils
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.widgets.botuikit.BotComponentExperiments
@@ -186,7 +187,8 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
 
             if (!isAutoModSystemMessage) {
                 embeds.forEach { embed ->
-                    when (embed.type) {
+                    // An emoji link is already drawn inline as the emoji; see Rules.createEmojiLinkRule.
+                    if (!Rules.isEmojiUrl(embed.url)) when (embed.type) {
                         EmbedType.APPLICATION_NEWS -> Unit
                         EmbedType.COMPONENTS -> createComponentEmbedEntry(
                             message = message,

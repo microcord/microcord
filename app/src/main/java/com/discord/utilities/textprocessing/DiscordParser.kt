@@ -95,6 +95,8 @@ object DiscordParser {
         }
 
         if (renderLinks) {
+            parser.addRule(Rules.createEmojiLinkRule(masked = true))
+            parser.addRule(Rules.createEmojiLinkRule(masked = false))
             if (allowMaskedLinks) {
                 parser.addRule(Rules.createMaskedLinkRule())
             }

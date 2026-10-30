@@ -354,6 +354,18 @@ class DiscordMarkdownRulesTest {
     }
 
     @Test
+    fun emojiCdnLinksRenderAsTheEmoji() {
+        val url = "https://cdn.discordapp.com/emojis/519581399221534729.webp?size=48&quality=lossless&name=thisup"
+        val masked = parse("[thisup]($url) fact checked [x]($url)")
+        assertEquals(listOf("thisup", "thisup"), masked.filterIsInstance<EmojiNode<*>>().map { it.content })
+        assertTrue(plainText(masked).contains("fact checked"))
+        assertEquals("thisup", parse("look $url").filterIsInstance<EmojiNode<*>>().single().content)
+        assertTrue(Rules.isEmojiUrl(url))
+        assertFalse(Rules.isEmojiUrl("https://cdn.discordapp.com/attachments/1/2/cat.png"))
+        assertTrue(parse("https://example.com/emojis/1.png").none { it is EmojiNode<*> })
+    }
+
+    @Test
     fun namedEmojiRuleResolvesKnownNamesAndLeavesUnknownOnesAsText() {
         withEmojiCatalog { parser ->
             val known = parser.parse(":wave:", MessageParseState.initialState)

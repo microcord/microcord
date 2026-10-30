@@ -91,6 +91,14 @@ object Rules {
         "^<((?:(?:tel|sms):\\+?|\\+)(?:(?:[0-9]|\\([0-9]+\\)))(?:[- ./]?(?:[0-9]|\\([0-9]+\\)))+)>",
     )
     private val PATTERN_MASKED_LINK: Pattern = Pattern.compile(LINK)
+
+    /** A custom emoji's CDN image, as client mods post it in place of an emoji the sender cannot use. */
+    private const val REGEX_EMOJI_URL =
+        "https://(?:cdn\\.discordapp\\.com|media\\.discordapp\\.net)/emojis/\\d+\\.(?:webp|png|gif|jpe?g|avif)(?:[?][^\\s()<>]*)?"
+    private val PATTERN_EMOJI_URL: Pattern = Pattern.compile(REGEX_EMOJI_URL)
+    private val PATTERN_EMOJI_LINK: Pattern = Pattern.compile("^<?($REGEX_EMOJI_URL)>?")
+    private val PATTERN_MASKED_EMOJI_LINK: Pattern =
+        Pattern.compile("^\\[([^\\]\\n]*)\\]\\(<?($REGEX_EMOJI_URL)>?\\)")
     private val PATTERN_HOOKED_LINK: Pattern = Pattern.compile(HOOKED_LINK)
     private val PATTERN_SOFT_HYPHEN: Pattern = Pattern.compile("^\\u00AD")
     private val PATTERN_SPOILER: Pattern = Pattern.compile("^\\|\\|([\\s\\S]+?)\\|\\|")
@@ -532,6 +540,33 @@ object Rules {
                 val isAnimated = !matcher.group(1).isNullOrEmpty()
                 val name = matcher.group(2).orEmpty()
                 val emojiId = matcher.group(3).toLongOrDefault()
+                return ParseSpec(EmojiNode.from(name, emojiId, isAnimated), state)
+            }
+        }
+
+    /** Whether [url] is a custom emoji's CDN image; such a link renders inline as the emoji. */
+    fun isEmojiUrl(url: String?): Boolean = url != null && PATTERN_EMOJI_URL.matcher(url).matches()
+
+    /**
+     * An emoji CDN link, bare or as `[name](url)`, drawn as the emoji itself the way client mods'
+     * fake-emoji messages are meant to be read. The name comes from the URL's `name=` parameter or
+     * the mask; `.gif` or `animated=true` makes it animated.
+     */
+    fun <T : EmojiNode.RenderContext, S> createEmojiLinkRule(masked: Boolean): Rule<T, EmojiNode<T>, S> =
+        object : Rule<T, EmojiNode<T>, S>(if (masked) PATTERN_MASKED_EMOJI_LINK else PATTERN_EMOJI_LINK) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in EmojiNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> {
+                val url = matcher.group(if (masked) 2 else 1).orEmpty()
+                val path = url.substringBefore('?')
+                val query = url.substringAfter('?', "").split('&').associate { it.substringBefore('=') to it.substringAfter('=', "") }
+                val name = query["name"]?.takeIf { it.isNotBlank() }
+                    ?: matcher.group(1).takeIf { masked && !it.isNullOrBlank() }
+                    ?: "emoji"
+                val emojiId = path.substringAfterLast('/').substringBefore('.').toLongOrDefault()
+                val isAnimated = path.endsWith(".gif") || query["animated"] == "true"
                 return ParseSpec(EmojiNode.from(name, emojiId, isAnimated), state)
             }
         }

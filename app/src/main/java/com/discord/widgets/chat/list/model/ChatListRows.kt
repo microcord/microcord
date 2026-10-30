@@ -21,6 +21,7 @@ import com.discord.utilities.feature.MessageCustomization
 import com.discord.utilities.guilds.RoleUtils
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.textprocessing.Rules
 import com.discord.widgets.chat.list.entries.AttachmentEntry
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
@@ -241,7 +242,9 @@ object ChatListRows {
             )
         }
         if (state.renderEmbeds) message.embeds.orEmpty().forEach { embed ->
-            if (embed.type == EmbedType.COMPONENTS) {
+            if (Rules.isEmojiUrl(embed.url)) {
+                // Drawn inline as the emoji itself; see Rules.createEmojiLinkRule.
+            } else if (embed.type == EmbedType.COMPONENTS) {
                 ChatListEntry.createComponentEmbedEntry(
                     message = message,
                     embed = embed,
