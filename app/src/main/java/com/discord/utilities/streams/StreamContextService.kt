@@ -29,10 +29,8 @@ import rx.Observable
  *
  * Reference: `com.discord.utilities.streams.StreamContextService`.
  *
- * **Missing dependency.** `StoreApplicationStreamPreviews` exists in this project but the store
- * graph does not construct it, so [applicationStreamPreviewStore] defaults to `null` and
- * [StreamContext.preview] is then always `null` — thumbnails stay blank while everything else on
- * the context is live. Pass the real store (or publish it from `StoreStream`) to close that.
+ * Without [applicationStreamPreviewStore] every [StreamContext.preview] is `null`; the instance
+ * `StoreStream` publishes has it.
  */
 class StreamContextService(
     private val applicationStreamingStore: StoreApplicationStreaming = StoreStream.getApplicationStreaming(),

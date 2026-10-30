@@ -1082,6 +1082,7 @@ class StoreStream private constructor(
             voiceChannelSelectedStore = voiceChannelSelected,
             voiceStateStore = voiceStates,
             channelStore = channels,
+            applicationStreamPreviewStore = applicationStreamPreviews,
         )
     }
     private val storesV2 = mutableListOf(
@@ -4232,6 +4233,7 @@ class StoreStream private constructor(
         @JvmStatic fun getGames() = requireInstance().games
         @JvmStatic fun getApplicationAssets() = requireInstance().applicationAssets
         @JvmStatic fun getApplicationStreamPreviews() = requireInstance().applicationStreamPreviews
+        @JvmStatic fun getStreamContexts() = requireInstance().streamContextService
         @JvmStatic fun getEntitlements() = requireInstance().entitlements
         @JvmStatic fun getCollectibles() = requireInstance().collectibles
         @JvmStatic fun getGooglePlayPurchases() = requireInstance().googlePlayPurchases

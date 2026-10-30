@@ -65,8 +65,7 @@ object WidgetUserSheetViewModelStoreState {
      * @param storeVoiceChannelSelected my current voice channel.
      * @param storeVoiceStates voice states per channel.
      * @param storeMediaSettings my local audio settings.
-     * @param streamContextService resolves the user's Go Live stream. The reference passes
-     *   `StreamContextService`, which is not reconstructed; the default reports no stream.
+     * @param streamContextService resolves the user's Go Live stream, preview included.
      */
     @JvmStatic
     @JvmOverloads
@@ -88,7 +87,8 @@ object WidgetUserSheetViewModelStoreState {
         storeStageChannels: StoreStageChannels = StoreStream.getStageChannels(),
         storeApplication: StoreApplication = StoreStream.getApplication(),
         storeGame: StoreGame = StoreStream.getGames(),
-        streamContextService: (Long) -> Observable<StreamContext?> = { Observable.just(null) },
+        streamContextService: (Long) -> Observable<StreamContext?> =
+            { StoreStream.getStreamContexts().getForUser(it, includePreview = true) },
     ): Observable<WidgetUserSheetViewModel.StoreState?> {
         val channelObservable: Observable<Channel?> =
             channelId?.let { storeChannels.observeChannel(it) } ?: Observable.just(null)

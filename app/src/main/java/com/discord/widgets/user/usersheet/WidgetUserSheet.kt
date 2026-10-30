@@ -38,6 +38,8 @@ import com.discord.app.appViewModels
 import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
 import com.discord.i18n.i18nRender
+import com.discord.widgets.user.presence.ViewHolderStreamRichPresence
+import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.stores.StoreNavigation
 import android.view.ViewTreeObserver
@@ -917,6 +919,10 @@ class WidgetUserSheet : AppBottomSheet() {
         )
         richPresenceViewHolder = holder
         holder.setOnActivityCustomButtonClicked(viewModel::onActivityCustomButtonClicked)
+        val streamContext = state.streamContext
+        if (holder is ViewHolderStreamRichPresence && streamContext != null) {
+            holder.setOnStreamPreviewClicked { viewModel.onStreamPreviewClicked(streamContext) }
+        }
         holder.configureUi(
             fragmentManager = parentFragmentManager,
             streamContext = state.streamContext,
@@ -1319,7 +1325,19 @@ class WidgetUserSheet : AppBottomSheet() {
 
             is WidgetUserSheetViewModel.Event.DismissSheet -> dismiss()
 
-            // WidgetChannelSelector and the spectate surface are not reconstructed yet.
+            is WidgetUserSheetViewModel.Event.RequestPermissionsForSpectateStream ->
+                requestMicrophone(null) { viewModel.onSpectatePermissionsGranted(event.stream) }
+
+            is WidgetUserSheetViewModel.Event.LaunchSpectate -> {
+                WidgetCallFullscreen.launch(
+                    requireContext(),
+                    event.stream.channelId,
+                    streamKey = event.stream.encodedStreamKey,
+                )
+                dismiss()
+            }
+
+            // WidgetChannelSelector is not reconstructed yet.
             else -> AppLog.i("WidgetUserSheet: no destination for $event")
         }
     }

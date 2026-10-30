@@ -252,6 +252,9 @@ class WidgetUserSheetViewModel(
 
     private var storeState: StoreState? = null
 
+    /** Stream previews this sheet has asked for; each is requested once. */
+    private val requestedPreviews = mutableSetOf<String>()
+
     /** Guards the once-per-sheet "user sheet opened" analytics event. */
     var openPopoutLogged: Boolean = false
 
@@ -280,6 +283,13 @@ class WidgetUserSheetViewModel(
             return
         }
         this.storeState = storeState
+        // Previews are fetched on demand, and otherwise only the call's participant list asks; a
+        // sheet opened before that list ever loaded would show the stream card without its image.
+        storeState.streamContext?.let { context ->
+            if (requestedPreviews.add(context.stream.encodedStreamKey)) {
+                StoreStream.getApplicationStreamPreviews().fetchStreamPreviewIfNotFetching(context)
+            }
+        }
 
         val user = storeState.user
         val isMe = user.id == storeState.me.id
@@ -570,16 +580,22 @@ class WidgetUserSheetViewModel(
      */
     fun onStreamPreviewClicked(streamContext: StreamContext) {
         val stream = streamContext.stream as? ModelApplicationStream ?: return
-        when (streamPreviewClickBehavior) {
-            WidgetUserSheet.StreamPreviewClickBehavior.TARGET_AND_DISMISS ->
-                eventSubject.onNext(Event.DismissSheet)
-            WidgetUserSheet.StreamPreviewClickBehavior.TARGET_AND_LAUNCH_SPECTATE ->
-                eventSubject.onNext(Event.RequestPermissionsForSpectateStream(stream))
+        if (streamContext.joinability == StreamContext.Joinability.MISSING_PERMISSIONS) {
+            eventSubject.onNext(Event.ShowToast(R.string.channel_locked))
+        } else {
+            // Watching joins the voice channel, so the microphone permission comes first.
+            eventSubject.onNext(Event.RequestPermissionsForSpectateStream(stream))
         }
     }
 
     fun onSpectatePermissionsGranted(stream: ModelApplicationStream) {
-        eventSubject.onNext(Event.LaunchSpectate(stream))
+        StoreStream.getApplicationStreaming().targetStream(stream.encodedStreamKey)
+        when (streamPreviewClickBehavior) {
+            WidgetUserSheet.StreamPreviewClickBehavior.TARGET_AND_LAUNCH_SPECTATE ->
+                eventSubject.onNext(Event.LaunchSpectate(stream))
+            WidgetUserSheet.StreamPreviewClickBehavior.TARGET_AND_DISMISS ->
+                eventSubject.onNext(Event.DismissSheet)
+        }
     }
 
     /**
