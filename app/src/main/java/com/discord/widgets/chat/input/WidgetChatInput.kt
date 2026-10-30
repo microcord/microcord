@@ -393,6 +393,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
+        // Coming back from another screen does not always redeliver insets, and the keyboard may
+        // have closed while we were away; re-read them so the bottom spacer cannot stay stale.
+        view?.let(ViewCompat::requestApplyInsets)
         viewModel.observeViewState()
             .ui(this)
             .subscribe({ configureUI(it) }, { /* a render failure must not kill the composer */ })

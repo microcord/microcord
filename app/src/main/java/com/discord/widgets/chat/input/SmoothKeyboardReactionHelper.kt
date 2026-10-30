@@ -21,14 +21,23 @@ object SmoothKeyboardReactionHelper {
                     insets: WindowInsetsCompat,
                     runningAnimations: MutableList<WindowInsetsAnimationCompat>,
                 ): WindowInsetsCompat {
-                    // ime()'s bottom inset overlaps the nav bar's own region, which is already
-                    // reserved elsewhere (see WidgetHome.applyPanelInsets); subtract it out here too.
-                    val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-                    val navBar = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-                    onBottomInsetChanged?.invoke((ime - navBar).coerceAtLeast(0))
+                    onBottomInsetChanged?.invoke(bottomInset(insets))
                     return insets
+                }
+
+                // An animation cut short (an attachment opening, a back gesture) never delivers its
+                // last frame, which would leave the spacer at some mid-animation height. Settle on
+                // what the window reports now.
+                override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                    ViewCompat.getRootWindowInsets(view)?.let { onBottomInsetChanged?.invoke(bottomInset(it)) }
                 }
             },
         )
     }
+
+    // ime()'s bottom inset overlaps the nav bar's own region, which is already reserved elsewhere
+    // (see WidgetHome.applyPanelInsets); subtract it out here too.
+    private fun bottomInset(insets: WindowInsetsCompat): Int =
+        (insets.getInsets(WindowInsetsCompat.Type.ime()).bottom -
+            insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom).coerceAtLeast(0)
 }
