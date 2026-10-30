@@ -100,18 +100,25 @@ class InputAutocomplete(
     )
     private val categoriesAdapter = ChatInputApplicationsAdapter().apply {
         onClickApplication = { application ->
-            viewModel.selectCommandBrowserApplication(application)
+            if (categoriesBrowsing) viewModel.selectCommandBrowserApplication(application)
+            else scrollToFirstCommandOf(application.id)
             selectApplication(application.id)
         }
     }
     private var browserApplications: List<Application> = emptyList()
+
+    /** The apps the row currently lists, and whether they are the `/` browser's or a query's. */
+    private var categoryApplications: List<Application> = emptyList()
+    private var categoriesBrowsing = true
     private val browserScrollListener = object : RecyclerView.OnScrollListener() {
         override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
             if (categoriesRecycler?.visibility != View.VISIBLE) return
             val top = (recyclerView.layoutManager as? LinearLayoutManager)?.findFirstVisibleItemPosition() ?: return
             if (top < 0 || top >= adapter.itemCount) return
-            val header = adapter.getHeaderPositionForItem(top) ?: 0
-            val application = (adapter.getItem(header) as? ApplicationPlaceholder)?.application ?: return
+            // A typed query lists bare commands; the browser groups them under app headers.
+            val application = (adapter.getItem(top) as? ApplicationCommandAutocompletable)?.application
+                ?: (adapter.getItem(adapter.getHeaderPositionForItem(top) ?: 0) as? ApplicationPlaceholder)?.application
+                ?: return
             selectCategory(application.id)
         }
     }
@@ -180,7 +187,10 @@ class InputAutocomplete(
             .ui(appComponent)
             .subscribe({ state ->
                 browserApplications = state?.applications.orEmpty()
-                categoriesAdapter.setApplicationData(browserApplications)
+                if (categoriesBrowsing) {
+                    categoryApplications = browserApplications
+                    categoriesAdapter.setApplicationData(browserApplications)
+                }
             }, { /* the list still works without the app row */ })
         viewModel.observeEvents()
             .ui(appComponent)
@@ -274,9 +284,20 @@ class InputAutocomplete(
         )
         autocompleteRecyclerView.visibility = View.VISIBLE
         configureStickers(viewState)
-        configureCategories(
-            !viewState.isAutocomplete && viewState.token == AutocompleteViewModel.COMMAND_DISCOVER_TOKEN,
-        )
+        // `isAutocomplete` is set for every typed token; only the bare `/` browser lacks it.
+        val commandToken = viewState.token.startsWith(AutocompleteViewModel.COMMAND_DISCOVER_TOKEN)
+        when {
+            !commandToken -> configureCategories(null, browsing = true)
+            !viewState.isAutocomplete && viewState.token == AutocompleteViewModel.COMMAND_DISCOVER_TOKEN ->
+                configureCategories(browserApplications, browsing = true)
+            // While a command is being typed the row stays, narrowed to the bots still matching,
+            // until only one is left.
+            else -> configureCategories(
+                viewState.autocompletables.filterIsInstance<ApplicationCommandAutocompletable>()
+                    .mapNotNull { it.application }.distinctBy { it.id },
+                browsing = false,
+            )
+        }
         if (viewState.isAutocomplete) {
             autocompleteHeader.visibility = if (viewState.token.isBlank()) View.GONE else View.VISIBLE
             autocompleteHeader.setTextColor(
@@ -304,14 +325,14 @@ class InputAutocomplete(
         autocompleteRecyclerView.visibility = View.VISIBLE
         autocompleteHeader.visibility = View.GONE
         setStickersShown(false)
-        configureCategories(false)
+        configureCategories(null, browsing = true)
     }
 
     private fun hideAutocomplete() {
         autocompleteRecyclerView.visibility = View.GONE
         autocompleteHeader.visibility = View.GONE
         setStickersShown(false)
-        configureCategories(false)
+        configureCategories(null, browsing = true)
     }
 
     private fun setStickersShown(shown: Boolean) = setRowShown(stickersContainer, stickersRecycler, shown)
@@ -334,21 +355,38 @@ class InputAutocomplete(
         }
     }
 
-    /** As in the reference, the app row shows only in the browser and only for more than one app. */
-    private fun configureCategories(isBrowser: Boolean) {
+    /**
+     * The app row: the `/` browser's apps, or the bots a typed command still matches, shown only
+     * while there is more than one to choose between. `null` hides it.
+     */
+    private fun configureCategories(applications: List<Application>?, browsing: Boolean) {
         val recycler = categoriesRecycler ?: return
-        val visible = isBrowser && browserApplications.size > 1
-        if ((recycler.visibility == View.VISIBLE) == visible) return
-        recycler.visibility = if (visible) View.VISIBLE else View.GONE
-        // Swipes on the row scroll it instead of opening the side panels, but only while it shows.
-        val gestureRegions = PanelsChildGestureRegionObserver.Provider.get()
-        if (visible) {
-            gestureRegions.register(recycler)
-            categoriesAdapter.selectApplication(0L)
-            recycler.scrollToPosition(0)
-        } else {
-            gestureRegions.unregister(recycler)
+        val visible = applications != null && applications.size > 1
+        val changed = visible && (applications != categoryApplications || browsing != categoriesBrowsing)
+        categoriesBrowsing = browsing
+        if (changed) {
+            categoryApplications = applications.orEmpty()
+            categoriesAdapter.setApplicationData(categoryApplications)
         }
+        val wasVisible = recycler.visibility == View.VISIBLE
+        if (wasVisible != visible) {
+            recycler.visibility = if (visible) View.VISIBLE else View.GONE
+            // Swipes on the row scroll it instead of opening the side panels, but only while it shows.
+            val gestureRegions = PanelsChildGestureRegionObserver.Provider.get()
+            if (visible) gestureRegions.register(recycler) else gestureRegions.unregister(recycler)
+        }
+        if (visible && (changed || !wasVisible)) {
+            categoriesAdapter.selectApplication(if (browsing) 0L else categoryApplications.first().id)
+            recycler.scrollToPosition(0)
+        }
+    }
+
+    /** Brings [applicationId]'s first command in a typed query's results to the top of the list. */
+    private fun scrollToFirstCommandOf(applicationId: Long) {
+        val position = (0 until adapter.itemCount).firstOrNull {
+            (adapter.getItem(it) as? ApplicationCommandAutocompletable)?.application?.id == applicationId
+        } ?: return
+        adapter.scrollToPosition(position)
     }
 
     private fun selectCategory(applicationId: Long) {
