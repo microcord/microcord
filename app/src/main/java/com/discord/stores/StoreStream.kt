@@ -3699,7 +3699,12 @@ class StoreStream private constructor(
                 users.handleGuildMemberAdd(hydrated)
                 guilds.handleGuildMember(hydrated, guild.id, isFullGuildMember = true)
             }
-            guild.voiceStates?.let { voiceStates.handleVoiceStateUpdates(it, guild.id) }
+            guild.voiceStates?.let { states ->
+                voiceStates.handleVoiceStateUpdates(states, guild.id)
+                // Today's READY no longer carries voice states, so streams already live at connect
+                // time are only learned here and from GUILD_CREATE.
+                states.forEach { applicationStreaming.handleVoiceStateUpdate(it, guild.id) }
+            }
             guild.activityInstances?.let(embeddedActivities::handleConnectionOpenSupplemental)
         }
 
@@ -3847,6 +3852,7 @@ class StoreStream private constructor(
         clientDataState.handleGuildAdd(guild)
         guildMemberCounts.handleGuildCreate(guild)
         voiceStates.handleGuildAdd(guild)
+        guild.voiceStates?.forEach { applicationStreaming.handleVoiceStateUpdate(it, guild.id) }
         gameParty.handleGuildCreateOrSync(guild)
         lurking.handleGuildAdd(guild)
         guildJoinRequests.handleGuildJoined(guild.id)
