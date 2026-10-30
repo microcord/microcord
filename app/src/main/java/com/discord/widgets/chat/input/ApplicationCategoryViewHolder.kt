@@ -8,6 +8,7 @@ import com.discord.R
 import com.discord.databinding.CommandCategoryItemBinding
 import com.discord.i18n.i18nFormat
 import com.discord.models.commands.Application
+import com.discord.models.commands.botUser
 import com.discord.models.commands.hasBotAvatar
 import com.discord.models.user.CoreUser
 import com.discord.utilities.color.ColorCompat
@@ -35,13 +36,11 @@ class ApplicationCategoryViewHolder(
                 MGImages.setImage(binding.commandCategoryItemIcon, iconRes)
             }
         } else {
-            val bot = application.bot
+            val bot = application.botUser()
             val icon = when {
-                application.hasBotAvatar() -> IconUtils.getForUser(bot?.let(::CoreUser))
+                bot?.avatar != null -> IconUtils.getForUser(bot)
                 !application.icon.isNullOrBlank() -> IconUtils.getApplicationIcon(application.id, application.icon)
-                else -> IconUtils.getDefaultAvatar(
-                    IconUtils.getDefaultAvatarIndex(bot?.id, bot?.discriminator?.toIntOrNull()),
-                )
+                else -> IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(bot?.id, bot?.discriminator))
             }
             MGImages.setImage(binding.commandCategoryItemIcon, icon)
         }

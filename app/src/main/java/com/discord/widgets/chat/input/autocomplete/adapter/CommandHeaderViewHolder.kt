@@ -5,6 +5,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.models.commands.botUser
+import com.discord.models.commands.displayName
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MGImagesBitmap
@@ -37,7 +39,8 @@ class CommandHeaderViewHolder(
         currentItem = item
 
         val application = item.application
-        name.text = application.bot?.username ?: application.name
+        val bot = application.botUser()
+        name.text = application.displayName()
 
         val tint = ColorCompat.getThemedColor(itemView.context, R.attr.colorTextMuted)
         val iconRes = application.iconRes
@@ -47,7 +50,9 @@ class CommandHeaderViewHolder(
             return
         }
 
+        // An app without its own icon shows its bot's avatar, as on desktop.
         val url = application.icon?.let { IconUtils.getApplicationIcon(application.id, it) }
+            ?: bot?.let { IconUtils.getForUser(it) }
         if (url == null) {
             avatar.setImageResource(R.drawable.ic_slash_command_24dp)
             avatar.setColorFilter(tint)

@@ -2,7 +2,9 @@ package com.discord.models.commands
 
 import com.discord.api.user.User
 import com.discord.api.commands.ApplicationCommandIndexPermissions
+import com.discord.models.user.CoreUser
 import com.discord.nullserializable.NullSerializable
+import com.discord.stores.StoreStream
 
 /**
  * An application as the slash-command picker shows it.
@@ -32,6 +34,16 @@ data class Application(
             )
     }
 }
+
+/**
+ * The application's bot user: the one the command index sent, else the cached user for [botId]
+ * (the store fetches unknown ones when the index arrives).
+ */
+fun Application.botUser(): com.discord.models.user.User? =
+    bot?.let(::CoreUser) ?: botId?.let { StoreStream.getUsers().getUsers()[it] }
+
+/** What the command pickers call the app: its bot's username, as the official client does, else its name. */
+fun Application.displayName(): String = botUser()?.username ?: name
 
 /** True when the application's bot user has an explicitly set avatar (not the default one). */
 fun Application.hasBotAvatar(): Boolean = bot?.avatar is NullSerializable.Value<*>

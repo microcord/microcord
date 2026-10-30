@@ -757,6 +757,7 @@ class StoreStream private constructor(
         storePermissions = permissions,
         restApi = { if (::restApi.isInitialized) restApi else null },
         observationDeck = observationDeck,
+        fetchUsers = { ids -> users.fetchUsers(ids) },
     )
     private val localActionComponentState = StoreLocalActionComponentState(dispatcher, observationDeck)
     private val applicationInteractions = StoreApplicationInteractions(

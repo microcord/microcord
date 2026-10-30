@@ -10,6 +10,7 @@ import com.discord.api.embeddedactivities.EmbeddedActivityConfig
 import com.discord.api.embeddedactivities.EmbeddedActivityShelf
 import com.discord.models.commands.Application
 import com.discord.models.commands.ApplicationCommand
+import com.discord.models.commands.displayName
 import com.discord.models.commands.sortedForSection
 import com.discord.utilities.time.TimeUtils
 
@@ -445,7 +446,7 @@ internal object AppLauncherRows {
 
     fun fromCommandApplication(application: Application) = AppLauncherApplication(
         application.id,
-        application.name,
+        application.displayName(),
         "",
         application.icon,
         commandApplication = application,

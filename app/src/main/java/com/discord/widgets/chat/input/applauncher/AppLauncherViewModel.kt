@@ -510,6 +510,8 @@ class AppLauncherViewModel(
                     icon = application.icon,
                     commandCount = commandCounts[application.id] ?: 0,
                     bot = application.bot,
+                    // Often the only trace of the bot; `botUser()` resolves its name and avatar from it.
+                    botId = application.botId ?: application.bot?.id,
                     permissions = application.permissions,
                     installationTypes = setOf(installationType),
                 )

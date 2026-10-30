@@ -11,8 +11,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
+import com.discord.models.commands.Application
+import com.discord.models.commands.botUser
+import com.discord.models.commands.displayName
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.uri.UriHandler
 import com.discord.databinding.WidgetAppLauncherActivityCardBinding
 import com.discord.databinding.WidgetAppLauncherActivityPairBinding
@@ -200,11 +204,9 @@ class AppLauncherAdapter(
     private inner class CommandCellHolder(private val binding: WidgetAppLauncherScrollerCommandBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(cell: AppLauncherRow.CommandCell) = with(binding) {
-            appLauncherScrollerCommandIcon.setImageURI(
-                iconUrl(cell.application?.id ?: cell.command.applicationId, cell.application?.icon),
-            )
+            appLauncherScrollerCommandIcon.setImageURI(cell.application?.let(::commandIconUrl))
             appLauncherScrollerCommandName.text = displayName(cell.command)
-            appLauncherScrollerCommandApp.text = cell.application?.name
+            appLauncherScrollerCommandApp.text = cell.application?.displayName()
                 ?: root.context.getString(R.string.app_launcher_section_built_in)
             root.setOnClickListener { onCommandSelected(cell.command) }
         }
@@ -213,7 +215,7 @@ class AppLauncherAdapter(
     private inner class AppTileHolder(private val binding: WidgetAppLauncherScrollerAppBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(application: AppLauncherApplication) = with(binding) {
-            appLauncherScrollerAppIcon.setImageURI(iconUrl(application.id, application.icon))
+            appLauncherScrollerAppIcon.setImageURI(launcherIconUrl(application))
             root.contentDescription = application.name
             root.setOnClickListener { onApplicationSelected(application) }
         }
@@ -222,7 +224,7 @@ class AppLauncherAdapter(
     private inner class ServerAppHolder(private val binding: WidgetAppLauncherScrollerServerAppBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(application: AppLauncherApplication) = with(binding) {
-            appLauncherScrollerServerAppIcon.setImageURI(iconUrl(application.id, application.icon))
+            appLauncherScrollerServerAppIcon.setImageURI(launcherIconUrl(application))
             appLauncherScrollerServerAppName.text = application.name
             root.setOnClickListener { onApplicationSelected(application) }
         }
@@ -288,7 +290,7 @@ class AppLauncherAdapter(
 
         private fun WidgetAppLauncherRowBinding.bindApplication(application: AppLauncherApplication) {
             appLauncherRowIcon.visibility = View.VISIBLE
-            setIcon(application.id, application.icon)
+            appLauncherRowIcon.setImageURI(launcherIconUrl(application))
             appLauncherRowTitle.text = application.name
             appLauncherRowSubtitle.text = application.description
             appLauncherRowSubtitle.visibility = if (application.description.isBlank()) View.GONE else View.VISIBLE
@@ -391,6 +393,13 @@ class AppLauncherAdapter(
     companion object {
         internal fun iconUrl(id: Long, icon: String?): String? =
             icon?.let { "https://cdn.discordapp.com/app-icons/$id/$it.webp?size=128" }
+
+        /** A command app's icon, or its bot's avatar when the app has none (as the official client shows). */
+        internal fun commandIconUrl(application: Application): String? =
+            iconUrl(application.id, application.icon) ?: application.botUser()?.let { IconUtils.getForUser(it) }
+
+        private fun launcherIconUrl(application: AppLauncherApplication): String? =
+            application.commandApplication?.let(::commandIconUrl) ?: iconUrl(application.id, application.icon)
 
         private const val TYPE_ROW = 0
         private const val TYPE_ACTIVITY = 1

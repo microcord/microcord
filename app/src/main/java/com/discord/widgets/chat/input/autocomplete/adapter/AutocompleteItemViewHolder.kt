@@ -12,6 +12,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isThread
+import com.discord.models.commands.displayName
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.guilds.RoleUtils
@@ -147,7 +148,7 @@ class AutocompleteItemViewHolder(
         val application = item.application
         if (application != null) {
             nameRight.visibility = View.VISIBLE
-            nameRight.text = (application.bot?.username ?: application.name).uppercase(Locale.getDefault())
+            nameRight.text = application.displayName().uppercase(Locale.getDefault())
         }
         if (item.showAvatar) {
             avatar.visibility = View.VISIBLE

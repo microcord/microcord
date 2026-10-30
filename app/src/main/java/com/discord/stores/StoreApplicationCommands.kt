@@ -84,6 +84,8 @@ class StoreApplicationCommands(
     },
     private val nonceGenerator: NonceGenerator = NonceGenerator(),
     private val retryScheduler: Scheduler = Schedulers.computation(),
+    /** Fetches users not cached yet; see [handleApplicationCommandIndexes]. */
+    private val fetchUsers: (List<Long>) -> Unit = {},
 ) : StoreV2() {
 
     // -- Applications --------------------------------------------------------------------------
@@ -520,6 +522,9 @@ class StoreApplicationCommands(
                 applications[app.id] = app.toModel(previous, source.installationType)
             }
         }
+        // The index often names a bot only by id. Like the official client, the picker then shows
+        // the bot's own name and avatar from the user cache, so an unknown bot is fetched for it.
+        applications.values.filter { it.bot == null }.mapNotNull { it.botId }.takeIf { it.isNotEmpty() }?.let(fetchUsers)
         val commands = LinkedHashMap<Long, ApplicationCommand>()
         val contextMenu = LinkedHashMap<Long, ApplicationCommand>()
         indexes.sortedBy(IndexedSource::installationType).forEach { source ->
