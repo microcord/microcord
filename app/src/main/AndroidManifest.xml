@@ -173,6 +173,11 @@
             android:screenOrientation="fullUser"
             android:theme="@style/AppTheme.Dark"
             android:windowSoftInputMode="adjustResize|stateHidden" />
+        <!-- No screenOrientation: a translucent activity may not fix one (Android 8.0 throws). -->
+        <activity
+            android:name="com.discord.app.AppActivity$Media"
+            android:exported="false"
+            android:theme="@style/AppTheme.Dark.MediaViewer" />
         <activity
             android:name="com.discord.activities.EmbeddedActivityActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode"

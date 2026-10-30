@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.graphics.Rect
 import android.graphics.drawable.Animatable
@@ -29,6 +30,7 @@ import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.embed.EmbedImage
 import com.discord.api.message.embed.EmbedType
 import com.discord.api.message.embed.MessageEmbed
+import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
@@ -182,6 +184,14 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         binding.mediaContainer.canStartGesture = { !isImageZoomed() }
         binding.mediaContainer.onVerticalDrag = ::dragToDismiss
         binding.mediaContainer.onVerticalRelease = ::releaseToDismiss
+        // The drag moves and fades the whole page; what it uncovers should be the chat below (this
+        // runs in the translucent AppActivity.Media), not the activity root's grey loading
+        // background or the user theme's opaque window colour. The activity is this screen's alone.
+        requireActivity().window.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setFormat(PixelFormat.TRANSLUCENT)
+        }
+        view.post { generateSequence(view.parent as? View) { it.parent as? View }.forEach { it.background = null } }
         binding.mediaGallery.adapter = galleryAdapter
         binding.mediaGallery.registerOnPageChangeCallback(galleryPageCallback)
         binding.mediaContainer.setOnClickListener { onMediaClick() }
@@ -908,9 +918,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         private fun launchGalleryItems(context: Context, items: List<MediaGalleryItem>, selectedIndex: Int, initialPositionMs: Long = 0L) {
             val selected = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
             items.getOrNull(selected)?.let { item ->
-                presentScreen(
+                presentMedia(
                     context,
-                    WidgetMedia::class.java,
                     intentFor(item.args, initialPositionMs)
                         .putExtra(INTENT_VIEWER_CONTEXT, item.viewerContext)
                         .putExtra(INTENT_GALLERY, ArrayList(items))
@@ -940,11 +949,12 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         }
 
         private fun launch(context: Context, args: MediaLaunchArgs, viewerContext: MediaViewerContext?, initialPositionMs: Long = 0L) =
-            presentScreen(
-                context,
-                WidgetMedia::class.java,
-                intentFor(args, initialPositionMs).putExtra(INTENT_VIEWER_CONTEXT, viewerContext),
-            )
+            presentMedia(context, intentFor(args, initialPositionMs).putExtra(INTENT_VIEWER_CONTEXT, viewerContext))
+
+        private fun presentMedia(context: Context, launchIntent: Intent) = context.startActivity(
+            AppScreenRouter.createScreenIntent(context, WidgetMedia::class.java, launchIntent)
+                .setClass(context, AppActivity.Media::class.java),
+        )
     }
 }
 

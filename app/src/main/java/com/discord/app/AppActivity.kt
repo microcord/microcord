@@ -862,6 +862,12 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         }
     }
 
+    /**
+     * Host for the media viewer. Its manifest theme is translucent, so the screen it was opened
+     * from stays drawn underneath and shows through while the media is swiped away.
+     */
+    class Media : AppActivity()
+
     /** Lock-screen-capable host for an incoming private call. */
     class IncomingCall : AppActivity() {
         override fun onCreate(savedInstanceState: Bundle?) {

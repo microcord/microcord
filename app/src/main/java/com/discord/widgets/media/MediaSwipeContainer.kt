@@ -36,7 +36,10 @@ class MediaSwipeContainer @JvmOverloads constructor(
                 downY = event.rawY
                 mode = NONE
             }
-            MotionEvent.ACTION_POINTER_DOWN -> mode = BLOCKED
+            // A second finger blocks a gesture that has not started, but must not orphan one that has
+            // (a three-finger screenshot mid-swipe): the release would never fire and the page would
+            // stay wherever it was dragged.
+            MotionEvent.ACTION_POINTER_DOWN -> if (mode != VERTICAL) mode = BLOCKED
             MotionEvent.ACTION_MOVE -> {
                 val dx = event.rawX - downX
                 val dy = event.rawY - downY
