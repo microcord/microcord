@@ -110,6 +110,12 @@ class WidgetCallFullscreenViewModel constructor(
     private var channelId = channelId
     private var allVideoParticipants: List<CallParticipant> = emptyList()
     private var autotargetStreamKey: String? = streamKey
+
+    /**
+     * A stream just asked for whose request the streaming store has not echoed yet. Its tile shows
+     * as connecting meanwhile, instead of flashing "Watch stream" for the hop it takes to arrive.
+     */
+    private var pendingStreamKey: String? = streamKey
     private var bottomSheetState: Int? = null
     private var focusedVideoParticipantKey: String? = null
     private var forwardVideoGridInteractionSubscription: Subscription? = null
@@ -190,6 +196,7 @@ class WidgetCallFullscreenViewModel constructor(
             emptyList()
         }
 
+        if (callModel.activeStream?.stream?.encodedStreamKey == pendingStreamKey) pendingStreamKey = null
         val users = when {
             !callModel.isConnected -> emptyList()
             isStage -> state.stageCallModel?.mediaParticipants?.map { it.voiceUser }.orEmpty()
@@ -640,6 +647,7 @@ class WidgetCallFullscreenViewModel constructor(
 
     @MainThread
     fun targetAndFocusStream(streamKey: String) {
+        pendingStreamKey = streamKey
         targetStream(streamKey)
         focusVideoParticipant("${ModelApplicationStream.decodeStreamKey(streamKey).ownerId}--STREAM")
     }
@@ -810,9 +818,12 @@ class WidgetCallFullscreenViewModel constructor(
             participantStream != null && selfStream && participantStream.channelId == channelId ->
                 applicationStreamParticipant(
                     participant,
-                    if (activeApplicationStream?.stream?.encodedStreamKey == participantStream.encodedStreamKey) {
-                        activeApplicationStream.state.toParticipantState()
-                    } else VideoCallParticipantView.ParticipantData.ApplicationStreamState.INACTIVE,
+                    when (participantStream.encodedStreamKey) {
+                        activeApplicationStream?.stream?.encodedStreamKey ->
+                            activeApplicationStream.state.toParticipantState()
+                        pendingStreamKey -> VideoCallParticipantView.ParticipantData.ApplicationStreamState.CONNECTING
+                        else -> VideoCallParticipantView.ParticipantData.ApplicationStreamState.INACTIVE
+                    },
                     showLabels,
                 )
             activeApplicationStream?.stream?.ownerId == participant.user.id &&

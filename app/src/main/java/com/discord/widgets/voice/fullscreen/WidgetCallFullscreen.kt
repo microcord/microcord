@@ -132,6 +132,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         controls = view.findViewById(R.id.voice_controls_sheet_view)
 
         setUpVideoGrid()
+        trackCallUiOverlap(view.findViewById(R.id.action_bar_toolbar_layout))
         setUpStageList()
         controlsBehavior = BottomSheetBehavior.from(controls).apply {
             isGestureInsetBottomIgnored = true
@@ -377,6 +378,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             stageRoles = state.stageRoles,
         )
         if (state.isVideoCallGridVisible && !state.showFooter) hideControls() else showControls()
+        setHeaderVisible(state.showHeader)
         floatingPtt.isVisible = state.isPushToTalk && !controls.isVisible
     }
 
@@ -599,6 +601,43 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         }.start()
         gridAdapter.notifyCallControlsVisibilityChanged(false)
         setSystemBarsVisible(false)
+    }
+
+    /**
+     * The title, sound and overflow bar, and the dark gradient behind it, idle away with the
+     * controls while video is on screen. The reference computes `showHeader` but never applies it,
+     * which leaves both over the video.
+     */
+    private fun setHeaderVisible(visible: Boolean) {
+        val root = view ?: return
+        for (id in intArrayOf(R.id.action_bar_toolbar_layout, R.id.action_bar_underlay)) {
+            val header = root.findViewById<View>(id) ?: continue
+            if (visible == (header.visibility == View.VISIBLE && header.alpha == 1f)) continue
+            header.animate().cancel()
+            if (visible) {
+                header.visibility = View.VISIBLE
+                header.animate().alpha(1f).setDuration(CONTROLS_FADE_DURATION).start()
+            } else {
+                header.animate().alpha(0f).setDuration(CONTROLS_FADE_DURATION)
+                    .withEndAction { header.visibility = View.INVISIBLE }.start()
+            }
+        }
+    }
+
+    /**
+     * Tells the grid how much of each edge the call UI covers, so a tile's stream quality badge sits
+     * under the top bar rather than behind it.
+     */
+    private fun trackCallUiOverlap(header: View) {
+        var last: List<Int>? = null
+        fun update() {
+            val bars = ViewCompat.getRootWindowInsets(header)?.getInsets(WindowInsetsCompat.Type.systemBars())
+            val next = listOf(header.height, bars?.bottom ?: 0, bars?.left ?: 0, bars?.right ?: 0)
+            if (next == last) return
+            last = next
+            gridAdapter.setInsetsForAvoidingCallUiOverlap(next[0], next[1], next[2], next[3])
+        }
+        header.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> update() }
     }
 
     private fun showControls() {

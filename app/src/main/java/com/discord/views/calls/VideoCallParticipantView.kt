@@ -238,7 +238,12 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         }
         boundStreamId = data?.streamId
         renderer.configure(data?.streamId, data?.scalingType, data?.insetScalingType, data?.mirror == true)
+        val fitToFrame = data?.scalingType == RendererCommon.ScalingType.SCALE_ASPECT_FIT
+        if (!fitToFrame) fitRendererTo(null)
         renderer.onFrameRenderedListener = { frame: Point ->
+            // The renderer crops every frame to its own shape, so "fit" only shows the whole frame
+            // once the view itself takes the frame's aspect ratio; the letterbox fills the rest.
+            fitRendererTo(frame.takeIf { fitToFrame && it.x > 0 && it.y > 0 })
             renderer.visibility = VISIBLE
             loading.visibility = GONE
             letterbox.visibility = visible(preview.visibility != VISIBLE)
@@ -258,6 +263,14 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         configureQuality(data)
         configureLabel(data)
         configureCutout()
+    }
+
+    private fun fitRendererTo(frame: Point?) {
+        val params = renderer.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val ratio = frame?.let { "${it.x}:${it.y}" }
+        if (params.dimensionRatio == ratio) return
+        params.dimensionRatio = ratio
+        renderer.layoutParams = params
     }
 
     private fun resetStreamState() {
