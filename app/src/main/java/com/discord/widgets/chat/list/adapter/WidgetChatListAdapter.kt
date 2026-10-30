@@ -724,7 +724,17 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             // The unread divider is its own affordance; flashing it as well would be noise.
             val landedOnDivider = index < adapter.data.list.size &&
                 adapter.data.list[index] is NewMessagesEntry
-            if (!landedOnDivider) view.animateHighlight()
+            if (!landedOnDivider) {
+                // A message spans several rows (text, then each attachment, embed, reaction bar...);
+                // flash every one of them, not only the first.
+                val list = adapter.data.list
+                val highlightedId = list.getOrNull(index)?.highlightMessage?.id
+                var position = index
+                do {
+                    layoutManager.findViewByPosition(position)?.animateHighlight()
+                    position++
+                } while (highlightedId != null && list.getOrNull(position)?.highlightMessage?.id == highlightedId)
+            }
             onCompleted()
         }
 
