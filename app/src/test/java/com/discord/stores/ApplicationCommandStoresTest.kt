@@ -391,7 +391,7 @@ class ApplicationCommandStoresTest {
     }
 
     @Test
-    fun persistedAccountIndexesHydrateWithoutNetworkRequests() {
+    fun persistedAccountIndexesHydrateAtOnceAndAreRecheckedOncePerSession() {
         val cacheKey = "TEST_PERSISTED_APPLICATION_COMMAND_INDEX_CACHE"
         Persister(cacheKey, StoreApplicationCommands.PersistedIndexCache()).set(
             StoreApplicationCommands.PersistedIndexCache(
@@ -408,9 +408,7 @@ class ApplicationCommandStoresTest {
         ) { _, method, _ ->
             if (method.name in setOf("getGuildApplicationCommandIndex", "getUserApplicationCommandIndex")) {
                 requests++
-                Observable.error<Response<ApplicationCommandIndex>>(
-                    AssertionError("network should not be used"),
-                )
+                Observable.error<Response<ApplicationCommandIndex>>(java.io.IOException("offline"))
             } else null
         } as RestAPIInterface
         val fixture = commandsFixture(
@@ -429,10 +427,19 @@ class ApplicationCommandStoresTest {
         fixture.scheduler.triggerActions()
 
         fixture.store.requestApplicationCommandIndex(7L, GUILD_ID, isBotDm = false)
+        // The saved indexes paint at once, then both are checked against the server in the background.
         fixture.await { fixture.store.getApplications().any { it.id == 300L } }
-
-        assertEquals(0, requests)
+        fixture.await { requests == 2 }
+        Thread.sleep(50L)
+        fixture.scheduler.triggerActions()
+        // The checks failed (offline): the saved commands stay rather than being emptied.
+        assertTrue(fixture.store.getApplications().any { it.id == 300L })
         assertTrue(fixture.store.getDiscoverCommands().commands.any { it.applicationId == 100L })
+
+        // Once per session: coming back to the guild does not check again.
+        fixture.store.requestApplicationCommandIndex(8L, GUILD_ID, isBotDm = false, force = false)
+        fixture.scheduler.triggerActions()
+        assertEquals(2, requests)
     }
 
     @Test

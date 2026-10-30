@@ -121,6 +121,13 @@ class StoreApplicationCommands(
     private var currentUserId = 0L
     @Volatile private var persistedIndexCache = PersistedIndexCache()
 
+    /**
+     * Saved indexes checked against the server since the gateway last connected ("user", "guild:id", "channel:id").
+     * A saved index paints the picker at once, but on its own it would serve removed commands
+     * forever: changes made while the app was closed never send an update event.
+     */
+    private val revalidatedIndexes = HashSet<String>()
+
     // -- Frecency ------------------------------------------------------------------------------
 
     private var frecencyCommands: MutableMap<Long, List<ApplicationCommand>> = LinkedHashMap()
@@ -241,6 +248,9 @@ class StoreApplicationCommands(
     fun handleConnectionOpen(payload: ModelPayload) {
         sessionId = payload.sessionId
         currentUserId = payload.me?.id ?: 0L
+        // As the official client does on CONNECTION_OPEN: every index may have changed while the
+        // socket was down, so each is checked again the next time it is used.
+        revalidatedIndexes.clear()
         val cached = indexCachePersister.get()
         persistedIndexCache = if (currentUserId > 0L && cached.userId == currentUserId) {
             cached
@@ -285,6 +295,7 @@ class StoreApplicationCommands(
         currentUserId = 0L
         persistedIndexCache = PersistedIndexCache()
         indexCachePersister.clear(persist = true)
+        revalidatedIndexes.clear()
         markChanged(
             GuildApplicationsUpdate,
             DiscoverCommandsUpdate,
@@ -379,6 +390,22 @@ class StoreApplicationCommands(
                 indexLoading = false
                 pendingIndexSources = 0
                 handleApplicationCommandIndexes(generation, guildId, isBotDm, loadedIndexSources.values.toList())
+                val locationKey = if (guildId != null && guildId > 0L) "guild:$guildId" else "channel:$channelId"
+                val stale = listOfNotNull(
+                    guildInstall.takeIf { revalidatedIndexes.add(locationKey) },
+                    userInstall.takeIf { revalidatedIndexes.add("user") },
+                )
+                val api = restApi() ?: return@schedule
+                pendingIndexSources = stale.size
+                stale.forEach { installationType ->
+                    requestIndexSource(generation, guildId, isBotDm, installationType, revalidating = true) {
+                        when {
+                            installationType == userInstall -> api.getUserApplicationCommandIndex()
+                            guildId != null && guildId > 0L -> api.getGuildApplicationCommandIndex(guildId)
+                            else -> api.getChannelApplicationCommandIndex(channelId)
+                        }
+                    }
+                }
                 return@schedule
             }
         }
@@ -414,21 +441,28 @@ class StoreApplicationCommands(
         isBotDm: Boolean,
         installationType: Int,
         attempt: Int = 1,
+        /** A background re-check of a saved index: a failure keeps the saved one instead of emptying it. */
+        revalidating: Boolean = false,
         request: () -> Observable<Response<ApplicationCommandIndex>>,
     ) {
         fun finish(index: ApplicationCommandIndex) = dispatcher.schedule {
             handleIndexSourceFinished(generation, IndexedSource(index, installationType), guildId, isBotDm)
         }
+        fun fail() = if (revalidating) {
+            dispatcher.schedule { handleIndexSourceFinished(generation, null, guildId, isBotDm) }
+        } else {
+            finish(ApplicationCommandIndex())
+        }
         request()
             .restSubscribeOn(false)
             .appSubscribe(
                 StoreApplicationCommands::class.java,
-                errorHandler = { finish(ApplicationCommandIndex()) },
+                errorHandler = { fail() },
             ) { response ->
                 val index = response.body()
                 if (response.code() == INDEX_NOT_READY || index == null) {
                     if (attempt >= INDEX_MAX_TRIES) {
-                        finish(ApplicationCommandIndex())
+                        fail()
                     } else {
                         retryScheduler.createWorker().schedule(
                             {
@@ -439,6 +473,7 @@ class StoreApplicationCommands(
                                         isBotDm,
                                         installationType,
                                         attempt + 1,
+                                        revalidating,
                                         request,
                                     )
                                 }
@@ -570,10 +605,15 @@ class StoreApplicationCommands(
 
     @StoreThread
     fun handleApplicationCommandIndexUpdate(guildId: Long) {
+        // Dropped for every guild, not only the open one: a guild left in the background otherwise
+        // kept serving its removed commands from the saved index.
+        if (guildId in persistedIndexCache.guildIndexes) {
+            persistedIndexCache = persistedIndexCache.copy(guildIndexes = persistedIndexCache.guildIndexes - guildId)
+            indexCachePersister.set(persistedIndexCache, persist = true)
+        }
+        revalidatedIndexes.remove("guild:$guildId")
         val channelId = indexedChannelId ?: return
         if (indexedGuildId != guildId) return
-        persistedIndexCache = persistedIndexCache.copy(guildIndexes = persistedIndexCache.guildIndexes - guildId)
-        indexCachePersister.set(persistedIndexCache, persist = true)
         loadedIndexSources.remove(ApplicationIntegrationType.GUILD_INSTALL.value)
         requestApplicationCommandIndex(channelId, guildId, indexedIsBotDm)
     }
