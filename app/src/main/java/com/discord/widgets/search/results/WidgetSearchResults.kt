@@ -11,6 +11,8 @@ import com.discord.stores.StoreChat
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
 import com.discord.utilities.rx.ui
+import com.discord.widgets.chat.WidgetUrlActions
+import com.discord.widgets.chat.list.actions.WidgetChatListActions
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.search.SearchStore
@@ -42,6 +44,10 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
                 parentFragmentManager,
                 SearchResultAdapterEventHandler(
                     searchStore = SearchStoreProvider.get(),
+                    showActions = { message, content ->
+                        WidgetChatListActions.showForSearch(parentFragmentManager, message.channelId, message.id, content)
+                    },
+                    showUrlActions = { url -> WidgetUrlActions.launch(parentFragmentManager, url) },
                     closeSearch = ::closeForJump,
                 ),
                 stickToBottom = false,
@@ -110,6 +116,9 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
      */
     internal class SearchResultAdapterEventHandler(
         private val searchStore: SearchStore,
+        /** Long-press opens the usual message actions (copy text, copy link, ...) instead of jumping. */
+        private val showActions: (Message, CharSequence) -> Unit = { _, _ -> },
+        private val showUrlActions: (String) -> Unit = {},
         private val closeSearch: (channelId: Long) -> Unit,
     ) : WidgetChatListAdapter.EventHandler {
 
@@ -137,7 +146,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
             message: Message,
             formattedMessage: CharSequence,
             isThreadStarterMessage: Boolean,
-        ) = jumpToChat(message)
+        ) = showActions(message, formattedMessage)
 
         override fun onMessageAuthorAvatarClicked(message: Message, guildId: Long) =
             jumpToChat(message)
@@ -149,6 +158,8 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
             jumpToChat(message)
 
         override fun onMessageBlockedGroupClicked(message: Message) = jumpToChat(message)
+
+        override fun onUrlLongClicked(url: String) = showUrlActions(url)
 
         override fun onStickerClicked(message: Message, sticker: com.discord.api.sticker.BaseSticker) =
             jumpToChat(message)

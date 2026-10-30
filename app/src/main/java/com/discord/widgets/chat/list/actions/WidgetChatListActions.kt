@@ -46,6 +46,7 @@ import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.user.UserUtils.discriminatorWithPadding
 import com.discord.utilities.textprocessing.node.EditedMessageNode
+import com.discord.widgets.search.SearchStoreProvider
 import com.discord.widgets.chat.managereactions.WidgetManageReactions
 import com.discord.widgets.mobile_reports.WidgetMobileReports
 import com.discord.widgets.notice.WidgetNoticeDialog
@@ -430,6 +431,9 @@ class WidgetChatListActions : AppBottomSheet() {
                 val message = when (type) {
                     TYPE_CHAT -> StoreStream.getMessages().observeMessagesForChannel(channelId, messageId)
                     TYPE_PINS -> StoreStream.getPinnedMessages().observePinnedMessage(channelId, messageId)
+                    // A search hit is usually not in the channel's loaded messages; read it from the results.
+                    TYPE_SEARCH -> SearchStoreProvider.get().storeSearchQuery.state
+                        .map { state -> state.hits?.firstOrNull { it.id == messageId } }
                     else -> Observable.just(null)
                 }
                 return Observable.combineLatest(message, StoreStream.getChannels().observeChannel(channelId), ::Pair)
@@ -494,12 +498,16 @@ class WidgetChatListActions : AppBottomSheet() {
         private const val ARG_TYPE = "INTENT_EXTRA_TYPE"
         private const val TYPE_CHAT = 0
         private const val TYPE_PINS = 1
+        private const val TYPE_SEARCH = 2
 
         fun showForChat(fragmentManager: FragmentManager, channelId: Long, messageId: Long, messageContent: CharSequence) =
             show(fragmentManager, channelId, messageId, messageContent, TYPE_CHAT)
 
         fun showForPin(fragmentManager: FragmentManager, channelId: Long, messageId: Long, messageContent: CharSequence) =
             show(fragmentManager, channelId, messageId, messageContent, TYPE_PINS)
+
+        fun showForSearch(fragmentManager: FragmentManager, channelId: Long, messageId: Long, messageContent: CharSequence) =
+            show(fragmentManager, channelId, messageId, messageContent, TYPE_SEARCH)
 
         fun show(fragmentManager: FragmentManager, channelId: Long, messageId: Long, _input: MessageActions.Input) =
             show(fragmentManager, channelId, messageId, null, TYPE_CHAT)
