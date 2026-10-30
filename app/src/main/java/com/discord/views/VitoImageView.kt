@@ -37,6 +37,13 @@ open class VitoImageView : AppCompatImageView {
     val hierarchy = Hierarchy()
     private var lastSource: ImageSource? = null
 
+    /**
+     * The URI [setImageURI] last put on screen. Rows rebind on every store update (a voice row on
+     * each speaking change), and re-showing the same image restarts the request, so the picture
+     * visibly reloads for no reason.
+     */
+    private var shownUri: Uri? = null
+
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet?) : super(context, attrs) {
         applyAttrs(attrs)
@@ -50,12 +57,14 @@ open class VitoImageView : AppCompatImageView {
             release()
             return
         }
+        if (uri == shownUri && lastSource != null) return
         val resId = uri.rawResourceId()
         if (resId != 0) {
             setActualImageResource(resId)
             return
         }
         show(ImageSourceProvider.forUri(uri), imageOptions)
+        shownUri = uri
     }
 
     fun setImageURI(uriString: String?) {
@@ -64,10 +73,12 @@ open class VitoImageView : AppCompatImageView {
 
     fun setActualImageResource(resId: Int) {
         setImageResource(resId)
+        shownUri = null
         lastSource = null
     }
 
     fun release() {
+        shownUri = null
         lastSource = null
         VitoView.release(this)
     }
@@ -113,6 +124,7 @@ open class VitoImageView : AppCompatImageView {
     }
 
     fun show(source: ImageSource, options: ImageOptions = imageOptions, listener: ImageListener? = null) {
+        shownUri = null
         lastSource = source
         imageOptions = options
         VitoView.show(source, options, null, listener, this)

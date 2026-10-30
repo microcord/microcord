@@ -36,17 +36,20 @@ class ObservationDeck(
             "Observer name: ${name ?: "Unknown"}\n${observingUpdates.joinToString()}"
     }
 
-    @Synchronized
+    /**
+     * Only the list is guarded. The first update runs the subscriber's whole chain — for
+     * [connectRx] a store snapshot built synchronously — and doing that under the deck's lock made
+     * every other thread connecting meanwhile, the UI thread included, wait for it.
+     */
     @JvmOverloads
     fun connect(observer: Observer, updateOnConnect: Boolean = true): Observer {
         logBreadcrumb("connect START. observer: ${observer.name}")
-        observers.add(observer)
+        synchronized(this) { observers.add(observer) }
         if (updateOnConnect) observer.onUpdate()
         logBreadcrumb("connect END. observer: ${observer.name} -- isStale: ${observer.isStale}")
         return observer
     }
 
-    @Synchronized
     @JvmOverloads
     fun connect(
         vararg updateSources: UpdateSource,
@@ -62,7 +65,6 @@ class ObservationDeck(
         updateOnConnect,
     )
 
-    @Synchronized
     @JvmOverloads
     fun connectRx(
         vararg updateSources: UpdateSource,
@@ -79,7 +81,6 @@ class ObservationDeck(
         backpressureMode,
     )
 
-    @Synchronized
     @JvmOverloads
     fun <T> connectRx(
         vararg updateSources: UpdateSource,

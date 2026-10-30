@@ -149,6 +149,21 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     val layoutManager: LinearLayoutManager?
         get() = recycler.layoutManager as? LinearLayoutManager
 
+    /**
+     * Attachment, embed and component holders that message rows host inline, kept when a recycled
+     * row needs fewer of them so the next row can take one instead of inflating (an attachment
+     * view costs ~10 ms). See [WidgetChatListAdapterItemMessage].
+     */
+    private val accessoryPool = HashMap<Int, ArrayDeque<MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry>>>()
+
+    internal fun obtainAccessory(parent: ViewGroup, viewType: Int): MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry> =
+        accessoryPool[viewType]?.removeLastOrNull() ?: onCreateViewHolder(parent, viewType)
+
+    internal fun recycleAccessory(viewType: Int, holder: MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry>) {
+        val pool = accessoryPool.getOrPut(viewType, ::ArrayDeque)
+        if (pool.size < ACCESSORY_POOL_SIZE_PER_TYPE) pool.addLast(holder)
+    }
+
     override fun onCreateViewHolder(
         parent: ViewGroup,
         viewType: Int,
@@ -799,6 +814,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     }
 
     companion object {
+        private const val ACCESSORY_POOL_SIZE_PER_TYPE = 8
         private const val NEW_MESSAGES_MIN_SCROLLBACK_COUNT = 10
         private const val NEW_MESSAGES_MAX_SCROLLBACK_COUNT = 30
 

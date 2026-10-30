@@ -1,6 +1,7 @@
 package com.discord.utilities.systemlog
 
 import android.os.Process as AndroidProcess
+import android.os.SystemClock
 import android.util.Log
 import com.discord.app.AppLog
 import com.discord.utilities.collections.FixedSizeLineBuffer
@@ -28,7 +29,7 @@ class SystemLogCapture {
     private val persistenceLock = Any()
     private var currentLogFile: File? = null
     private var previousLogFile: File? = null
-    private var linesSincePersist = 0
+    private var lastPersistAt = 0L
 
     fun init(filesDir: File) {
         synchronized(persistenceLock) {
@@ -38,7 +39,7 @@ class SystemLogCapture {
             current.delete()
             currentLogFile = current
             previousLogFile = previous
-            linesSincePersist = 0
+            lastPersistAt = 0L
         }
     }
 
@@ -122,14 +123,17 @@ class SystemLogCapture {
             if (match.groupValues[2] != APP_LOG_TAG) {
                 AppLog.captureLogcat(priority, safeLine, isSystem = true)
             }
-            linesSincePersist++
-            if (priority >= Log.ERROR || linesSincePersist == 1 || linesSincePersist >= PERSIST_LINE_COUNT) persist()
+            // Each persist rewrites the whole buffer (up to 512 KB). Counting lines re-armed itself on
+            // the line after every persist, so it ran per line and took ~9% of startup CPU; errors
+            // still go to disk at once, everything else at most every couple of seconds.
+            val now = SystemClock.uptimeMillis()
+            if (priority >= Log.ERROR || now - lastPersistAt >= PERSIST_INTERVAL_MS) persist()
         }
     }
 
     private fun persist() {
         val file = synchronized(persistenceLock) {
-            linesSincePersist = 0
+            lastPersistAt = SystemClock.uptimeMillis()
             currentLogFile
         } ?: return
         runCatching { file.writeText(getOutput()) }
@@ -153,7 +157,7 @@ class SystemLogCapture {
         private const val APP_LOG_TAG = "Discord"
         private const val CURRENT_LOG_FILE = "debug-log-current.txt"
         private const val PREVIOUS_LOG_FILE = "debug-log-previous.txt"
-        private const val PERSIST_LINE_COUNT = 25
+        private const val PERSIST_INTERVAL_MS = 2_000L
 
         private fun priority(value: String): Int = when (value) {
             "V" -> Log.VERBOSE

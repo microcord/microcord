@@ -41,7 +41,7 @@ class RoundedCoordinatorLayout : CoordinatorLayout {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        roundedViewCoordinator.onSizeChanged(w, h)
+        roundedViewCoordinator.onSizeChanged(this, w, h)
     }
 
     override fun draw(canvas: Canvas) = roundedViewCoordinator.draw(canvas) { super.draw(canvas) }

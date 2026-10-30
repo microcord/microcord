@@ -161,6 +161,14 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         val initialSurface = centerSurface(initialSelection)
         if (savedInstanceState != null || (initialSurface == CenterSurface.NONE && initialSelection.isResolved())) {
             ensureStartPanelFragments()
+        } else {
+            // Kept off the startup path, but built once the first screen has settled: left until the
+            // first swipe, the guild list, channel list and sidebar were all inflated mid-gesture
+            // and that first swipe stalled (~100 ms on a release build).
+            // ponytail: fixed delay, an idle handler if startup work ever grows past it.
+            view.postDelayed({
+                if (_binding?.root === view && !childFragmentManager.isStateSaved) ensureStartPanelFragments()
+            }, START_PANEL_PREWARM_DELAY_MS)
         }
         if (savedInstanceState != null) ensureEndPanelFragment()
         if (initialSurface == CenterSurface.FORUM) ensureForumFragment()
@@ -689,6 +697,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             else -> CenterSurface.NONE
         }
 
+        private const val START_PANEL_PREWARM_DELAY_MS = 2_000L
         private const val GUILDS_TAG = "WidgetGuildsList"
         private const val CHANNELS_TAG = "WidgetChannelsList"
         private const val FORUM_TAG = "WidgetForumBrowser"

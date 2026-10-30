@@ -59,8 +59,14 @@ class WidgetChatListAdapterItemMediaMosaic(
             this.width = width
             height = layout.height
         }
-        while (tiles.size > entry.items.size) grid.removeView(tiles.removeAt(tiles.lastIndex))
+        // Spare tiles are hidden, not dropped: a recycled row with more images reuses them instead
+        // of inflating a fresh attachment view per tile.
         while (tiles.size < entry.items.size) tiles += ChatAttachmentView(itemView.context).also(grid::addView)
+        tiles.forEachIndexed { index, tile ->
+            val used = index < entry.items.size
+            if (!used && tile.visibility == View.VISIBLE) tile.onPause()
+            tile.visibility = if (used) View.VISIBLE else View.GONE
+        }
 
         entry.items.forEachIndexed { index, item ->
             val cell = layout.cells[index]
@@ -81,7 +87,7 @@ class WidgetChatListAdapterItemMediaMosaic(
 
     override fun onPause() = tiles.forEach(ChatAttachmentView::onPause)
 
-    override fun onResume() = tiles.forEach(ChatAttachmentView::onResume)
+    override fun onResume() = tiles.filter { it.visibility == View.VISIBLE }.forEach(ChatAttachmentView::onResume)
 
     private companion object {
         /** Discord caps the mosaic's width at this. */

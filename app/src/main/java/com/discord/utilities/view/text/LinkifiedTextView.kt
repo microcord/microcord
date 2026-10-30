@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.text.Spanned
+import android.text.SpannedString
 import android.text.style.ClickableSpan
 import android.text.style.URLSpan
 import android.util.AndroidRuntimeException
@@ -26,6 +27,17 @@ class LinkifiedTextView @JvmOverloads constructor(
     }
 
     override fun setText(text: CharSequence?, type: BufferType?) {
+        // A Spannable makes TextView lay text out with DynamicLayout, which on bind costs ~20 ms
+        // for a long message. Links are found by the touch listener and spoilers flip state on the
+        // span objects themselves, so an immutable copy holding the same spans behaves identically
+        // and lays out with the far cheaper StaticLayout.
+        val immutable = text is Spanned && !isTextSelectable && autoLinkMask == 0
+        val content = if (immutable) SpannedString(text) else text
+        val bufferType = if (immutable) BufferType.NORMAL else type
+        setTextSafely(content, bufferType)
+    }
+
+    private fun setTextSafely(text: CharSequence?, type: BufferType?) {
         try {
             super.setText(text, type)
         } catch (error: AndroidRuntimeException) {

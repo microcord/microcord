@@ -235,6 +235,10 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
             else -> selectedPanel
         }
         val restingSidePanel = newX == startPanelOpenedCenterPanelX || newX == endPanelOpenedCenterPanelX
+        // Off its resting spot the centre panel is only moved and dimmed, so cache it as one
+        // texture: otherwise every frame of a swipe re-records and redraws the whole chat.
+        val layerType = if (newX == 0f) View.LAYER_TYPE_NONE else View.LAYER_TYPE_HARDWARE
+        if (center.layerType != layerType) center.setLayerType(layerType, null)
         center.alpha = if (restingSidePanel) 0.5f else 1f
         center.importantForAccessibility =
             if (restingSidePanel) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS

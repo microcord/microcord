@@ -746,12 +746,7 @@ class WidgetChatListAdapterItemMessage(
     private fun configureAccessories(entry: MessageEntry) {
         val container = itemAttachments ?: return
         container.visibility = if (entry.accessories.isEmpty()) View.GONE else View.VISIBLE
-        while (container.childCount > entry.accessories.size) {
-            val index = container.childCount - 1
-            (container.getChildAt(index).getTag(R.id.chat_list_adapter_item_attachments) as? FragmentLifecycleListener)
-                ?.onPause()
-            container.removeViewAt(index)
-        }
+        while (container.childCount > entry.accessories.size) releaseAccessory(container, container.childCount - 1)
         entry.accessories.forEachIndexed { index, accessory ->
             val existing = container.getChildAt(index)
             val holder = existing
@@ -761,16 +756,27 @@ class WidgetChatListAdapterItemMessage(
                     @Suppress("UNCHECKED_CAST")
                     it as MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry>
                 }
-                ?: adapter.onCreateViewHolder(container, accessory.type).also { created ->
+                ?: adapter.obtainAccessory(container, accessory.type).also { created ->
                     created.itemView.setTag(R.id.chat_list_adapter_item_attachments, created)
                     created.itemView.setTag(R.id.chat_list_adapter_item_text, accessory.type)
-                    existing?.let { container.removeViewAt(index) }
+                    if (existing != null) releaseAccessory(container, index)
                     container.addView(created.itemView, index)
                 }
             holder.bind(index, accessory)
             adoptAccessoryTouches(holder.itemView)
             collapseLeadingGap(holder.itemView, isFirst = index == 0)
         }
+    }
+
+    /** Detaches the accessory at [index] and hands its holder back to the adapter for reuse. */
+    private fun releaseAccessory(container: ViewGroup, index: Int) {
+        val view = container.getChildAt(index)
+        val holder = view.getTag(R.id.chat_list_adapter_item_attachments)
+        (holder as? FragmentLifecycleListener)?.onPause()
+        container.removeViewAt(index)
+        val type = view.getTag(R.id.chat_list_adapter_item_text) as? Int ?: return
+        @Suppress("UNCHECKED_CAST")
+        (holder as? MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry>)?.let { adapter.recycleAccessory(type, it) }
     }
 
     override fun onPause() = forEachAccessoryLifecycleListener { it.onPause() }
