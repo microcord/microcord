@@ -55,8 +55,12 @@ class InputAutocomplete(
 ) {
 
     private val adapter = ChatInputAutocompleteAdapter()
+
+    /** Horizontal rows currently claiming their swipes from the side panels; see [setRowShown]. */
+    private val gestureRows = HashSet<View>()
     private val stickersHeader: TextView? =
         stickersContainer.findViewById(R.id.chat_input_stickers_matching_header)
+    private val stickersRecycler: RecyclerView? = stickersContainer.findViewById(R.id.chat_input_stickers_recycler)
     private val stickerAdapter: WidgetChatInputAutocompleteStickerAdapter? =
         stickersContainer.findViewById<RecyclerView>(R.id.chat_input_stickers_recycler)?.let { recycler ->
             recycler.layoutManager = LinearLayoutManager(recycler.context, LinearLayoutManager.HORIZONTAL, false)
@@ -201,6 +205,8 @@ class InputAutocomplete(
         autocompleteRecyclerView.removeOnScrollListener(browserScrollListener)
         autocompleteRecyclerView.adapter = null
         selectedCommandRecycler?.adapter = null
+        setStickersShown(false)
+        setRowShown(selectedCommandRoot, selectedCommandRecycler, false)
         categoriesRecycler?.let(PanelsChildGestureRegionObserver.Provider.get()::unregister)
         categoriesRecycler?.adapter = null
     }
@@ -252,10 +258,10 @@ class InputAutocomplete(
     private fun configureStickers(viewState: AutocompleteViewState.Autocomplete) {
         val adapter = stickerAdapter
         if (adapter == null || viewState.stickers.isEmpty()) {
-            stickersContainer.visibility = View.GONE
+            setStickersShown(false)
             return
         }
-        stickersContainer.visibility = View.VISIBLE
+        setStickersShown(true)
         stickersHeader?.setI18nText(R.string.sticker_matching, "prefix" to viewState.token)
         adapter.setData(viewState.stickers)
     }
@@ -297,15 +303,35 @@ class InputAutocomplete(
         )
         autocompleteRecyclerView.visibility = View.VISIBLE
         autocompleteHeader.visibility = View.GONE
-        stickersContainer.visibility = View.GONE
+        setStickersShown(false)
         configureCategories(false)
     }
 
     private fun hideAutocomplete() {
         autocompleteRecyclerView.visibility = View.GONE
         autocompleteHeader.visibility = View.GONE
-        stickersContainer.visibility = View.GONE
+        setStickersShown(false)
         configureCategories(false)
+    }
+
+    private fun setStickersShown(shown: Boolean) = setRowShown(stickersContainer, stickersRecycler, shown)
+
+    /**
+     * Shows or hides [container]. While it shows, a swipe on its horizontal [row] scrolls the row
+     * rather than opening a side panel; the region must go with it, or a hidden row would keep
+     * swallowing panel swipes over the spot it used to occupy.
+     */
+    private fun setRowShown(container: View?, row: View?, shown: Boolean) {
+        container?.visibility = if (shown) View.VISIBLE else View.GONE
+        if (row == null || shown == (row in gestureRows)) return
+        val regions = PanelsChildGestureRegionObserver.Provider.get()
+        if (shown) {
+            gestureRows += row
+            regions.register(row)
+        } else {
+            gestureRows -= row
+            regions.unregister(row)
+        }
     }
 
     /** As in the reference, the app row shows only in the browser and only for more than one app. */
@@ -387,10 +413,10 @@ class InputAutocomplete(
         when (state) {
             SelectedCommandViewState.Hidden -> {
                 selectedCommandAdapter?.clear()
-                selectedCommandRoot?.visibility = View.GONE
+                setRowShown(selectedCommandRoot, selectedCommandRecycler, false)
             }
             is SelectedCommandViewState.SelectedCommand -> {
-                selectedCommandRoot?.visibility = View.VISIBLE
+                setRowShown(selectedCommandRoot, selectedCommandRecycler, true)
                 selectedCommandAdapter?.clear()
                 selectedCommandAdapter?.setApplicationCommand(state.command, state.application)
                 selectedCommandAdapter?.setVerified(emptyMap(), emptySet())
