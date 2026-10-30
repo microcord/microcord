@@ -407,7 +407,11 @@ class GatewaySocket(
         clearSession()
         val data = identifyDataProvider()
         if (data == null) {
-            terminalDisconnect(authenticationFailed = true, code = 4004, reason = "No connection info provided")
+            // Nothing to identify with *yet* is local, not Discord refusing the token: right after
+            // Fast Connect hands its socket to the store graph, the token reaches the gateway store
+            // a few dispatches later. Reporting it as an auth failure signed the user out and wiped
+            // every preference on fast restarts. The token's arrival reconnects this socket.
+            terminalDisconnect(authenticationFailed = false, code = 4004, reason = "No connection info provided")
             return
         }
         state = State.IDENTIFYING

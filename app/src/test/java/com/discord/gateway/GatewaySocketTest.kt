@@ -18,6 +18,15 @@ import org.junit.Test
 
 class GatewaySocketTest {
     @Test
+    fun missingIdentifyDataDisconnectsWithoutReportingAnAuthFailure() {
+        val harness = Harness(identifyOnOpen = true, identifyData = null)
+
+        harness.connect()
+
+        assertEquals(listOf(false), harness.handler.disconnects)
+    }
+
+    @Test
     fun fastConnectIdentifiesOnOpenWithoutWaitingForHello() {
         val harness = Harness(identifyOnOpen = true)
 
@@ -305,18 +314,16 @@ class GatewaySocketTest {
         assertEquals(listOf(2), replacement.sent.map { JsonParser.parseString(it).asJsonObject["op"].asInt })
     }
 
-    private class Harness(identifyOnOpen: Boolean = false) {
+    private class Harness(
+        identifyOnOpen: Boolean = false,
+        identifyData: IdentifyData? = IdentifyData("fixture-token", IdentifyClientState(emptyMap(), 0, 0, 0)),
+    ) {
         val scheduler = FakeScheduler()
         val factory = FakeSocketFactory()
         val handler = RecordingHandler()
         val logger = RecordingLogger()
         val gateway = GatewaySocket(
-            identifyDataProvider = {
-                IdentifyData(
-                    "fixture-token",
-                    IdentifyClientState(emptyMap(), 0, 0, 0),
-                )
-            },
+            identifyDataProvider = { identifyData },
             identifyProperties = { mapOf("os" to "Android", "browser" to "Discord Android", "device" to "fixture") },
             eventHandler = handler,
             scheduler = scheduler,

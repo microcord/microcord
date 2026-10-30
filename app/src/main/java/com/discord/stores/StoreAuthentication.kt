@@ -27,6 +27,7 @@ import com.discord.stores.authentication.AuthStateCache
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.error.AccountSuspendedException
 import com.discord.utilities.persister.Persister
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.time.TimeUtils
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
@@ -290,6 +291,7 @@ class StoreAuthentication(
         userInitiatedAuthEventSubject.onNext(false)
         onPreLogout()
         requireApi().logout(RestAPIParams.UserDevices(pushTokenProvider()))
+            .restSubscribeOn(false)
             .flatMap { getFingerprintSnapshotOrGenerate() }
             .timeout(logoutTimeoutMillis, TimeUnit.MILLISECONDS, timeoutScheduler)
             .take(1)
@@ -407,7 +409,9 @@ class StoreAuthentication(
     fun requestConsentRequired() {
         if (_isConsentRequired != null) return
         resetIsConsentRequired()
-        isConsentRequiredSubscription = requireApi().getLocationMetadata().subscribe(
+        // Called from the login screen's main thread; without a scheduler the request ran there and
+        // always failed with NetworkOnMainThreadException, so consent was assumed required.
+        isConsentRequiredSubscription = requireApi().getLocationMetadata().restSubscribeOn().subscribe(
             { setConsentRequired(it.consentRequired) },
             { setConsentRequired(true) },
         )
