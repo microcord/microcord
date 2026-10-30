@@ -55,6 +55,7 @@ class InputAutocomplete(
 ) {
 
     private val adapter = ChatInputAutocompleteAdapter()
+    private var lastViewState: AutocompleteViewState? = null
 
     /** Horizontal rows currently claiming their swipes from the side panels; see [setRowShown]. */
     private val gestureRows = HashSet<View>()
@@ -259,10 +260,20 @@ class InputAutocomplete(
         resyncAfterEdit()
     }
 
-    private fun configureUI(viewState: AutocompleteViewState) = when (viewState) {
-        is AutocompleteViewState.Autocomplete -> showAutocomplete(viewState)
-        is AutocompleteViewState.LoadingItems -> showLoading(viewState)
-        AutocompleteViewState.Hidden -> hideAutocomplete()
+    /**
+     * The state is rebuilt from live sources (permissions, members for mentions, the app index), so
+     * in a busy server the same list is republished again and again; redrawing it each time reset
+     * the list and threw it back to the top while the user was reading it.
+     */
+    private fun configureUI(viewState: AutocompleteViewState) {
+        if (viewState == lastViewState) return
+        val previous = lastViewState
+        lastViewState = viewState
+        when (viewState) {
+            is AutocompleteViewState.Autocomplete -> showAutocomplete(viewState, previous)
+            is AutocompleteViewState.LoadingItems -> showLoading(viewState)
+            AutocompleteViewState.Hidden -> hideAutocomplete()
+        }
     }
 
     private fun configureStickers(viewState: AutocompleteViewState.Autocomplete) {
@@ -276,7 +287,7 @@ class InputAutocomplete(
         adapter.setData(viewState.stickers)
     }
 
-    private fun showAutocomplete(viewState: AutocompleteViewState.Autocomplete) {
+    private fun showAutocomplete(viewState: AutocompleteViewState.Autocomplete, previous: AutocompleteViewState?) {
         adapter.setData(
             renderedItems(viewState),
             hasStickers = viewState.stickers.isNotEmpty(),
@@ -314,7 +325,8 @@ class InputAutocomplete(
                 if (viewState.autocompletables.any { it is EmojiAutocompletable }) View.VISIBLE else View.GONE
             autocompleteHeader.setI18nText(R.string.emoji_matching, "prefix" to viewState.token)
         }
-        adapter.scrollToPosition(0)
+        // Back to the top only for new input, not for a refresh of what is already being read.
+        if ((previous as? AutocompleteViewState.Autocomplete)?.token != viewState.token) adapter.scrollToPosition(0)
     }
 
     private fun showLoading(viewState: AutocompleteViewState.LoadingItems) {
