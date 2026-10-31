@@ -42,6 +42,7 @@ import androidx.appcompat.app.AlertDialog
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
+import com.discord.panels.PanelsChildGestureRegionObserver
 import com.discord.models.commands.BuiltInCommand
 import com.discord.models.commands.BuiltInCommandAction
 import com.discord.widgets.chat.input.models.ApplicationCommandData
@@ -248,6 +249,26 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
     private var restoringText = false
 
     private val drafts get() = draftsProvider()
+
+    /**
+     * A message long enough to scroll keeps its own drags. Otherwise a slightly diagonal scroll
+     * through it passes the panels' horizontal-swipe test, the panel starts opening, and that
+     * dismisses the keyboard mid-scroll. Short messages leave panel swipes alone.
+     */
+    private var inputClaimsPanelGestures = false
+    private val inputGestureRegionUpdater = View.OnLayoutChangeListener { view, left, top, right, bottom, _, _, _, _ ->
+        val scrollable = view.canScrollVertically(1) || view.canScrollVertically(-1)
+        if (scrollable == inputClaimsPanelGestures) return@OnLayoutChangeListener
+        inputClaimsPanelGestures = scrollable
+        val regions = PanelsChildGestureRegionObserver.Provider.get()
+        if (scrollable) {
+            regions.register(view)
+            // Registered mid-layout, so the observer missed this pass; hand it the bounds now.
+            regions.onLayoutChange(view, left, top, right, bottom, 0, 0, 0, 0)
+        } else {
+            regions.unregister(view)
+        }
+    }
 
     private val watcher = object : TextWatcher {
         override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -515,6 +536,9 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         flexInputViewModel.updateMessageLimitCounter(AppFlexInputViewModel.MessageLimitCounter())
         view?.removeCallbacks(pluginComposerBinder)
         input?.removeTextChangedListener(watcher)
+        input?.removeOnLayoutChangeListener(inputGestureRegionUpdater)
+        input?.takeIf { inputClaimsPanelGestures }?.let(PanelsChildGestureRegionObserver.Provider.get()::unregister)
+        inputClaimsPanelGestures = false
         inputAppender = null
         autocomplete?.onDestroyView()
         SharedPreferencesProvider.get().unregisterOnSharedPreferenceChangeListener(customizationListener)
@@ -561,6 +585,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         })
         val editText = flexBinding.textInput
         input = editText
+        editText.addOnLayoutChangeListener(inputGestureRegionUpdater)
         // The field can be rebuilt without this fragment resuming, so it is set here as well.
         applyCapitalizeSentences(editText)
         truncatedHint = WidgetChatInputTruncatedHint(editText).also { it.addBindedTextWatcher(this) }
