@@ -395,8 +395,9 @@ class StoreGatewayConnection(
         query: String? = null,
         userIds: List<Long>? = null,
         limit: Int? = DEFAULT_MEMBER_REQUEST_LIMIT,
+        nonce: String? = null,
     ): Boolean = requestIfSessionEstablished {
-        it.requestGuildMembers(listOf(guildId), query, userIds, limit)
+        it.requestGuildMembers(listOf(guildId), query, userIds, limit, nonce)
     }
 
     fun updateGuildSubscriptions(guildId: Long, guildSubscriptions: GuildSubscriptions): Boolean =

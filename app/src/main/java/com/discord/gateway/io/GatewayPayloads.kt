@@ -47,6 +47,8 @@ sealed class OutgoingPayload private constructor() {
         private val userIds: List<Long>? = null,
         private val limit: Int? = null,
         val presences: Boolean = true,
+        /** Echoed back on the answering `GUILD_MEMBERS_CHUNK`; omitted when null. */
+        private val nonce: String? = null,
     ) : OutgoingPayload()
 
     class GuildSubscriptions(

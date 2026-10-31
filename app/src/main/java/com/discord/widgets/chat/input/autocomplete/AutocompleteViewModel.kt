@@ -9,7 +9,9 @@ import com.discord.models.commands.ApplicationCommand
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.ApplicationSubCommand
 import com.discord.stores.CommandAutocompleteState
+import com.discord.stores.StoreGuilds
 import com.discord.stores.StoreStream
+import com.discord.utilities.rx.filterNull
 import com.discord.utilities.rx.ui
 import com.discord.widgets.chat.input.AutocompleteStickerItem
 import com.discord.widgets.chat.input.autocomplete.sources.StickerAutocompletableSource
@@ -74,6 +76,14 @@ class AutocompleteViewModel(
     private val channelGuildId: (Long) -> Long? = { id ->
         StoreStream.getChannels().getChannel(id)?.guildId
     },
+    /** Asks the gateway for members matching a typed `@name`, so people not yet cached can be offered. */
+    private val memberQuery: (guildId: Long, query: String, nonce: String) -> Unit = { guildId, query, nonce ->
+        StoreStream.getGatewayConnection().requestGuildMembers(guildId, query, nonce = nonce)
+    },
+    /** Nonces echoed on arriving `GUILD_MEMBERS_CHUNK`s, which answer a member search. */
+    private val memberChunkNonces: () -> Observable<String> = {
+        StoreStream.getGatewayConnection().guildMembersChunk.map { it.nonce }.filterNull()
+    },
     private val remoteAutocompleteDelayMs: Long = REMOTE_AUTOCOMPLETE_DELAY_MS,
     private val remoteRequestScheduler: Scheduler = Schedulers.computation(),
     private val stickerMessageSender: StickerMessageSender = StickerMessageSender(),
@@ -96,6 +106,19 @@ class AutocompleteViewModel(
     private var sentRemoteQuery: Pair<String, String>? = null
     private val remoteRequests = PublishSubject.create<RemoteOptionRequest>()
     private val events = PublishSubject.create<Event>()
+    private val mentionTokens = PublishSubject.create<String?>()
+
+    /**
+     * Member search loading state, a project addition: the reference shows nothing until results
+     * land. The search's nonce is its guild id (React Native sends none), so other screens'
+     * member requests, which send no nonce, never answer it; a timeout covers a reply that never
+     * comes, e.g. a request made while disconnected.
+     */
+    private val answeredMemberSearches = HashSet<String>()
+    /** Nonce → query of the search in flight. */
+    private var sentMemberSearch: Pair<String, String>? = null
+    private var memberChunkSubscription: Subscription? = null
+    private var memberTimeoutSubscription: Subscription? = null
     private val commandBrowserState = BehaviorSubject.create(null as CommandBrowserState?)
     private val selectedCommandState = BehaviorSubject.create<SelectedCommandViewState>(
         SelectedCommandViewState.Hidden,
@@ -121,7 +144,49 @@ class AutocompleteViewModel(
                 events.onNext(Event.RequestAutocompleteData(request.option))
                 remoteOptionRequest(request.channelId, request.guildId, request.data)
             }, { /* a failed request is reflected by the store */ })
+        memberChunkSubscription = memberChunkNonces()
+            .ui(this)
+            .subscribe(::onMemberSearchAnswered, { /* the timeout still clears the row */ })
+        StoreGuilds.Actions.requestMembers(
+            appComponent = this,
+            guildId = { currentChannelId?.let(channelGuildId) },
+            partialUserNameTokenEmitted = mentionTokens.distinctUntilChanged(),
+            autocomplete = true,
+            requestGuildMembers = { guildId, query ->
+                val nonce = guildId.toString()
+                onMemberSearchSent(nonce, query)
+                memberQuery(guildId, query, nonce)
+            },
+        )
         setChannelId(channelId)
+    }
+
+    @VisibleForTesting
+    @MainThread
+    internal fun onMemberSearchSent(nonce: String, query: String) {
+        sentMemberSearch = nonce to query
+        memberTimeoutSubscription?.unsubscribe()
+        memberTimeoutSubscription = Observable.timer(MEMBER_SEARCH_TIMEOUT_MS, TimeUnit.MILLISECONDS, remoteRequestScheduler)
+            .ui(this)
+            .subscribe({ onMemberSearchAnswered(nonce) }, { })
+    }
+
+    @VisibleForTesting
+    @MainThread
+    internal fun onMemberSearchAnswered(nonce: String) {
+        val sent = sentMemberSearch?.takeIf { it.first == nonce } ?: return
+        sentMemberSearch = null
+        memberTimeoutSubscription?.unsubscribe()
+        answeredMemberSearches += sent.second
+        publish()
+    }
+
+    /** A typed `@name` with no local match whose server search has not been answered yet. */
+    private fun isMemberSearchPending(): Boolean {
+        val token = currentToken ?: return false
+        if (selectedCommand != null || token.leadingIdentifier != LeadingIdentifier.MENTION) return false
+        if (token.formattedToken.isEmpty() || token.formattedToken in answeredMemberSearches) return false
+        return currentChannelId?.let(channelGuildId)?.takeIf { it != 0L } != null
     }
 
     /**
@@ -150,6 +215,9 @@ class AutocompleteViewModel(
         commandState = CommandState()
         pendingRemoteQuery = null
         sentRemoteQuery = null
+        answeredMemberSearches.clear()
+        sentMemberSearch = null
+        memberTimeoutSubscription?.unsubscribe()
         inputMentionsMap = ChatInputMentionsMap("", emptyMap())
         updateViewState(AutocompleteViewState.Hidden)
         selectedCommandState.onNext(SelectedCommandViewState.Hidden)
@@ -212,6 +280,7 @@ class AutocompleteViewModel(
         } else {
             null
         }
+        mentionTokens.onNext(currentToken?.token)
         if (selectedCommand == null && currentToken?.leadingIdentifier == LeadingIdentifier.APP_COMMAND) {
             val query = currentToken?.formattedToken?.trim().orEmpty()
             val channelId = currentChannelId
@@ -519,17 +588,28 @@ class AutocompleteViewModel(
             updateViewState(it)
             return
         }
+        val state = reduce(
+            currentToken,
+            optionCandidates ?: autocompletables,
+            stickerSource,
+            allowEmptyQuery = selectedCommandOption != null,
+        )
         updateViewState(
-            reduce(
-                currentToken,
-                optionCandidates ?: autocompletables,
-                stickerSource,
-                allowEmptyQuery = selectedCommandOption != null,
-            ),
+            when {
+                !isMemberSearchPending() -> state
+                state is AutocompleteViewState.Hidden -> AutocompleteViewState.LoadingItems(MEMBER_LOADING_ITEMS)
+                // Local matches stay usable; the row above them says more may still arrive, and
+                // sits on top so it never moves them when results land.
+                state is AutocompleteViewState.Autocomplete ->
+                    state.copy(autocompletables = listOf(ApplicationCommandLoadingPlaceholder()) + state.autocompletables)
+                else -> state
+            },
         )
     }
 
     override fun onCleared() {
+        memberChunkSubscription?.unsubscribe()
+        memberTimeoutSubscription?.unsubscribe()
         subscription?.unsubscribe()
         commandSubscription?.unsubscribe()
         remoteRequestSubscription?.unsubscribe()
@@ -542,6 +622,8 @@ class AutocompleteViewModel(
     companion object {
         internal const val COMMAND_DISCOVER_TOKEN = "/"
         private const val COMMAND_LOADING_ITEMS = 3
+        private const val MEMBER_LOADING_ITEMS = 1
+        private const val MEMBER_SEARCH_TIMEOUT_MS = 10_000L
         private const val REMOTE_AUTOCOMPLETE_DELAY_MS = 500L
 
         private fun observeCommandState(channelId: Long): Observable<CommandState> {
@@ -665,7 +747,7 @@ class AutocompleteViewModel(
             return AutocompleteViewState.Autocomplete(
                 isLoading = false,
                 isError = false,
-                isAutocomplete = true,
+                isAutocomplete = false,
                 autocompletables = matches,
                 stickers = stickers,
                 token = token.token,

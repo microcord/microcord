@@ -295,7 +295,6 @@ class InputAutocomplete(
         )
         autocompleteRecyclerView.visibility = View.VISIBLE
         configureStickers(viewState)
-        // `isAutocomplete` is set for every typed token; only the bare `/` browser lacks it.
         val commandToken = viewState.token.startsWith(AutocompleteViewModel.COMMAND_DISCOVER_TOKEN)
         when {
             !commandToken -> configureCategories(null, browsing = true)
@@ -319,10 +318,14 @@ class InputAutocomplete(
             )
             val status = statusTextRes(viewState)
             if (status != null) autocompleteHeader.setText(status)
-            else autocompleteHeader.setI18nText(R.string.emoji_matching, "prefix" to viewState.token)
+            else autocompleteHeader.setI18nText(R.string.options_matching, "prefix" to viewState.token)
         } else {
+            val emojiToken = viewState.token.startsWith(LeadingIdentifier.EMOJI_AND_STICKERS.identifier.toString())
             autocompleteHeader.visibility =
-                if (viewState.autocompletables.any { it is EmojiAutocompletable }) View.VISIBLE else View.GONE
+                if (emojiToken && viewState.autocompletables.isNotEmpty()) View.VISIBLE else View.GONE
+            autocompleteHeader.setTextColor(
+                ColorCompat.getThemedColor(autocompleteHeader.context, R.attr.colorTextNormal),
+            )
             autocompleteHeader.setI18nText(R.string.emoji_matching, "prefix" to viewState.token)
         }
         // Back to the top only for new input, not for a refresh of what is already being read.
@@ -332,7 +335,9 @@ class InputAutocomplete(
     private fun showLoading(viewState: AutocompleteViewState.LoadingItems) {
         adapter.setData(
             List(viewState.numberLoadingItems) { ApplicationCommandLoadingPlaceholder() },
-            sizeToMax = true,
+            // Command loading fills the popup as the reference does; the single member-search row
+            // (a project addition) sizes to itself rather than opening an empty full-height popup.
+            sizeToMax = viewState.numberLoadingItems > 1,
         )
         autocompleteRecyclerView.visibility = View.VISIBLE
         autocompleteHeader.visibility = View.GONE

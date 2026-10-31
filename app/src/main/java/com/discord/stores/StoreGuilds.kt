@@ -503,11 +503,14 @@ class StoreGuilds(
          * In [autocomplete] mode the token is a raw chat-input word, so a leading `@` is stripped
          * and anything else is discarded; otherwise the token is a search box's contents and is
          * used verbatim. Blank tokens are dropped rather than requesting every member.
+         *
+         * The reference reads the selected guild per token; [guildId] is read the same way so a
+         * caller that re-targets channels queries the current guild. Null or 0 (a DM) skips it.
          */
         @JvmStatic
         fun requestMembers(
             appComponent: AppComponent,
-            guildId: Long,
+            guildId: () -> Long?,
             partialUserNameTokenEmitted: Observable<String?>,
             autocomplete: Boolean,
             requestGuildMembers: (Long, String) -> Unit,
@@ -524,7 +527,9 @@ class StoreGuilds(
                 .distinctUntilChanged()
                 .computationLatest()
                 .ui(appComponent)
-                .appSubscribe("requestGuildMembers") { token -> requestGuildMembers(guildId, token!!) }
+                .appSubscribe("requestGuildMembers") { token ->
+                    guildId()?.takeIf { it != 0L }?.let { requestGuildMembers(it, token!!) }
+                }
         }
 
         /**

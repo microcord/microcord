@@ -241,6 +241,7 @@ class CommandBrowserAndRemoteOptionTest {
         )
         val viewModel = AutocompleteViewModel(
             channelId = 7L,
+            memberChunkNonces = { Observable.never() },
             autocompletablesSource = { Observable.just(emptyMap()) },
             commandStateSource = { Observable.never() },
             commandIndexRequest = {},
@@ -266,6 +267,31 @@ class CommandBrowserAndRemoteOptionTest {
     }
 
     @Test
+    fun unmatchedMentionShowsLoadingUntilItsOwnMemberChunkArrives() {
+        val viewModel = AutocompleteViewModel(
+            channelId = 7L,
+            memberChunkNonces = { Observable.never() },
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.never() },
+            commandIndexRequest = {},
+            channelGuildId = { 20L },
+            memberQuery = { _, _, _ -> },
+            remoteRequestScheduler = TestScheduler(),
+        )
+        var state: AutocompleteViewState = AutocompleteViewState.Hidden
+        viewModel.observeViewState().subscribe { state = it }
+
+        viewModel.onInputChanged("hi @bob", 7..7)
+        assertTrue(state is AutocompleteViewState.LoadingItems)
+        viewModel.onMemberSearchSent("n1", "bob")
+        // Another screen's chunk for the same guild does not answer this search.
+        viewModel.onMemberSearchAnswered("other")
+        assertTrue(state is AutocompleteViewState.LoadingItems)
+        viewModel.onMemberSearchAnswered("n1")
+        assertEquals(AutocompleteViewState.Hidden, state)
+    }
+
+    @Test
     fun rapidTypingOnlySendsTheLatestRemoteQuery() {
         val scheduler = TestScheduler()
         val requests = mutableListOf<com.discord.widgets.chat.input.models.ApplicationCommandData>()
@@ -273,6 +299,7 @@ class CommandBrowserAndRemoteOptionTest {
         val command = command("search", listOf(option))
         val viewModel = AutocompleteViewModel(
             channelId = 7L,
+            memberChunkNonces = { Observable.never() },
             autocompletablesSource = { Observable.just(emptyMap()) },
             commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
             remoteOptionRequest = { _, _, data -> requests += data },
@@ -304,6 +331,7 @@ class CommandBrowserAndRemoteOptionTest {
         }
         val viewModel = AutocompleteViewModel(
             channelId = 7L,
+            memberChunkNonces = { Observable.never() },
             autocompletablesSource = { Observable.just(emptyMap()) },
             commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
             commandIndexRequest = {},
@@ -329,6 +357,7 @@ class CommandBrowserAndRemoteOptionTest {
         val note = option("note", required = false)
         val viewModel = AutocompleteViewModel(
             channelId = 7L,
+            memberChunkNonces = { Observable.never() },
             autocompletablesSource = { Observable.just(emptyMap()) },
             commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
             commandIndexRequest = {},
@@ -354,6 +383,7 @@ class CommandBrowserAndRemoteOptionTest {
         )
         fun data(input: String) = AutocompleteViewModel(
             channelId = 7L,
+            memberChunkNonces = { Observable.never() },
             autocompletablesSource = { Observable.just(emptyMap()) },
             commandStateSource = { Observable.just(AutocompleteViewModel.CommandState()) },
             commandIndexRequest = {},

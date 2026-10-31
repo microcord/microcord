@@ -10,4 +10,6 @@ data class GuildMembersChunk(
     val members: List<GuildMember>?,
     val presences: List<Presence>?,
     val notFound: List<Long>?,
+    /** The request's nonce, when it sent one. */
+    val nonce: String? = null,
 )

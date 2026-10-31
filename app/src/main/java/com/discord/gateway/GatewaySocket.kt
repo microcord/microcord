@@ -217,8 +217,13 @@ class GatewaySocket(
         query: String? = null,
         userIds: List<Long>? = null,
         limit: Int? = DEFAULT_MEMBER_REQUEST_LIMIT,
+        nonce: String? = null,
     ) = scheduleSend {
-        send(Opcode.REQUEST_GUILD_MEMBERS, GuildMembersRequest(guildIds, query, userIds, limit), omitNulls = true)
+        send(
+            Opcode.REQUEST_GUILD_MEMBERS,
+            GuildMembersRequest(guildIds, query, userIds, limit, nonce = nonce),
+            omitNulls = true,
+        )
     }
 
     fun updateGuildSubscriptions(guildId: Long, subscriptions: GuildSubscriptions) = scheduleSend {

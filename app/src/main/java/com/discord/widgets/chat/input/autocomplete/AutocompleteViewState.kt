@@ -16,8 +16,8 @@ sealed class AutocompleteViewState {
     /**
      * The candidate list.
      *
-     * [isAutocomplete] distinguishes "the user is actively completing a token" from "we are
-     * showing the browser"; [token] is carried so the view can highlight the matched substring
+     * [isAutocomplete] marks a slash-command option whose choices come from the bot (`autocomplete`
+     * on the option), as the reference does; [token] is carried so the view can highlight the matched substring
      * and so a late emission for a stale query can be discarded.
      */
     data class Autocomplete(
