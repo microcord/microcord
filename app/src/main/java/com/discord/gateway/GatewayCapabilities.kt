@@ -52,6 +52,9 @@ object GatewayCapabilities {
     /** Periodic PASSIVE_UPDATE_V2 carrying unread and voice state for unsubscribed guilds. */
     const val PASSIVE_UPDATE_V2 = 1L shl 14
 
+    /** Undocumented, set by RN and desktop; without it EMBEDDED_ACTIVITY_UPDATE_V2 never arrives. */
+    const val UNNAMED_17 = 1L shl 17
+
     /** MESSAGE_POLL_VOTE_ADD_MANY in place of a burst of MESSAGE_POLL_VOTE_ADD. */
     const val POLL_VOTE_BATCHING = 1L shl 19
 
@@ -75,6 +78,7 @@ object GatewayCapabilities {
         PASSIVE_CALLS_V1 or
         REACTION_BATCHING or
         PASSIVE_UPDATE_V2 or
+        UNNAMED_17 or
         POLL_VOTE_BATCHING or
         VOICE_STATE_BATCHING_V2
 }

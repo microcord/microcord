@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.collection.LruCache
 import com.discord.api.commands.ApplicationCommandData
+import com.discord.api.embeddedactivities.EmbeddedActivityInstance
 import com.discord.api.interaction.Interaction
 import com.discord.api.interaction.InteractionModalCreate
 import com.discord.api.interaction.InteractionStateUpdate
@@ -134,6 +135,8 @@ class StoreApplicationInteractions(
     private var sentInteractionsSnapshot: Map<String, SentInteraction> = emptyMap()
 
     private val interactionModalCreate = PublishSubject.create<InteractionModalCreate>()
+    private val componentActivityLaunches = PublishSubject.create<EmbeddedActivityInstance>()
+    private val launchedActivityNonces = HashSet<String>()
 
     private var sessionId: String? = null
 
@@ -155,10 +158,21 @@ class StoreApplicationInteractions(
 
     fun observeModalCreate(): Observable<InteractionModalCreate> = interactionModalCreate
 
+    fun observeComponentActivityLaunches(): Observable<EmbeddedActivityInstance> = componentActivityLaunches
+
     fun observeSentInteractions(): Observable<Map<String, SentInteraction>> =
         observationDeck.connectRx(SentInteractionsUpdate) { sentInteractionsSnapshot }
 
     fun getSentInteraction(nonce: String): SentInteraction? = sentInteractionsSnapshot[nonce]
+
+    /** A `LAUNCH_ACTIVITY` reply arrives as this session joining the instance under the press's nonce. */
+    @StoreThread
+    fun handleEmbeddedActivityUpdateV2(instance: EmbeddedActivityInstance) {
+        val session = sessionId ?: return
+        val nonce = instance.participants.firstOrNull { it.sessionId == session }?.nonce ?: return
+        if (sentInteractions[nonce]?.messageId == null || !launchedActivityNonces.add(nonce)) return
+        componentActivityLaunches.onNext(instance)
+    }
 
     // -- Lifecycle -----------------------------------------------------------------------------
 
@@ -199,6 +213,7 @@ class StoreApplicationInteractions(
         interactionComponentSendState.clear()
         interactionData.clear()
         sentInteractions.evictAll()
+        launchedActivityNonces.clear()
         sessionId = null
         markChanged(ComponentStateUpdate, SentInteractionsUpdate)
     }

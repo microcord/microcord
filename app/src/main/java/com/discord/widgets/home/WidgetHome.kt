@@ -6,6 +6,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
+import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
 import com.discord.R
@@ -582,6 +583,16 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             .ui(this)
             .appSubscribe(WidgetHome::class.java) { showUrgentMessageDialog() }
         ModalComponent.autoOpen(this)
+        StoreStream.getInteractions().observeComponentActivityLaunches()
+            .ui(this)
+            .appSubscribe(WidgetHome::class.java) { instance ->
+                EmbeddedActivityLauncher.launch(
+                    requireContext(),
+                    instance.applicationId,
+                    instance.location.channelId,
+                    instance.compositeInstanceId,
+                )
+            }
         StoreStream.getNux().getNuxState()
             .filter { it.newUserType != null }
             .take(1)

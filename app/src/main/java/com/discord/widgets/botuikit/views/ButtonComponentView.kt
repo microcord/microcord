@@ -44,7 +44,6 @@ class ButtonComponentView @JvmOverloads constructor(
         val enabled = component.stateInteraction !is ActionInteractionComponentState.Disabled
 
         minimumWidth = dpToPixels(if (component.style == ButtonStyle.LINK) 160 else 52)
-        minimumHeight = dpToPixels(48)
         configureStyle(button, component.style)
         if (component.emoji != null && loading) emoji.visibility = View.INVISIBLE
         else ComponentViewUtils.run {

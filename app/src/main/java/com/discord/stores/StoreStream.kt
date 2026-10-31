@@ -2506,8 +2506,10 @@ class StoreStream private constructor(
             applicationInteractions::handleInteractionModalCreate)
         dispatchSubscribe(events.embeddedActivityInboundUpdate, "embeddedActivityInboundUpdate",
             embeddedActivities::handleEmbeddedActivityInboundUpdate)
-        dispatchSubscribe(events.embeddedActivityUpdateV2, "embeddedActivityUpdateV2",
-            embeddedActivities::handleEmbeddedActivityUpdateV2)
+        dispatchSubscribe(events.embeddedActivityUpdateV2, "embeddedActivityUpdateV2") { instance ->
+            embeddedActivities.handleEmbeddedActivityUpdateV2(instance)
+            applicationInteractions.handleEmbeddedActivityUpdateV2(instance)
+        }
 
         // User-scoped side channels. `userConnectionUpdate` is not subscribed here: it is handed to
         // StoreUserConnections as its `connectionUpdates` source, which re-fetches on each signal.
