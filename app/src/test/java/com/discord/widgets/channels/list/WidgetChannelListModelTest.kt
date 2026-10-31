@@ -1,6 +1,10 @@
 package com.discord.widgets.channels.list
 
+import com.discord.R
 import com.discord.api.channel.Channel
+import com.discord.api.guild.GuildFeature
+import com.discord.api.notification.ChannelNotificationSettingsFlags
+import com.discord.api.notification.GuildNotificationSettingsFlags
 import com.discord.api.permission.Permission
 import com.discord.nullserializable.NullSerializable
 import com.discord.api.user.Collectibles
@@ -9,6 +13,7 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.models.domain.ModelPayload
+import com.discord.models.guild.Guild
 import com.discord.models.member.GuildMember
 import com.discord.models.user.CoreUser
 import com.discord.stores.Dispatcher
@@ -20,6 +25,7 @@ import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.persister.Persister
 import com.discord.widgets.channels.list.items.ChannelListItem
 import com.discord.widgets.channels.list.items.ChannelListItemCategory
+import com.discord.widgets.channels.list.items.ChannelListItemHeader
 import com.discord.widgets.channels.list.items.ChannelListItemPrivate
 import com.discord.widgets.channels.list.items.ChannelListItemTextChannel
 import com.discord.widgets.channels.list.items.ChannelListItemThread
@@ -249,6 +255,87 @@ class WidgetChannelListModelTest {
     }
 
     @Test
+    fun `opt-in hides voice channels the viewer never opted into`() {
+        val channels = listOf(channel(2, Channel.GUILD_VOICE), channel(3, Channel.GUILD_VOICE, position = 1))
+        val optedIntoThree = ModelNotificationSettings(
+            guildId = GUILD_ID,
+            flags = GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(
+                    channelId = 3L,
+                    flags = ChannelNotificationSettingsFlags.OPT_IN_ENABLED,
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(3L),
+            build(
+                channels,
+                notificationSettings = optedIntoThree,
+                guild = Guild(id = GUILD_ID, features = setOf(GuildFeature.COMMUNITY)),
+            ).channelIds(),
+        )
+    }
+
+    @Test
+    fun `opt-in moves a channel read lately but never opted into to the suggested section`() {
+        val channels = listOf(
+            channel(1, Channel.CATEGORY),
+            channel(2, Channel.GUILD_TEXT, parentId = 1),
+            channel(3, Channel.GUILD_TEXT, parentId = 1, position = 1),
+        )
+        val optedIntoThree = ModelNotificationSettings(
+            guildId = GUILD_ID,
+            flags = GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON,
+            channelOverrides = listOf(
+                ModelNotificationSettings.ChannelOverride(
+                    channelId = 3L,
+                    flags = ChannelNotificationSettingsFlags.OPT_IN_ENABLED,
+                ),
+            ),
+        )
+
+        val items = build(
+            channels,
+            notificationSettings = optedIntoThree,
+            guild = Guild(id = GUILD_ID, features = setOf(GuildFeature.COMMUNITY)),
+            recentlyReadChannelIds = setOf(2L),
+        )
+
+        val header = items.indexOfFirst {
+            it is ChannelListItemHeader && it.textResId == R.string.manticord_channel_list_suggested
+        }
+        assertTrue(header >= 0)
+        assertEquals(2L, (items[header + 1] as ChannelListItemTextChannel).channel.id)
+        // Its category keeps only what the viewer opted into.
+        val category = items.indexOfFirst { it is ChannelListItemCategory }
+        assertTrue(category > header)
+        assertEquals(listOf(3L), items.drop(category + 1).filterIsInstance<ChannelListItemTextChannel>().map { it.channel.id })
+    }
+
+    @Test
+    fun `opt-in drops a collapsed category with nothing opted in and keeps its suggested row`() {
+        val channels = listOf(
+            channel(1, Channel.CATEGORY),
+            channel(2, Channel.GUILD_TEXT, parentId = 1),
+        )
+        val items = build(
+            channels,
+            collapsedCategories = setOf(1L),
+            notificationSettings = ModelNotificationSettings(
+                guildId = GUILD_ID,
+                flags = GuildNotificationSettingsFlags.OPT_IN_CHANNELS_ON,
+            ),
+            guild = Guild(id = GUILD_ID, features = setOf(GuildFeature.COMMUNITY)),
+            recentlyReadChannelIds = setOf(2L),
+        )
+
+        assertTrue(items.none { it is ChannelListItemCategory })
+        assertEquals(listOf(2L), items.filterIsInstance<ChannelListItemTextChannel>().map { it.channel.id })
+    }
+
+    @Test
     fun `the mfa notice is the first row`() {
         val items = build(
             listOf(channel(2, Channel.GUILD_TEXT)),
@@ -446,10 +533,12 @@ class WidgetChannelListModelTest {
         ableToInstantInvite: Boolean = false,
         activeJoinedThreads: Map<Long, Map<Long, Channel>> = emptyMap(),
         idleThreadIds: Set<Long> = emptySet(),
+        guild: Guild? = null,
+        recentlyReadChannelIds: Set<Long> = emptySet(),
     ): List<ChannelListItem> = WidgetChannelListModel.guildListBuilder(
         selectedGuildId = GUILD_ID,
         guild = WidgetChannelListModel.GuildInfo(
-            guild = null,
+            guild = guild,
             everyoneRole = null,
             guildRoles = null,
             notificationSettings = notificationSettings,
@@ -457,6 +546,7 @@ class WidgetChannelListModelTest {
             channelPermissions = permissions,
             ableToInstantInvite = ableToInstantInvite,
             unelevated = unelevated,
+            recentlyReadChannelIds = recentlyReadChannelIds,
         ),
         guildChannels = channels.associateBy(Channel::id),
         activeJoinedGuildThreads = activeJoinedThreads.mapValues { (_, threads) ->

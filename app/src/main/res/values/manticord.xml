@@ -235,4 +235,6 @@
     <string name="voice_channel_status_title">Voice Channel Status</string>
     <string name="voice_channel_status_body">Let everyone know what\'s going on. Leave it empty to clear the status.</string>
     <string name="voice_channel_status_hint">What\'s happening?</string>
+    <!-- RN's opt-in Recents section header. -->
+    <string name="manticord_channel_list_suggested">Suggested</string>
 </resources>

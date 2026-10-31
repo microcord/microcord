@@ -713,6 +713,10 @@ data class WidgetChannelListModel(
             hubStudyGroupEnabled: Boolean = false,
         ): List<ChannelListItem> {
             val items = ArrayList<ChannelListItem>(guildChannels.size + joinedThreads.size)
+            // Under opt-in, channels the viewer never opted into but that are worth a look (a
+            // mention, an active thread, read lately) go to RN's "Suggested" section instead of
+            // their category.
+            val suggested = ArrayList<ChannelListItem>()
             val isHub = guild.guild?.isHub() == true
             val guildDefaultMessageNotifications =
                 guild.guild?.defaultMessageNotifications ?: ModelNotificationSettings.FREQUENCY_ALL
@@ -789,6 +793,23 @@ data class WidgetChannelListModel(
             /** Categories the user can manage: kept even when they end up empty. */
             val forceViewCategories = HashSet<Long>()
 
+            val optInEnabled = isOptInEnabled(guild)
+
+            /**
+             * Under opt-in, the categories that hold something the viewer opted into, or that they
+             * opted into themselves. Only these can show, collapsed or not: RN drops the rest.
+             */
+            val optedInCategories: Set<Long> = if (!optInEnabled) emptySet() else {
+                guildChannels.values.mapNotNullTo(HashSet()) { channel ->
+                    when {
+                        !isOptedIn(channel, guild) -> null
+                        channel.type == Channel.CATEGORY -> channel.id
+                        channel.parentId != 0L -> channel.parentId
+                        else -> null
+                    }
+                }
+            }
+
             /** Text channels already dropped, so their threads can be dropped too. */
             val hiddenChannelIds = HashSet<Long>()
 
@@ -805,9 +826,15 @@ data class WidgetChannelListModel(
             fun removeTrailingEmptyCategory() {
                 val last = items.lastOrNull() as? ChannelListItemCategory ?: return
                 val categoryId = last.channel.id
-                if (categoryId !in forceViewCategories && categoryId !in collapsedCategories) {
-                    items.removeAt(items.size - 1)
+                val keep = if (optInEnabled) {
+                    // Collapsed, it would still have opted-in rows to show once expanded; a
+                    // manager's empty category stays only if they opted into the category itself.
+                    (categoryId in collapsedCategories && categoryId in optedInCategories) ||
+                        (categoryId in forceViewCategories && isOptedIn(last.channel, guild))
+                } else {
+                    categoryId in forceViewCategories || categoryId in collapsedCategories
                 }
+                if (!keep) items.removeAt(items.size - 1)
             }
 
             for ((categoryId, categoryChannels) in sortedCategories) {
@@ -861,15 +888,21 @@ data class WidgetChannelListModel(
                             }
                         } else {
                             val inFocus = channelSelected || areAnyChildThreadsSelected(id)
-                            val collapsedAway = textChannel.parentId in collapsedCategories &&
+                            val suggestedOnly = optInEnabled && !isOptedIn(textChannel, guild)
+                            // A Suggested row does not sit in its category, so collapsing that
+                            // category must not take it away.
+                            val collapsedAway = !suggestedOnly &&
+                                textChannel.parentId in collapsedCategories &&
                                 mentionCount <= 0 &&
                                 !(!isCategoryMuted && !isMuted && unread)
                             val mutedAway = isMuted && guild.hideMutedChannels
                             // Under opt-in the list is only what the viewer asked for, so a
                             // channel they never opted into is hidden unless it pings them or they
-                            // read it lately. RN lists those under a Recents section instead.
-                            val notOptedIn = isOptInEnabled(guild) && !isOptedIn(textChannel, guild) &&
-                                mentionCount <= 0 && id !in guild.recentlyReadChannelIds
+                            // read it lately; those it keeps are moved to the Suggested section.
+                            // As in RN's Recents, reading a muted channel (or one in a muted
+                            // category) is not enough; only a mention brings it back.
+                            val notOptedIn = suggestedOnly && mentionCount <= 0 &&
+                                (id !in guild.recentlyReadChannelIds || isMuted || isCategoryMuted)
                             val result = !inFocus &&
                                 areAllChildThreadsRead(id) &&
                                 (collapsedAway || mutedAway || notOptedIn)
@@ -912,6 +945,11 @@ data class WidgetChannelListModel(
                         val locked = !everyoneCanConnect || (!canView && isRoleSubscription)
 
                         if (!canView && !voiceChannelSelected && !isRoleSubscription) return null
+                        // Under opt-in RN drops a voice channel the viewer never opted into, and
+                        // unlike a text channel it does not resurface under Recents for activity.
+                        if (optInEnabled && !isOptedIn(vocalChannel, guild) && !voiceChannelSelected) {
+                            return null
+                        }
                         // A collapsed category keeps only the voice channels somebody is in.
                         if (vocalChannel.parentId in collapsedCategories &&
                             numUsersConnected == 0 && !voiceChannelSelected
@@ -1098,6 +1136,10 @@ data class WidgetChannelListModel(
                         Channel.GUILD_MEDIA,
                         -> {
                             val item = toTextChannelItem() ?: continue
+                            if (optInEnabled && !isOptedIn(channel, guild)) {
+                                suggested.add(item)
+                                continue
+                            }
                             items.add(item)
                             items.addAll(threadItemsFor(channel))
                         }
@@ -1116,15 +1158,17 @@ data class WidgetChannelListModel(
             }
 
             removeTrailingEmptyCategory()
-            return hoistPinnedChannels(items, guild, selectedGuildId)
+            return hoistPinnedChannels(items, suggested, guild, selectedGuildId)
         }
 
         /**
          * Runs after the list is assembled so a pinned channel keeps the exact row the normal path
-         * produced — unread state, threads and all.
+         * produced — unread state, threads and all. [suggested] follows the pinned rows, matching
+         * RN's favorites-then-recents order; a pinned channel is never also suggested.
          */
         private fun hoistPinnedChannels(
             items: MutableList<ChannelListItem>,
+            suggested: MutableList<ChannelListItem>,
             guild: GuildInfo,
             selectedGuildId: Long,
         ): List<ChannelListItem> {
@@ -1132,9 +1176,11 @@ data class WidgetChannelListModel(
                 .filter { it.isFavorite }
                 .map { it.channelId }
                 .toSet()
-            val pinned = items.filter { it is ChannelListItemTextChannel && it.channel.id in pinnedIds }
+            fun ChannelListItem.isPinned() = this is ChannelListItemTextChannel && channel.id in pinnedIds
+            val pinned = items.filter { it.isPinned() } + suggested.filter { it.isPinned() }
             if (pinned.isNotEmpty()) {
                 items.removeAll(pinned)
+                suggested.removeAll(pinned)
                 dropEmptyCategories(items)
             }
 
@@ -1148,7 +1194,7 @@ data class WidgetChannelListModel(
                         ChannelListItemEventsSeparator(
                             isTop = true,
                             section = "pinned",
-                            tightBelow = pinned.isNotEmpty(),
+                            tightBelow = pinned.isNotEmpty() || suggested.isNotEmpty(),
                         ),
                     )
                 }
@@ -1162,6 +1208,19 @@ data class WidgetChannelListModel(
                         ),
                     )
                     addAll(pinned)
+                }
+                if (suggested.isNotEmpty()) {
+                    add(
+                        ChannelListItemHeader(
+                            id = SUGGESTED_CHANNELS_HEADER_ID,
+                            textResId = R.string.manticord_channel_list_suggested,
+                            ableToManageChannel = false,
+                            selectedGuildId = selectedGuildId,
+                        ),
+                    )
+                    addAll(suggested)
+                }
+                if (pinned.isNotEmpty() || suggested.isNotEmpty()) {
                     add(ChannelListItemEventsSeparator(isTop = false, section = "pinned"))
                 }
             }
@@ -1325,6 +1384,7 @@ data class WidgetChannelListModel(
 
         /** The reference hub row shows at most five new servers. */
         private const val PINNED_CHANNELS_HEADER_ID = -2L
+        private const val SUGGESTED_CHANNELS_HEADER_ID = -3L
 
         /** Where the guild's own entries stop and its channels begin. */
         private val CHANNEL_LIST_BODY_TYPES = setOf(
