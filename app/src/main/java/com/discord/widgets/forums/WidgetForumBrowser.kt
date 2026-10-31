@@ -166,7 +166,10 @@ class WidgetForumBrowser : AppFragment(R.layout.widget_forum_browser) {
                     binding.recyclerView.visibility = View.VISIBLE
                     adapterItems.clear()
                     adapterItems.addAll(items)
-                    adapter.setData(items)
+                    // Posts with new activity land above the first row, and RecyclerView keeps its
+                    // anchor on the old row, so a forum left alone for a while opened far down.
+                    val atTop = !binding.recyclerView.canScrollVertically(-1)
+                    adapter.setData(items) { if (atTop) _binding?.recyclerView?.scrollToPosition(0) }
                     configureScrolling(state)
                 }
             }

@@ -48,7 +48,7 @@ class WidgetForumBrowserAdapter(
         }
     }
 
-    fun setData(items: List<ForumBrowserItem>) = submitList(items)
+    fun setData(items: List<ForumBrowserItem>, onCommitted: Runnable? = null) = submitList(items, onCommitted)
 
     override fun getItemViewType(position: Int) = getItem(position).type
 
