@@ -53,6 +53,7 @@ import com.discord.widgets.friends.EmptyFriendsStateView
 import com.discord.widgets.hubs.events.WidgetHubEventsPage
 import com.discord.widgets.guilds.onboarding.WidgetChannelsAndRoles
 import com.discord.widgets.message_requests.WidgetMessageRequests
+import com.discord.widgets.search.WidgetSearch
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.views.VitoImageView
@@ -262,6 +263,7 @@ class WidgetChannelsList : AppFragment(R.layout.widget_channels_list) {
             )
         }
         adapter.onViewGuildScheduledEvents = ::showGuildScheduledEvents
+        adapter.onSearchGuild = { guildId -> WidgetSearch.launchForGuild(guildId, requireContext()) }
         adapter.onViewGuildScheduledEventDetails = { eventId ->
             ChannelListNavigation.showGuildScheduledEventDetails(this, eventId)
         }

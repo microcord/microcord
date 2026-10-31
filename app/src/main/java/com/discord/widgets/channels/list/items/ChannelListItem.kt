@@ -8,7 +8,7 @@ import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
  * [type] is returned verbatim as the RecyclerView view type, so the constants below are the
  * contract between the model builder ([com.discord.widgets.channels.list.WidgetChannelListModel])
  * and the adapter ([com.discord.widgets.channels.list.WidgetChannelsListAdapter]). The numbering
- * is sparse because types 4, 5 and 10 were retired; do not renumber.
+ * is sparse because types 4, 5, 10 and 19 were retired; do not renumber.
  */
 interface ChannelListItem : MGRecyclerDataPayload {
 
@@ -36,10 +36,10 @@ interface ChannelListItem : MGRecyclerDataPayload {
         const val TYPE_STAGE_AUDIENCE_COUNT = 16
         const val TYPE_DIRECTORY = 17
         const val TYPE_ADD_SERVER = 18
-        const val TYPE_GUILD_SCHEDULED_EVENTS = 19
         const val TYPE_HUB_INVITE = 20
         const val TYPE_GUILD_ROLE_SUBSCRIPTIONS_OVERVIEW = 21
         const val TYPE_GUILD_JOIN_REQUEST = 22
         const val TYPE_GUILD_ONBOARDING = 23
+        const val TYPE_GUILD_ACTIONS = 24
     }
 }

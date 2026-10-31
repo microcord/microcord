@@ -28,6 +28,8 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.api.activity.ActivityType
+import com.discord.databinding.WidgetChannelsListItemGuildActionsBinding
+import com.discord.databinding.WidgetChannelsListItemGuildOnboardingBinding
 import com.discord.databinding.WidgetChannelsListItemVoiceUserBinding
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDMRecipient
@@ -88,7 +90,8 @@ import com.discord.widgets.channels.list.items.ChannelListItemCategory
 import com.discord.widgets.channels.list.items.ChannelListItemDirectory
 import com.discord.widgets.channels.list.items.ChannelListItemGuildJoinRequest
 import com.discord.widgets.servers.member_verification.MemberVerificationPendingViewModel
-import com.discord.widgets.channels.list.items.ChannelListItemGuildScheduledEvents
+import com.discord.widgets.channels.list.items.ChannelListItemGuildActions
+import com.discord.widgets.channels.list.items.ChannelListItemGuildOnboarding
 import com.discord.widgets.channels.list.items.ChannelListItemEventsSeparator
 import com.discord.widgets.channels.list.items.ChannelListItemHeader
 import com.discord.widgets.channels.list.items.ChannelListItemInvite
@@ -179,6 +182,9 @@ class WidgetChannelsListAdapter(
 
     var onViewGuildScheduledEvents: (Guild) -> Unit = {}
 
+    /** The search pill in the guild actions row. */
+    var onSearchGuild: (guildId: Long) -> Unit = {}
+
     var onViewGuildRoleSubscriptions: () -> Unit = {}
     var onViewGuildOnboarding: () -> Unit = {}
 
@@ -247,8 +253,8 @@ class WidgetChannelsListAdapter(
             ItemChannelDirectory(R.layout.widget_channels_list_item_directory, this)
         ChannelListItem.TYPE_ADD_SERVER ->
             ItemChannelAddServer(R.layout.widget_channels_list_item_directory, this)
-        ChannelListItem.TYPE_GUILD_SCHEDULED_EVENTS ->
-            ItemGuildScheduledEvents(R.layout.widget_channels_list_item_guild_scheduled_events, this)
+        ChannelListItem.TYPE_GUILD_ACTIONS ->
+            ItemGuildActions(R.layout.widget_channels_list_item_guild_actions, this)
         // The hub invite reuses the directory row rather than the standalone invite layout.
         ChannelListItem.TYPE_HUB_INVITE ->
             ItemInvite(R.layout.widget_channels_list_item_directory, this)
@@ -1511,37 +1517,49 @@ class WidgetChannelsListAdapter(
         @LayoutRes layoutResId: Int,
         adapter: WidgetChannelsListAdapter,
     ) : Item(layoutResId, adapter) {
+        private val binding = WidgetChannelsListItemGuildOnboardingBinding.bind(itemView)
+
         init {
             itemView.setOnClickListener { adapter.onViewGuildOnboarding() }
-        }
-    }
-
-    class ItemGuildScheduledEvents(
-        @LayoutRes layoutResId: Int,
-        adapter: WidgetChannelsListAdapter,
-    ) : Item(layoutResId, adapter) {
-
-        private val root = itemView as ConstraintLayout
-        private val count: TextView =
-            itemView.findViewById(R.id.channels_list_item_guild_scheduled_event_count)
-        private var boundItem: ChannelListItemGuildScheduledEvents? = null
-
-        init {
-            root.setOnClickListener { boundItem?.let { adapter.onViewGuildScheduledEvents(it.guild) } }
         }
 
         override fun onConfigure(position: Int, data: ChannelListItem) {
             super.onConfigure(position, data)
-            val item = data as ChannelListItemGuildScheduledEvents
-            boundItem = item
-            count.visibility = if (item.data.isNotEmpty()) View.VISIBLE else View.GONE
-            count.text = item.data.size.toString()
-            root.setBackgroundAndKeepPadding(
-                ContextCompat.getDrawable(
-                    root.context,
-                    root.context.getThemedDrawableRes(R.attr.drawable_overlay_channels),
-                ),
+            val browseOnly = (data as ChannelListItemGuildOnboarding).browseOnly
+            binding.guildOnboardingChannelName.setText(
+                if (browseOnly) R.string.guild_onboarding_browse_channels else R.string.guild_onboarding_channels_and_roles,
             )
+            binding.guildOnboardingIcon.setImageResource(
+                if (browseOnly) R.drawable.ic_browse_channels_24dp else R.drawable.ic_settings_24dp,
+            )
+        }
+    }
+
+    class ItemGuildActions(
+        @LayoutRes layoutResId: Int,
+        adapter: WidgetChannelsListAdapter,
+    ) : Item(layoutResId, adapter) {
+        private val binding = WidgetChannelsListItemGuildActionsBinding.bind(itemView)
+        private var boundItem: ChannelListItemGuildActions? = null
+
+        init {
+            binding.channelsListGuildActionsSearch.setOnClickListener {
+                boundItem?.let { adapter.onSearchGuild(it.guild.id) }
+            }
+            binding.channelsListGuildActionsInvite.setOnClickListener {
+                boundItem?.let { adapter.onShareGuildInvite(it.guild.id) }
+            }
+            binding.channelsListGuildActionsEvents.setOnClickListener {
+                boundItem?.let { adapter.onViewGuildScheduledEvents(it.guild) }
+            }
+        }
+
+        override fun onConfigure(position: Int, data: ChannelListItem) {
+            super.onConfigure(position, data)
+            val item = data as ChannelListItemGuildActions
+            boundItem = item
+            binding.channelsListGuildActionsInvite.visibility = if (item.canInvite) View.VISIBLE else View.GONE
+            binding.channelsListGuildActionsEvents.visibility = if (item.showEvents) View.VISIBLE else View.GONE
         }
     }
 

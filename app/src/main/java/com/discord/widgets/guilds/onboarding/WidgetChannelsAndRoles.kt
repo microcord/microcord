@@ -26,6 +26,7 @@ import com.discord.databinding.WidgetGuildOnboardingOptionBinding
 import com.discord.models.domain.ModelNotificationSettings
 import com.discord.stores.StoreGuildOnboarding
 import com.discord.stores.StoreStream
+import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.rx.ui
 import rx.Observable
 
@@ -50,6 +51,8 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
         val last: Boolean = false,
         val option: GuildOnboardingPromptOption? = null,
         val onClick: (() -> Unit)? = null,
+        /** Jumps into the channel, as RN's Browse Channels rows do. */
+        val onOpen: (() -> Unit)? = null,
     )
 
     private var _binding: WidgetChannelsAndRolesBinding? = null
@@ -93,6 +96,9 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
                     tab = Tab.BROWSE
                     renderTabs()
                 }
+                // With nothing to customize this is RN's plain Browse Channels screen.
+                binding.tabs.visibility =
+                    if (it.onboarding.customizationPrompts.isEmpty() && !it.onboarding.loading) View.GONE else View.VISIBLE
                 renderRows()
             }
     }
@@ -218,7 +224,18 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
             first = first,
             last = last,
             onClick = { toggleChannels(listOf(channel), !selected, model) },
+            onOpen = { openChannel(channel) },
         )
+    }
+
+    private fun openChannel(channel: Channel) {
+        // Selecting a voice channel would join it; browsing should only open its chat.
+        if (channel.isGuildVocalChannel()) {
+            ChannelSelector.getInstance().openVocalChannelChat(channel)
+        } else {
+            ChannelSelector.getInstance().selectChannel(channel)
+        }
+        requireActivity().finish()
     }
 
     private fun toggleChannels(channels: List<Channel>, selected: Boolean, model: Model) {
@@ -331,6 +348,8 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
             binding.subtitle.visibility = if (row.subtitle == null) View.GONE else View.VISIBLE
             binding.checkbox.visibility = if (row.checked == null) View.GONE else View.VISIBLE
             binding.checkbox.isChecked = row.checked == true
+            binding.open.visibility = if (row.onOpen == null) View.GONE else View.VISIBLE
+            binding.open.setOnClickListener { row.onOpen?.invoke() }
             binding.icon.visibility = if (row.icon == null) View.GONE else View.VISIBLE
             row.icon?.let(binding.icon::setImageResource)
             binding.icon.imageTintList = android.content.res.ColorStateList.valueOf(

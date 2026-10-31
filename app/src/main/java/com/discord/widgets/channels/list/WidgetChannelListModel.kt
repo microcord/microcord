@@ -48,8 +48,8 @@ import com.discord.widgets.channels.list.items.ChannelListItemDirectory
 import com.discord.widgets.channels.list.items.ChannelListItemEventsSeparator
 import com.discord.widgets.channels.list.items.ChannelListItemGuildJoinRequest
 import com.discord.widgets.channels.list.items.ChannelListItemGuildRoleSubscriptionsOverview
+import com.discord.widgets.channels.list.items.ChannelListItemGuildActions
 import com.discord.widgets.channels.list.items.ChannelListItemGuildOnboarding
-import com.discord.widgets.channels.list.items.ChannelListItemGuildScheduledEvents
 import com.discord.widgets.channels.list.items.ChannelListItemInvite
 import com.discord.widgets.channels.list.items.ChannelListItemMfaNotice
 import com.discord.widgets.channels.list.items.ChannelListItemPrivate
@@ -770,13 +770,21 @@ data class WidgetChannelListModel(
             guild.guild?.let { models ->
                 val hasEvents = guildScheduledEvents.isNotEmpty()
                 val canCreate = models.hasFeature(GuildFeature.COMMUNITY) && canCreateAnyEvent
-                if (hasEvents || canCreate) {
-                    items.add(ChannelListItemGuildScheduledEvents(guildScheduledEvents, models))
-                }
-                if (models.hasFeature(GuildFeature.GUILD_ONBOARDING_HAS_PROMPTS) ||
-                    models.hasFeature(GuildFeature.GUILD_ONBOARDING)
-                ) {
-                    items.add(ChannelListItemGuildOnboarding)
+                items.add(
+                    ChannelListItemGuildActions(
+                        guild = models,
+                        canInvite = guild.ableToInstantInvite,
+                        showEvents = hasEvents || canCreate,
+                    ),
+                )
+                // RN offers channel browsing on every community server, and calls it Channels &
+                // Roles only when onboarding has prompts to customize.
+                if (models.hasFeature(GuildFeature.COMMUNITY)) {
+                    items.add(
+                        ChannelListItemGuildOnboarding(
+                            browseOnly = !models.hasFeature(GuildFeature.GUILD_ONBOARDING_HAS_PROMPTS),
+                        ),
+                    )
                 }
             }
 
@@ -1194,7 +1202,10 @@ data class WidgetChannelListModel(
                         ChannelListItemEventsSeparator(
                             isTop = true,
                             section = "pinned",
-                            tightBelow = pinned.isNotEmpty() || suggested.isNotEmpty(),
+                            // What follows (a section header or a category) brings its own top
+                            // spacing; the separator's gap on top of it left a hole under the
+                            // guild rows.
+                            tightBelow = true,
                         ),
                     )
                 }

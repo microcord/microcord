@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RN's guild header actions: search the server, invite people, open the events list. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp"
+    style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+    <LinearLayout
+        android:id="@+id/channels_list_guild_actions_search"
+        android:layout_width="0dp"
+        android:layout_height="40dp"
+        android:layout_weight="1"
+        android:background="@drawable/drawable_channels_list_guild_action"
+        android:foreground="?attr/bg_pressed_highlight"
+        android:gravity="center"
+        android:contentDescription="@string/search"
+        style="@style/UiKit.ViewGroup.LinearLayout.Horizontal">
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="6dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_search_16dp"
+            app:tint="?attr/colorInteractiveNormal" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:importantForAccessibility="no"
+            android:text="@string/search"
+            android:textColor="?attr/colorInteractiveNormal"
+            style="@style/UiKit.TextView.Semibold" />
+    </LinearLayout>
+    <ImageView
+        android:id="@+id/channels_list_guild_actions_invite"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
+        android:padding="9dp"
+        android:background="@drawable/drawable_channels_list_guild_action"
+        android:foreground="?attr/bg_pressed_highlight"
+        android:contentDescription="@string/invite_people"
+        android:src="@drawable/ic_guild_invite_24dp"
+        app:tint="?attr/colorInteractiveNormal" />
+    <ImageView
+        android:id="@+id/channels_list_guild_actions_events"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="8dp"
+        android:padding="9dp"
+        android:background="@drawable/drawable_channels_list_guild_action"
+        android:foreground="?attr/bg_pressed_highlight"
+        android:contentDescription="@string/guild_events"
+        android:src="@drawable/ic_event_24dp"
+        app:tint="?attr/colorInteractiveNormal" />
+</LinearLayout>
