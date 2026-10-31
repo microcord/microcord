@@ -164,21 +164,15 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         // The video surface swallows touches, so it needs the same tap handler as the container.
         binding.mediaPlayerView.videoSurfaceView?.setOnClickListener { onMediaClick() }
-        var videoTouchDownX = 0f
-        var videoTouchDownY = 0f
+        // Touches outside the surface (the letterbox bars) go to the gallery page underneath, so
+        // they can swipe; that page's own tap listener toggles the chrome, so toggling here as well
+        // ran it twice and snapped the controls back mid-animation.
         binding.mediaPlayerView.setOnTouchListener { _, event ->
             if (gallery.isEmpty()) return@setOnTouchListener false
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                videoTouchDownX = event.x
-                videoTouchDownY = event.y
-            }
             MotionEvent.obtain(event).also { forwarded ->
                 binding.mediaGallery.dispatchTouchEvent(forwarded)
                 forwarded.recycle()
             }
-            if (event.actionMasked == MotionEvent.ACTION_UP &&
-                hypot((event.x - videoTouchDownX).toDouble(), (event.y - videoTouchDownY).toDouble()) < 20.0
-            ) onMediaClick()
             true
         }
         binding.mediaContainer.canStartGesture = { !isImageZoomed() }
