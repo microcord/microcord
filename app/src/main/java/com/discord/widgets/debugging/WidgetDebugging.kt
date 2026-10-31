@@ -2,6 +2,8 @@ package com.discord.widgets.debugging
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -313,7 +315,35 @@ internal fun deviceInfo(context: Context): String {
 internal fun debugHeader(context: Context): List<String> = listOf(
     deviceInfo(context),
     "X-Super-Properties: ${AnalyticSuperProperties.superPropertiesString}",
+    recentProcessExits(context),
 )
+
+/**
+ * Why the last few processes ended. A low-memory kill leaves no line in the app's own logcat, so
+ * without this it is indistinguishable from a native crash in a report.
+ */
+private fun recentProcessExits(context: Context): String {
+    if (android.os.Build.VERSION.SDK_INT < 30) return "Recent exits: unavailable before Android 11"
+    val exits = runCatching {
+        context.getSystemService(ActivityManager::class.java)?.getHistoricalProcessExitReasons(null, 0, 3)
+    }.getOrNull().orEmpty()
+    if (exits.isEmpty()) return "Recent exits: none recorded"
+    return exits.joinToString(separator = System.lineSeparator(), prefix = "Recent exits:" + System.lineSeparator()) {
+        val reason = when (it.reason) {
+            ApplicationExitInfo.REASON_LOW_MEMORY -> "low memory"
+            ApplicationExitInfo.REASON_CRASH -> "crash"
+            ApplicationExitInfo.REASON_CRASH_NATIVE -> "native crash"
+            ApplicationExitInfo.REASON_ANR -> "ANR"
+            ApplicationExitInfo.REASON_SIGNALED -> "signaled"
+            ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "excessive resource usage"
+            ApplicationExitInfo.REASON_USER_REQUESTED -> "user requested"
+            ApplicationExitInfo.REASON_EXIT_SELF -> "exited itself"
+            else -> "reason ${it.reason}"
+        }
+        "  ${java.util.Date(it.timestamp)}: $reason (status ${it.status}, importance ${it.importance}, " +
+            "pss ${it.pss / 1024} MB, rss ${it.rss / 1024} MB) ${it.description.orEmpty()}"
+    }
+}
 
 internal fun debugLogExport(
     logs: List<AppLog.LoggedItem>,
