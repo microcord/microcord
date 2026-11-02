@@ -1,7 +1,12 @@
 package com.discord.widgets.settings.developer
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,6 +31,7 @@ import com.discord.utilities.rx.ui
 import com.discord.widgets.hubs.RadioSelectorItem
 import com.discord.widgets.hubs.RadioSelectorItems
 import com.discord.widgets.hubs.WidgetRadioSelectorBottomSheet
+import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.settings.WidgetSettingsBotUiKit
 import com.discord.widgets.settings.WidgetSettingsThemeComponentGallery
 import com.hammerandchisel.libdiscord.Discord
@@ -141,6 +147,37 @@ class WidgetSettingsDeveloper : AppFragment(R.layout.widget_settings_developer) 
             StoreStream.clearCaches()
             AppToast.show(requireContext(), "Caches cleared, reconnecting")
         }
+        binding.developerSettingsCopyToken.setOnClickListener { confirmCopyToken() }
+    }
+
+    private fun confirmCopyToken() = WidgetNoticeDialog.show(
+        fragmentManager = parentFragmentManager,
+        headerText = "Copy your token?",
+        bodyText = "Never give your token to anyone. Anyone who has it is logged in as you: they can " +
+            "read your messages, send messages, join servers and change your settings, and your " +
+            "password and 2FA do not stop them. Discord staff will never ask for it, and anyone " +
+            "asking you to paste it somewhere is trying to steal your account.\n\n" +
+            "If it ever leaks, change your password to sign out every session.",
+        okText = "Copy Token",
+        cancelText = getString(R.string.cancel),
+        dialogTheme = R.attr.notice_theme_positive_red,
+        listenerMap = mapOf(R.id.notice_ok to { _ -> copyToken() }),
+    )
+
+    private fun copyToken() {
+        val context = context ?: return
+        val token = StoreStream.getAuthentication().getAuthState()?.token
+        if (token.isNullOrEmpty()) {
+            AppToast.show(context, "Not logged in")
+            return
+        }
+        val clip = ClipData.newPlainText("", token)
+        // Keeps the token out of the clipboard preview Android 13+ shows on copy.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        }
+        (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(clip)
+        AppToast.show(context, "Token copied")
     }
 
     override fun onDestroyView() {
