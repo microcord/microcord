@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
@@ -48,6 +49,7 @@ import com.discord.utilities.intent.LinkParseResult
 import com.discord.utilities.developer.DeveloperSettings
 import com.discord.utilities.display.setMaximumRefreshRate
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
 import com.discord.utilities.notifications.NotificationRenderer
@@ -227,6 +229,7 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         // `drawUnderSystemBars`, which sets `fitsSystemWindows` on each fragment root.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
+        RoleColors.nameBackground = ThemedColor.resolve(this, R.attr.colorBackgroundPrimary, Color.TRANSPARENT)
         supportFragmentManager.registerFragmentLifecycleCallbacks(noticeFragmentCallbacks, true)
         try {
             binding = ActivityAppBinding.inflate(layoutInflater)

@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.adapter
 
+import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.text.Spannable
 import android.text.style.BackgroundColorSpan
@@ -75,7 +76,7 @@ class WidgetChatListAdapterItemAutoModSystemMessageEmbed(
             .filter { it.id in memberRoles && it.color != 0 }
             .maxWithOrNull(compareBy<com.discord.api.role.GuildRole>({ it.position }, { it.id }))
         val defaultColor = ThemedColor.resolve(binding.root.context, R.attr.colorHeaderPrimary)
-        val roleColor = coloredRole?.color ?: defaultColor
+        val roleColor = coloredRole?.color?.let { RoleColors.forName(it or Color.BLACK) } ?: defaultColor
         binding.username.setTextColor(if (roleColorMode == RoleColorMode.NAMES) roleColor else defaultColor)
         binding.roleDot.apply {
             visibility = if (coloredRole == null || roleColorMode == RoleColorMode.NONE) View.GONE else View.VISIBLE

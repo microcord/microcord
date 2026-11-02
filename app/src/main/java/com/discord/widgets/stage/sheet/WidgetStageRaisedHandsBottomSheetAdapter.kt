@@ -12,6 +12,7 @@ import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.stores.StoreVoiceParticipants
 import com.discord.utilities.SnowflakeUtils
+import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
@@ -89,7 +90,7 @@ class WidgetStageRaisedHandsBottomSheetAdapter(
             name.text = voiceUser.displayName
             // A member's role colour only applies when they actually have one; opaque black is
             // the "no colour" sentinel and must not override the theme.
-            item.member?.color?.takeIf { it != ROLE_COLOR_UNSET }?.let(name::setTextColor)
+            item.member?.color?.takeIf { it != ROLE_COLOR_UNSET }?.let { name.setTextColor(RoleColors.forName(it)) }
 
             memberInfo.text = getParticipantMemberInfo(memberInfo.context, item)
         }

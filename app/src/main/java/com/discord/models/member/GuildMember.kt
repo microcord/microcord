@@ -102,7 +102,7 @@ data class GuildMember(
 
         @JvmStatic
         fun getColor(@ColorInt color: Int, @ColorInt defaultColor: Int) =
-            if (color == Color.BLACK) defaultColor else color
+            if (color == Color.BLACK) defaultColor else RoleColors.forName(color)
 
         @JvmStatic
         fun compareUserNames(

@@ -84,7 +84,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             configureGuildTag(data.primaryGuild)
             configureTag(data.isBot, data.tagText ?: R.string.bot_tag_bot, data.tagVerified)
             val roleColor = data.color?.takeUnless { it == Color.BLACK || it == 0 }
-            setUsernameColor(roleColor.takeIf { RoleColors.mode() == RoleColorMode.NAMES }
+            setUsernameColor(roleColor.takeIf { RoleColors.mode() == RoleColorMode.NAMES }?.let(RoleColors::forName)
                 ?: ColorCompat.getThemedColor(context, R.attr.primary_000))
             // Font only: a member's role colour is what a moderator reads this list for, so the
             // reference leaves it in place rather than overpainting it with the name style.
