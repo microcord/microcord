@@ -62,6 +62,13 @@ class InlineMediaView @JvmOverloads constructor(
     private var featureTag = ""
     private var viewParams: ViewParams? = null
 
+    /**
+     * The player reports buffering on every start, even from cache, where it is ready a few frames
+     * later; the spinner only appears if that runs past [LOADING_INDICATOR_DELAY_MS] instead of
+     * flashing over every cached GIF.
+     */
+    private val showLoadingIndicator = Runnable { binding.inlineMediaLoadingIndicator.visibility = View.VISIBLE }
+
     init {
         addOnAttachStateChangeListener(this)
     }
@@ -185,7 +192,7 @@ class InlineMediaView @JvmOverloads constructor(
             player.setVolume(1f)
             player.play(mediaSource, view)
             binding.inlineMediaPlayButton.visibility = View.GONE
-            binding.inlineMediaLoadingIndicator.visibility = View.VISIBLE
+            showLoadingIndicatorSoon()
         }
     }
 
@@ -216,9 +223,9 @@ class InlineMediaView @JvmOverloads constructor(
         when (event) {
             AppMediaPlayer.Event.Ready -> {
                 binding.inlineMediaImagePreview.visibility = if (shouldAutoPlay(params)) View.GONE else View.VISIBLE
-                binding.inlineMediaLoadingIndicator.visibility = View.GONE
+                hideLoadingIndicator()
             }
-            AppMediaPlayer.Event.Buffering -> binding.inlineMediaLoadingIndicator.visibility = View.VISIBLE
+            AppMediaPlayer.Event.Buffering -> showLoadingIndicatorSoon()
             AppMediaPlayer.Event.Playing -> {
                 binding.inlineMediaVolumeToggle.visibility =
                     if (params.embedType == null || params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
@@ -241,7 +248,7 @@ class InlineMediaView @JvmOverloads constructor(
         binding.inlineMediaImagePreview.visibility = View.VISIBLE
         playerView?.visibility = if (params.progressiveMediaUri != null && shouldAutoPlay(params)) View.VISIBLE else View.GONE
         binding.inlineMediaVolumeToggle.visibility = View.GONE
-        binding.inlineMediaLoadingIndicator.visibility = View.GONE
+        hideLoadingIndicator()
         binding.inlineMediaPlayButton.visibility = if (params.embedType == EmbedType.VIDEO) View.VISIBLE else View.GONE
         binding.inlineMediaGifIndicator.visibility = if (isAnimated(params) && !shouldAutoPlay(params)) View.VISIBLE else View.GONE
     }
@@ -252,7 +259,19 @@ class InlineMediaView @JvmOverloads constructor(
         appMediaPlayer = null
     }
 
+    private fun showLoadingIndicatorSoon() {
+        if (binding.inlineMediaLoadingIndicator.visibility == View.VISIBLE) return
+        removeCallbacks(showLoadingIndicator)
+        postDelayed(showLoadingIndicator, LOADING_INDICATOR_DELAY_MS)
+    }
+
+    private fun hideLoadingIndicator() {
+        removeCallbacks(showLoadingIndicator)
+        binding.inlineMediaLoadingIndicator.visibility = View.GONE
+    }
+
     private fun clearPlayerAndSubscriptions() {
+        removeCallbacks(showLoadingIndicator)
         clearPlayer()
         subscriptions.unsubscribe()
         unsubscribeSignal.onNext(null)
@@ -271,4 +290,9 @@ class InlineMediaView @JvmOverloads constructor(
         val targetHeight: Int?,
         val autoPlayGifs: Boolean,
     )
+
+    private companion object {
+        /** Long enough to cover a cached start, short enough that a real wait still shows it promptly. */
+        const val LOADING_INDICATOR_DELAY_MS = 300L
+    }
 }
