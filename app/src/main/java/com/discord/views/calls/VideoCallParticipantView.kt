@@ -1,12 +1,19 @@
 package com.discord.views.calls
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Point
 import android.util.AttributeSet
+import android.view.GestureDetector
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.ViewConfiguration
+import android.view.animation.DecelerateInterpolator
+import androidx.core.animation.doOnEnd
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -23,6 +30,7 @@ import com.discord.utilities.view.extensions.fadeBy
 import com.discord.views.VoiceUserView
 import com.discord.views.VitoImageView
 import org.webrtc.RendererCommon
+import kotlin.math.hypot
 
 class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") constructor(
     context: Context,
@@ -98,6 +106,58 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
     private var labelInitialized = false
     private var boundStreamId: Int? = null
     private var matchVideoOrientation = false
+
+    private var fitToFrame = false
+
+    /**
+     * The focused tile fits its picture in the draw, so its renderer fills the tile and zoom never
+     * resizes it; other fitted tiles shape the renderer to the picture instead.
+     */
+    private var drawFits = false
+
+    /** The incoming picture's size as shown (after rotation), once a frame has arrived. */
+    private var lastFrame: Point? = null
+
+    /** Zoom factor and centre, the centre as fractions of the unzoomed picture. */
+    private var zoom = 1f
+    private var zoomCenterX = 0.5f
+    private var zoomCenterY = 0.5f
+
+    /** Set once a touch turns into a pinch or pan; the tile's own tap and long press are cancelled. */
+    private var zoomGestureActive = false
+    private var downX = 0f
+    private var downY = 0f
+    private var lastX = 0f
+    private var lastY = 0f
+    private var lastFocusX = 0f
+    private var lastFocusY = 0f
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private val pinch = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            lastFocusX = detector.focusX
+            lastFocusY = detector.focusY
+            return true
+        }
+
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            // Moving both fingers together drags the picture as well as zooming it.
+            panBy(detector.focusX - lastFocusX, detector.focusY - lastFocusY)
+            zoomBy(detector.scaleFactor, detector.focusX, detector.focusY)
+            lastFocusX = detector.focusX
+            lastFocusY = detector.focusY
+            return true
+        }
+    })
+    private val doubleTap = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDoubleTap(event: MotionEvent): Boolean {
+            if (zoom <= 1f) return false
+            // The second tap is the reset; the tile must not also take it as a tap.
+            startZoomGesture(event)
+            animateZoomOut()
+            return true
+        }
+    }).apply { setIsLongpressEnabled(false) }
+    private var zoomOutAnimator: ValueAnimator? = null
 
     private val avatarBackground: View
     private val letterbox: View
@@ -238,12 +298,17 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         }
         boundStreamId = data?.streamId
         renderer.configure(data?.streamId, data?.scalingType, data?.insetScalingType, data?.mirror == true)
-        val fitToFrame = data?.scalingType == RendererCommon.ScalingType.SCALE_ASPECT_FIT
-        if (!fitToFrame) fitRendererTo(null)
+        fitToFrame = data?.scalingType == RendererCommon.ScalingType.SCALE_ASPECT_FIT
+        drawFits = data?.isFullScreen == true && fitToFrame
+        if (streamChanged) lastFrame = null
+        if (streamChanged || !drawFits) resetZoom()
+        if (drawFits || !fitToFrame) fitRendererTo(null)
+        renderer.setFitZoom(zoom.takeIf { drawFits }, zoomCenterX, zoomCenterY)
         renderer.onFrameRenderedListener = { frame: Point ->
+            lastFrame = frame.takeIf { it.x > 0 && it.y > 0 }
             // The renderer crops every frame to its own shape, so "fit" only shows the whole frame
             // once the view itself takes the frame's aspect ratio; the letterbox fills the rest.
-            fitRendererTo(frame.takeIf { fitToFrame && it.x > 0 && it.y > 0 })
+            if (!drawFits) fitRendererTo(lastFrame.takeIf { fitToFrame })
             renderer.visibility = VISIBLE
             loading.visibility = GONE
             letterbox.visibility = visible(preview.visibility != VISIBLE)
@@ -263,6 +328,128 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         configureQuality(data)
         configureLabel(data)
         configureCutout()
+    }
+
+    /**
+     * Pinch to zoom and drag to pan, only on the focused tile: in the grid a pinch would fight the
+     * scroll and every tile's tap. Once a touch becomes a zoom gesture the rest of it is kept from
+     * the tile, so it neither toggles the call controls nor opens the long-press sheet.
+     */
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val zoomable = drawFits && lastFrame != null && renderer.visibility == VISIBLE
+        if (!zoomable && !zoomGestureActive) return super.dispatchTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            // Touching the picture stops a double-tap zoom-out where it is.
+            zoomOutAnimator?.cancel()
+            zoomGestureActive = false
+            downX = event.x
+            downY = event.y
+            lastX = event.x
+            lastY = event.y
+            renderer.setHoldLastFrame(true)
+            // A zoomed picture owns one-finger drags; otherwise the screen behind it sees the drag
+            // first and takes it, and the pan never starts.
+            if (zoom > 1f) parent?.requestDisallowInterceptTouchEvent(true)
+        }
+        pinch.onTouchEvent(event)
+        doubleTap.onTouchEvent(event)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_POINTER_DOWN -> startZoomGesture(event)
+            MotionEvent.ACTION_POINTER_UP -> {
+                // The finger left on the screen carries on panning from where it is.
+                val remaining = if (event.actionIndex == 0) 1 else 0
+                lastX = event.getX(remaining)
+                lastY = event.getY(remaining)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (zoom > 1f && hypot(event.x - downX, event.y - downY) > touchSlop) startZoomGesture(event)
+                if (zoomGestureActive && event.pointerCount == 1) panBy(event.x - lastX, event.y - lastY)
+                lastX = event.x
+                lastY = event.y
+            }
+        }
+        val ended = event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL
+        if (ended && zoomOutAnimator?.isRunning != true) renderer.setHoldLastFrame(false)
+        if (!zoomGestureActive) return super.dispatchTouchEvent(event)
+        if (ended) zoomGestureActive = false
+        return true
+    }
+
+    private fun startZoomGesture(event: MotionEvent) {
+        if (zoomGestureActive) return
+        zoomGestureActive = true
+        parent?.requestDisallowInterceptTouchEvent(true)
+        val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
+        super.dispatchTouchEvent(cancel)
+        cancel.recycle()
+    }
+
+    /**
+     * The whole picture's on-screen size at the current zoom: fitted to the tile, then scaled. Null
+     * until a frame has arrived and the tile has been laid out.
+     */
+    private fun zoomedPictureSize(): Pair<Float, Float>? {
+        val frame = lastFrame ?: return null
+        if (width <= 0 || height <= 0) return null
+        val fitted = minOf(width.toFloat() / frame.x, height.toFloat() / frame.y) * zoom
+        return frame.x * fitted to frame.y * fitted
+    }
+
+    /** Scales by [factor] keeping the picture point under ([focusX], [focusY]) where it is. */
+    private fun zoomBy(factor: Float, focusX: Float, focusY: Float) {
+        val (oldWidth, oldHeight) = zoomedPictureSize() ?: return
+        zoom = (zoom * factor).coerceIn(1f, MAX_ZOOM)
+        val (newWidth, newHeight) = zoomedPictureSize() ?: return
+        val offsetX = focusX - width / 2f
+        val offsetY = focusY - height / 2f
+        zoomCenterX += offsetX / oldWidth - offsetX / newWidth
+        zoomCenterY += offsetY / oldHeight - offsetY / newHeight
+        applyZoom()
+    }
+
+    private fun panBy(dx: Float, dy: Float) {
+        if (zoom <= 1f) return
+        val (pictureWidth, pictureHeight) = zoomedPictureSize() ?: return
+        zoomCenterX -= dx / pictureWidth
+        zoomCenterY -= dy / pictureHeight
+        applyZoom()
+    }
+
+    /**
+     * Hands the zoom to the renderer, which draws the part of the zoomed picture that lands on the
+     * tile: it grows into the letterbox until it covers the tile. The centre is clamped here with
+     * the same rule the renderer uses, so a drag past the edge does not build up slack.
+     */
+    private fun applyZoom() {
+        val (pictureWidth, pictureHeight) = zoomedPictureSize() ?: return
+        val fractionX = minOf(1f, width / pictureWidth)
+        val fractionY = minOf(1f, height / pictureHeight)
+        // The shown part never leaves the picture; an axis the picture does not fill stays centred.
+        zoomCenterX = zoomCenterX.coerceIn(fractionX / 2f, 1f - fractionX / 2f)
+        zoomCenterY = zoomCenterY.coerceIn(fractionY / 2f, 1f - fractionY / 2f)
+        renderer.setFitZoom(zoom, zoomCenterX, zoomCenterY)
+    }
+
+    private fun animateZoomOut() {
+        zoomOutAnimator?.cancel()
+        zoomOutAnimator = ValueAnimator.ofFloat(zoom, 1f).apply {
+            duration = ZOOM_OUT_DURATION_MS
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                zoom = it.animatedValue as Float
+                applyZoom()
+            }
+            doOnEnd { renderer.setHoldLastFrame(false) }
+            start()
+        }
+    }
+
+    private fun resetZoom() {
+        zoomOutAnimator?.cancel()
+        renderer.setHoldLastFrame(false)
+        zoom = 1f
+        zoomCenterX = 0.5f
+        zoomCenterY = 0.5f
     }
 
     private fun fitRendererTo(frame: Point?) {
@@ -383,5 +570,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
 
     private companion object {
         const val FADE_DURATION_MS = 200L
+        const val MAX_ZOOM = 5f
+        const val ZOOM_OUT_DURATION_MS = 200L
     }
 }

@@ -4,7 +4,9 @@ import com.discord.api.premium.PremiumTier
 import com.discord.api.voice.state.VoiceState
 import com.discord.models.user.User
 import com.discord.stores.StoreVoiceParticipants
+import com.discord.views.calls.ZoomedDraw
 import com.discord.views.calls.rotatedFrameSize
+import com.discord.views.calls.zoomedDraw
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -24,6 +26,54 @@ class VoiceVideoLeafBehaviorTest {
         assertEquals(1920, rotatedFrameSize(1920, 1080, 0).first)
         assertEquals(1080, rotatedFrameSize(1920, 1080, 90).first)
         assertEquals(1920, rotatedFrameSize(1920, 1080, -180).first)
+    }
+
+    @Test
+    fun unzoomedLandscapeIsLetterboxedOnATallScreen() {
+        val draw = zoomedDraw(1920, 1080, 0, 0, 1080, 2400, 1f, 0.5f, 0.5f)
+        // Full width, centred vertically at its own shape.
+        assertEquals(0, draw.x)
+        assertEquals(896, draw.y)
+        assertEquals(1080, draw.width)
+        assertEquals(608, draw.height)
+        // Edge to edge of the drawn area is edge to edge of the picture.
+        assertEquals(0f, pictureX(draw, 1920, 1080, 1080, 2400, 0f), 1e-4f)
+        assertEquals(1f, pictureX(draw, 1920, 1080, 1080, 2400, 1f), 1e-4f)
+    }
+
+    @Test
+    fun zoomedPictureCoversTheScreenAndFollowsItsCentre() {
+        val draw = zoomedDraw(1920, 1080, 0, 0, 1080, 2400, 4f, 0.25f, 0.25f)
+        // 4x of a 1080-wide fit is 4320 wide and 2430 tall: it now covers the whole screen.
+        assertEquals(0, draw.x)
+        assertEquals(0, draw.y)
+        assertEquals(1080, draw.width)
+        assertEquals(2400, draw.height)
+        // A quarter of the width, centred on the requested x.
+        assertEquals(0.125f, pictureX(draw, 1920, 1080, 1080, 2400, 0f), 1e-4f)
+        assertEquals(0.375f, pictureX(draw, 1920, 1080, 1080, 2400, 1f), 1e-4f)
+        // Vertically the window is almost all of the picture, so its centre is held inside it.
+        val shownFraction = 2400f / 2430f
+        assertEquals(1f - shownFraction, pictureY(draw, 1920, 1080, 1080, 2400, 0f), 1e-4f)
+        assertEquals(1f, pictureY(draw, 1920, 1080, 1080, 2400, 1f), 1e-4f)
+    }
+
+    /**
+     * The picture coordinate WebRTC samples at drawn-area position [v]: the zoom window first, then
+     * the renderer's own fill crop for a viewport of that size.
+     */
+    private fun pictureX(draw: ZoomedDraw, frameW: Int, frameH: Int, viewW: Int, viewH: Int, v: Float): Float {
+        val frameAspect = frameW.toFloat() / frameH
+        val viewAspect = viewW.toFloat() / viewH
+        val fill = if (frameAspect > viewAspect) viewAspect / frameAspect else 1f
+        return 0.5f + fill * (draw.scaleX * v + draw.offsetX - 0.5f)
+    }
+
+    private fun pictureY(draw: ZoomedDraw, frameW: Int, frameH: Int, viewW: Int, viewH: Int, v: Float): Float {
+        val frameAspect = frameW.toFloat() / frameH
+        val viewAspect = viewW.toFloat() / viewH
+        val fill = if (frameAspect > viewAspect) 1f else frameAspect / viewAspect
+        return 0.5f + fill * (draw.scaleY * v + draw.offsetY - 0.5f)
     }
 
     /**

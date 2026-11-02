@@ -3,6 +3,8 @@ package co.discord.media_engine
 import android.content.Context
 import android.util.AttributeSet
 import com.hammerandchisel.libdiscord.Discord
+import org.webrtc.EglBase
+import org.webrtc.GlRectDrawer
 import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoFrame
@@ -34,10 +36,13 @@ open class VideoStreamRenderer @JvmOverloads constructor(
         }
         streamIdentifier = streamId.orEmpty()
         if (streamIdentifier.isNotEmpty()) {
-            init(SharedEglBaseContext.getEglContext(), events)
+            init(SharedEglBaseContext.getEglContext(), events, EglBase.CONFIG_PLAIN, createDrawer())
             addSink(discord, streamIdentifier)
         }
     }
+
+    /** A fresh drawer per [init]; the renderer releases it with itself. Same default as WebRTC's. */
+    protected open fun createDrawer(): RendererCommon.GlDrawer = GlRectDrawer()
 
     fun attachToStream(
         sink: VideoOutputSink?,
@@ -58,7 +63,7 @@ open class VideoStreamRenderer @JvmOverloads constructor(
         }
         streamIdentifier = streamId.orEmpty()
         if (streamIdentifier.isNotEmpty()) {
-            init(SharedEglBaseContext.getEglContext(), events)
+            init(SharedEglBaseContext.getEglContext(), events, EglBase.CONFIG_PLAIN, createDrawer())
             addSink(setSink, streamIdentifier)
         }
     }
