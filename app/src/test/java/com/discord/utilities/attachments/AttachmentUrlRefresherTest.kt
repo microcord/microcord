@@ -49,6 +49,16 @@ class AttachmentUrlRefresherTest {
     }
 
     @Test
+    fun `a bare discord attachment link is signed before it leaves the app`() {
+        assertTrue(AttachmentUrlRefresher.needsSignature("https://cdn.discordapp.com/attachments/1/2/a.png", 0L))
+        assertTrue(AttachmentUrlRefresher.needsSignature("https://media.discordapp.net/attachments/1/2/a.png?width=10", 0L))
+        assertTrue(AttachmentUrlRefresher.needsSignature(signed, expiresAtMs + 1))
+        assertFalse(AttachmentUrlRefresher.needsSignature(signed, expiresAtMs - 2L * 60L * 60_000L))
+        // Someone else's host is never sent to Discord to be signed.
+        assertFalse(AttachmentUrlRefresher.needsSignature("https://example.com/attachments/1/2/a.png", 0L))
+    }
+
+    @Test
     fun `a malformed expiry is treated as unsigned rather than crashing`() {
         assertFalse(
             AttachmentUrlRefresher.isExpired(

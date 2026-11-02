@@ -38,6 +38,7 @@ import com.discord.app.appViewModels
 import com.discord.databinding.WidgetMediaBinding
 import com.discord.databinding.WidgetMediaGalleryPageBinding
 import com.discord.i18n.i18nFormat
+import com.discord.utilities.attachments.AttachmentUrlRefresher
 import com.discord.player.MediaSource
 import com.discord.player.MediaType
 import com.discord.utilities.embed.EmbedResourceUtils
@@ -610,12 +611,31 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     ) {
         val context = context ?: return
         when (menuItem.itemId) {
-            R.id.menu_media_browser -> UriHandler.handleOrUntrusted(context, sourceUri.toString())
+            R.id.menu_media_browser -> withSignedUrl(sourceUri.toString()) { UriHandler.handleOrUntrusted(context, it) }
             R.id.menu_media_download -> requestMediaDownload {
                 startDownload(context, downloadUri, title, titleSubtext)
             }
-            R.id.menu_media_share -> performChooserSendIntent(context, sourceUri.toString())
+            R.id.menu_media_share -> withSignedUrl(sourceUri.toString()) { performChooserSendIntent(context, it) }
         }
+    }
+
+    /**
+     * Hands [url] out only once the CDN will accept it outside the app. An embed's source is the link
+     * as it was pasted, often bare, and a long-open message's signature may have lapsed.
+     */
+    private fun withSignedUrl(url: String, onReady: (String) -> Unit) {
+        // The spinner may already belong to the media itself; it is only hidden again if shown here.
+        val indicator = bound.mediaLoadingIndicator
+        val showsSpinner = indicator.visibility != View.VISIBLE &&
+            AttachmentUrlRefresher.needsSignature(url, System.currentTimeMillis())
+        if (showsSpinner) indicator.visibility = View.VISIBLE
+        AttachmentUrlRefresher.refreshExpired(listOf(url), System.currentTimeMillis())
+            .onErrorReturn { mapOf(url to url) }
+            .ui(this)
+            .appSubscribe(errorClass = WidgetMedia::class.java) {
+                if (showsSpinner) indicator.visibility = View.GONE
+                onReady(it[url] ?: url)
+            }
     }
 
     private fun startDownload(context: Context, downloadUri: Uri, title: String?, description: String?) {

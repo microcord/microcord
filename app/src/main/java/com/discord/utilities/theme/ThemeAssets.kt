@@ -28,7 +28,6 @@ object ThemeAssets {
     private const val MAX_BYTES = 25 shl 20
     private const val HTTPS = "https://"
     private const val FILE = "file://"
-    private const val ATTACHMENT_EXPIRY = "ex="
     private const val PARALLEL_DOWNLOADS = 4
     private const val SIGN_BATCH = 50
 
@@ -138,10 +137,7 @@ object ThemeAssets {
      */
     private fun signAll(urls: List<String>): Map<String, String> {
         val now = System.currentTimeMillis()
-        val stale = urls.filter {
-            AttachmentUrlRefresher.isSignedAttachment(it) &&
-                (!it.contains(ATTACHMENT_EXPIRY) || AttachmentUrlRefresher.isExpired(it, now))
-        }
+        val stale = urls.filter { AttachmentUrlRefresher.needsSignature(it, now) }
         val api = RestAPI.apiOrNull
         val refreshed = if (stale.isEmpty() || api == null) emptyMap() else stale.chunked(SIGN_BATCH).flatMap { batch ->
             runCatching { api.refreshAttachmentUrls(RefreshAttachmentUrlsBody(batch)).toBlocking().first().refreshedUrls }

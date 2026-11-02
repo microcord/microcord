@@ -2,6 +2,7 @@ package com.discord.utilities.attachments
 
 import com.discord.api.attachment.RefreshAttachmentUrlsBody
 import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.restSubscribeOn
 import rx.Observable
 
 /**
@@ -45,6 +46,17 @@ object AttachmentUrlRefresher {
     fun isSignedAttachment(url: String): Boolean =
         SIGNED_PATH_PREFIXES.any { url.substringBefore('?').contains(it) }
 
+    /** Only Discord's own hosts are asked to sign a bare link; anyone else's URL stays private. */
+    private val CDN_HOSTS = listOf("https://cdn.discordapp.com/", "https://media.discordapp.net/")
+
+    /**
+     * Whether [url] has to be re-signed before it leaves the app: a lapsed link, or a bare Discord
+     * attachment link such as one pasted into chat, which the CDN rejects without a signature.
+     */
+    fun needsSignature(url: String, nowMs: Long): Boolean =
+        isExpired(url, nowMs) ||
+            isSignedAttachment(url) && expiryMs(url) == null && CDN_HOSTS.any { url.startsWith(it, ignoreCase = true) }
+
     /**
      * Read straight out of the query string rather than through `Uri`, so the rule stays pure
      * Kotlin — the Android parser is a stub off-device and would report every link as unsigned.
@@ -55,17 +67,18 @@ object AttachmentUrlRefresher {
         EXPIRY.find(url)?.groupValues?.get(1)?.toLongOrNull(radix = 16)?.times(1_000L)
 
     /**
-     * Re-signs whichever of [urls] have lapsed and returns every URL mapped to a usable one.
+     * Re-signs whichever of [urls] [needSignature][needsSignature] and returns every URL mapped to
+     * a usable one.
      *
-     * Unexpired and unsigned links are answered from the input without a request, so a screen full
-     * of fresh attachments costs nothing.
+     * Freshly signed and non-attachment links are answered from the input without a request, so a
+     * screen full of fresh attachments costs nothing.
      */
     fun refreshExpired(urls: List<String>, nowMs: Long): Observable<Map<String, String>> {
-        val expired = urls.distinct().filter { isExpired(it, nowMs) }
+        val expired = urls.distinct().filter { needsSignature(it, nowMs) }
         if (expired.isEmpty()) return Observable.just(urls.associateWith { it })
         val api = RestAPI.apiOrNull ?: return Observable.just(urls.associateWith { it })
         return Observable.from(expired.chunked(MAX_BATCH))
-            .concatMap { batch -> api.refreshAttachmentUrls(RefreshAttachmentUrlsBody(batch)) }
+            .concatMap { batch -> api.refreshAttachmentUrls(RefreshAttachmentUrlsBody(batch)).restSubscribeOn() }
             .toList()
             .map { responses ->
                 val refreshed = responses
