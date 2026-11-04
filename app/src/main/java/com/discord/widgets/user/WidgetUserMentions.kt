@@ -16,7 +16,10 @@ import com.discord.models.message.Message
 import com.discord.stores.StoreNavigation
 import com.discord.stores.StoreStream
 import com.discord.utilities.mg_recycler.MGRecyclerAdapter
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import com.discord.views.ThemedColor
+import com.discord.widgets.tabs.NavigationTab
 import com.discord.widgets.chat.bookmarks.WidgetMessageBookmarks
 import com.discord.widgets.chat.list.ThreadSpineItemDecoration
 import com.discord.widgets.chat.list.adapter.WidgetChatListAdapter
@@ -89,6 +92,14 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         adapter = mentionsAdapter
         viewModel.model?.let { mentionsAdapter.data = it }
         load()
+        // The tab lives for the whole session and `load` only pages backwards from the oldest
+        // mention held, so mentions received after the first fetch never appeared.
+        if (!isEmbedded) {
+            StoreStream.getTabsNavigation().observeSelectedTab().distinctUntilChanged().ui(this)
+                .appSubscribe(WidgetUserMentions::class.java) { selected ->
+                    if (selected == NavigationTab.MENTIONS) reloadFromTop()
+                }
+        }
     }
 
     override fun onViewBoundOrOnResume() {
@@ -104,9 +115,21 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
     override fun onDestroyView() {
         request?.unsubscribe()
         request = null
+        // The cancelled request will never report back, so its flag would stay set for good.
+        loading = false
         adapter?.dispose()
         adapter = null
         super.onDestroyView()
+    }
+
+    /** Starts over from the newest page. The first fetch is `load`'s job, so skip an empty list. */
+    private fun reloadFromTop() {
+        if (messages.isEmpty()) return
+        request?.unsubscribe()
+        messages.clear()
+        allLoaded = false
+        loading = false
+        load()
     }
 
     private fun load() {
