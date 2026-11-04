@@ -180,6 +180,14 @@ class EmbedResourceUtilsTest {
     }
 
     @Test
+    fun `a direct video file plays in the viewer instead of opening the browser`() {
+        val mp4 = EmbedVideo("https://vxreddit.com/redditvideo.mp4?video_url=x", null, 1, 1)
+        assertNull(externalOpenUrl(embed(EmbedType.VIDEO, video = mp4)))
+        val proxied = EmbedVideo("https://page", "https://images-ext-1.discordapp.net/external/h/https/a.b/c.webm", 1, 1)
+        assertNull(externalOpenUrl(embed(EmbedType.VIDEO, video = proxied)))
+    }
+
+    @Test
     fun `gifvs always animate, images only when the url is a gif`() {
         assertTrue(EmbedResourceUtils.isAnimated(EmbedType.GIFV, null))
         assertTrue(EmbedResourceUtils.isAnimated(EmbedType.IMAGE, "https://cdn/A.GIF"))

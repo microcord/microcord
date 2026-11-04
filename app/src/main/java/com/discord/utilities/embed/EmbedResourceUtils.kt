@@ -105,13 +105,23 @@ object EmbedResourceUtils {
     /**
      * Where tapping the embed's picture should take the user, or null to open the media viewer.
      *
-     * Video embeds open the source video; file embeds open the provider that served them.
+     * Video embeds that are a page player (YouTube and the like) open the source video; a direct
+     * media file plays in the viewer instead, as in the RN client. File embeds open the provider
+     * that served them.
      */
     fun MessageEmbed.getExternalOpenUrl(): String? = when (type) {
-        EmbedType.VIDEO -> video?.url
+        EmbedType.VIDEO -> if (video.isDirectMediaFile()) null else video?.url
         EmbedType.FILE -> provider?.url
         else -> null
     }
+
+    // The model carries no content type, so go by the file extension of the proxy or source URL.
+    private val DIRECT_VIDEO_EXTENSIONS = setOf("mp4", "webm", "mov", "m4v")
+
+    private fun EmbedVideo?.isDirectMediaFile(): Boolean =
+        listOfNotNull(this?.proxyUrl, this?.url).any { url ->
+            url.substringBefore('?').substringAfterLast('.').lowercase(Locale.ROOT) in DIRECT_VIDEO_EXTENSIONS
+        }
 
     /** True for media that moves: a GIFV, or an image whose URL is a `.gif`. */
     fun isAnimated(embedType: EmbedType?, previewImageUri: String?): Boolean = when (embedType) {
