@@ -20,7 +20,9 @@ import com.discord.utilities.feature.FeatureFlags
 object NicknameUtils {
 
     fun getNickname(guildId: Long?, channelId: Long?, userId: Long): String? {
-        if (guildId != null) return StoreStream.getGuilds().getMember(guildId, userId)?.identityNick()
+        // A private channel's `guildId` is 0, not null. Treating that as a guild skipped the
+        // friend-nickname branch for every caller that passes `channel.guildId` straight through.
+        if (guildId != null && guildId != 0L) return StoreStream.getGuilds().getMember(guildId, userId)?.identityNick()
         if (channelId != null) {
             val channel = StoreStream.getChannels().getChannel(channelId) ?: return null
             if (channel.isPrivate()) return StoreStream.getUserRelationships().getNickname(userId)
