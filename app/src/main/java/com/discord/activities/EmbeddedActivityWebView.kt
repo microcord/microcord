@@ -32,6 +32,7 @@ import com.discord.app.AppLog
 import com.discord.rpc.RpcCloseCodes
 import com.discord.rpc.RpcError
 import com.discord.rpc.RpcLog
+import com.discord.rpc.RpcOpcodes
 import com.discord.rpc.RpcErrors
 import com.discord.utilities.analytics.AnalyticsUtils
 import com.discord.rpc.RpcServer
@@ -269,8 +270,6 @@ class EmbeddedActivityWebView(
                 isIframeLoaded = true;
                 bindFrameWindow();
                 updateSafeAreaVars(insets);
-                // Every load is a new SDK instance; a stale socket is refused as already connected.
-                $BRIDGE_NAME.frameLoaded(${JSONObject.quote(bridgeSecret)});
               });
             </script>
             </body>
@@ -335,23 +334,22 @@ class EmbeddedActivityWebView(
 
     private inner class Bridge {
         @JavascriptInterface
-        fun frameLoaded(secret: String) {
-            if (secret != bridgeSecret || destroyed) return
-            post {
-                if (destroyed) return@post
-                transport.handleFrameUnmount(frameId)
-                transport.handleFrameMount(frameId)
-            }
-        }
-
-        @JavascriptInterface
         fun postMessage(secret: String, payload: String) {
             if (!acceptsBridgeMessage(secret, bridgeSecret, payload, destroyed)) return
             post {
                 if (destroyed) return@post
                 runCatching {
-                    transport.handleMessage(JSONTokener(payload).nextValue(), source, ::postToRpcClient)
-                }
+                    val message = JSONTokener(payload).nextValue()
+                    // The SDK handshakes once per instance, as soon as its script runs, which is
+                    // usually before the frame's `load` event. Resetting on `load` therefore killed
+                    // a connection that was already up and left the activity waiting forever. A
+                    // second handshake can only mean the page reloaded, so reset on that instead.
+                    if ((message as? JSONArray)?.opt(0) == RpcOpcodes.HANDSHAKE) {
+                        transport.handleFrameUnmount(frameId)
+                        transport.handleFrameMount(frameId)
+                    }
+                    transport.handleMessage(message, source, ::postToRpcClient)
+                }.onFailure { RpcLog.log("bridge message failed: $it") }
             }
         }
     }

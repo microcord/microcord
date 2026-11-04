@@ -87,8 +87,10 @@ class EmbeddedActivitiesContractsTest {
                 ),
             )
             server.enqueue(MockResponse().setResponseCode(204))
-            EmbeddedActivitySessionManager.start(api, 12, channel(type = 0), "session").toBlocking().single()
+            // `prepare` fetches the index alongside the shelf and hands it to `start`.
+            val index = api.commandIndex(12).toBlocking().single()
             assertEquals("/api/v9/applications/12/application-command-index", server.takeRequest().path)
+            EmbeddedActivitySessionManager.start(api, 12, channel(type = 0), "session", index).toBlocking().single()
             server.takeRequest().also {
                 assertEquals("/api/v9/interactions", it.path)
                 assertTrue(it.body.readUtf8().contains("\"source\":\"TEXT\""))
