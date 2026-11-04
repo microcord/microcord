@@ -41,6 +41,7 @@ import com.discord.api.channel.isGroup
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isHQDirectoryChannel
 import com.discord.api.channel.isMultiUserDM
+import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isSystemDM
 import com.discord.api.guild.GuildMaxVideoChannelUsers
 import com.discord.api.guildjoinrequest.ApplicationStatus
@@ -58,6 +59,7 @@ import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageParseState
 import com.discord.utilities.textprocessing.MessageRenderContext
 import com.discord.utilities.SnowflakeUtils
+import com.discord.utilities.channel.specialGuildChannelIcon
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.feature.DmListCustomization
 import com.discord.utilities.icon.IconUtils
@@ -448,12 +450,13 @@ class WidgetChannelsListAdapter(
             )
 
             hash.setImageResource(
-                when (item.channel.type) {
-                    Channel.GUILD_ANNOUNCEMENT -> announcementsIcon(item)
-                    Channel.GUILD_FORUM -> forumIcon(item)
-                    Channel.GUILD_MEDIA -> R.drawable.ic_image_library_24dp
-                    else -> hashIcon(item)
-                },
+                specialGuildChannelIcon(item.channel, item.isLocked)
+                    ?: when (item.channel.type) {
+                        Channel.GUILD_ANNOUNCEMENT -> announcementsIcon(item)
+                        Channel.GUILD_FORUM -> forumIcon(item)
+                        Channel.GUILD_MEDIA -> R.drawable.ic_image_library_24dp
+                        else -> hashIcon(item)
+                    },
             )
             hash.imageTintList = ColorStateList.valueOf(hashColor(item))
             typing.bindTyping(item.channel)
@@ -768,6 +771,7 @@ class WidgetChannelsListAdapter(
             val speakerIcon = when {
                 !canConnect -> R.drawable.ic_channel_lock_16dp
                 item.isNsfw -> R.drawable.ic_voice_nsfw
+                item.channel.isSpoilerChannel() -> R.drawable.ic_channel_voice_spoiler
                 item.isLocked -> R.drawable.ic_channel_voice_locked
                 else -> R.drawable.ic_channel_voice
             }

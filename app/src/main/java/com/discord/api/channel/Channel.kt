@@ -74,7 +74,9 @@ data class Channel(
         const val FLAG_PINNED = 2L
         const val FLAG_REQUIRE_TAG = 16L
         const val FLAG_HIDE_MEDIA_DOWNLOAD_OPTIONS = 32768L
+        const val FLAG_IS_MODERATOR_REPORT_CHANNEL = 524288L
         const val FLAG_IS_SPOILER_CHANNEL = 2097152L
+        const val FLAG_IS_GAME_INVITES_CHANNEL = 4194304L
     }
 }
 

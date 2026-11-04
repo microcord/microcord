@@ -79,6 +79,12 @@ fun Channel.isDirectory(): Boolean = type == Channel.DIRECTORY
 fun Channel.isSpoilerChannel(): Boolean =
     (flags ?: 0L) and Channel.FLAG_IS_SPOILER_CHANNEL != 0L
 
+fun Channel.isModeratorReportChannel(): Boolean =
+    (flags ?: 0L) and Channel.FLAG_IS_MODERATOR_REPORT_CHANNEL != 0L
+
+fun Channel.isGameInvitesChannel(): Boolean =
+    (flags ?: 0L) and Channel.FLAG_IS_GAME_INVITES_CHANNEL != 0L
+
 /** A plain guild text channel or a thread-only channel. */
 fun Channel.isGuildTextChannel(): Boolean =
     type == Channel.GUILD_TEXT || isThreadOnlyChannel()
