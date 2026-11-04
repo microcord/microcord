@@ -228,6 +228,11 @@ class MediaSinkWantsManager(
         private const val ANY = "any"
         private const val VIDEO_PIXEL_BUDGET = 1280 * 720
 
+        /**
+         * Lowest quality first. Both lookups take the *last* entry that fits, so the list has to
+         * climb: built from one participant upwards it runs 720p to 144p, which made a full-quality
+         * want resolve to the 144p / 150 kbps entry.
+         */
         private val LADDER: List<OrderedLadder> = buildList {
             val validRemainders = setOf(0.0, 4.0, 8.0, 10.0)
             val candidates = (1 until 4096).mapNotNull { height ->
@@ -258,7 +263,7 @@ class MediaSinkWantsManager(
                     previousWidth = candidate.first
                 }
             }
-        }
+        }.reversed()
 
         internal fun encodingQualityForWant(want: Int): MediaEngineConnection.EncodingQuality {
             val encodeQuality = EncodeQuality.forWant(want)

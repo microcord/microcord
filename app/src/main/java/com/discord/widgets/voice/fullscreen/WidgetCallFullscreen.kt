@@ -483,6 +483,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             R.menu.menu_call_fullscreen,
             onSelected = { item ->
                 when (item.itemId) {
+                    R.id.menu_call_switch_camera -> viewModel.switchCameraInputPressed()
                     R.id.menu_call_audio_output -> AudioOutputSelectionDialog.show(parentFragmentManager)
                     R.id.menu_call_invite ->
                         com.discord.widgets.voice.sheet.launchChannelInvite(this, state.callModel.channel, "Voice Call")
@@ -490,6 +491,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                 }
             },
             onConfigured = { menu ->
+                menu.findItem(R.id.menu_call_switch_camera).isVisible =
+                    WidgetCallFullscreenViewModel.MenuItem.SWITCH_CAMERA in state.menuItems
                 menu.findItem(R.id.menu_call_invite).isVisible = state.callModel.canInvite()
                 menu.findItem(R.id.menu_text_in_voice).apply {
                     isVisible = WidgetCallFullscreenViewModel.MenuItem.TEXT_IN_VOICE in state.menuItems
