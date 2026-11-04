@@ -8,9 +8,11 @@ import android.util.Patterns
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.discord.R
 import com.discord.api.message.Message
 import com.discord.api.message.attachment.MessageAttachment
@@ -28,8 +30,10 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.uri.UriHandler
+import com.discord.views.ThemedColor
 import com.discord.widgets.media.WidgetMedia
 import com.discord.widgets.media.MediaViewerContext
+import com.discord.widgets.media.mediaTilePreviewUrl
 import com.discord.widgets.media.mediaVideoPreviewUrl
 
 internal fun isDirectVideoUrl(url: String?): Boolean {
@@ -71,7 +75,11 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
     private var _binding: WidgetChannelContentBinding? = null
     private val binding get() = requireNotNull(_binding)
     private val states = Tab.entries.associateWith { TabState() }
-    private val adapter = Adapter(::open, ::jump)
+    private val adapters = Tab.entries.associateWith { Adapter(::open, ::jump) }
+    private val recyclers = HashMap<Tab, RecyclerView>()
+    private val pageCallback = object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) = showTab(Tab.entries[position])
+    }
     private var tab = Tab.MEDIA
     private var gridMode = false
     private val guildId get() = mostRecentIntent.getLongExtra(EXTRA_GUILD_ID, 0L)
@@ -93,50 +101,135 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
             requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(GRID_MODE, gridMode).apply()
             configureLayout()
         }
-        binding.channelContentRecycler.adapter = adapter
-        binding.channelContentRecycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                if (dy <= 0) return
-                val last = (recyclerView.layoutManager as? LinearLayoutManager)?.findLastVisibleItemPosition() ?: return
-                if (last >= adapter.itemCount - 4) load()
-            }
-        })
-        select(Tab.MEDIA)
+        binding.channelContentPager.adapter = PageAdapter()
+        // The pager grabs a touch after ~8 dp sideways however steep the gesture, so a fast, slightly
+        // diagonal scroll flipped the page. The paging slop is twice that, enough for the list to
+        // claim a vertical gesture first while a deliberate swipe still pages at once.
+        (binding.channelContentPager.getChildAt(0) as? RecyclerView)?.setScrollingTouchSlop(RecyclerView.TOUCH_SLOP_PAGING)
+        // Keep every page alive: switching tabs then never rebinds a list or loses its scroll position.
+        binding.channelContentPager.offscreenPageLimit = Tab.entries.size - 1
+        binding.channelContentPager.registerOnPageChangeCallback(pageCallback)
+        showTab(Tab.MEDIA)
     }
 
     override fun onDestroyView() {
-        binding.channelContentRecycler.adapter = null
+        binding.channelContentPager.unregisterOnPageChangeCallback(pageCallback)
+        binding.channelContentPager.adapter = null
+        recyclers.clear()
         _binding = null
         super.onDestroyView()
     }
 
+    /** A tab tap slides the pager there; [showTab] then follows from the page callback. */
     private fun select(value: Tab) {
+        binding.channelContentPager.setCurrentItem(value.ordinal, true)
+    }
+
+    /** The page that just became current: restyle the tabs and toggle, and load it on first view. */
+    private fun showTab(value: Tab) {
         tab = value
-        binding.channelContentMedia.isSelected = value == Tab.MEDIA
-        binding.channelContentFiles.isSelected = value == Tab.FILES
-        binding.channelContentLinks.isSelected = value == Tab.LINKS
-        binding.channelContentGridToggle.visibility = if (value == Tab.MEDIA) View.VISIBLE else View.GONE
-        configureLayout()
+        styleTab(binding.channelContentMedia, value == Tab.MEDIA)
+        styleTab(binding.channelContentFiles, value == Tab.FILES)
+        styleTab(binding.channelContentLinks, value == Tab.LINKS)
+        // Invisible, not gone: it balances the spacer opposite so the tabs stay centred.
+        binding.channelContentGridToggle.visibility = if (value == Tab.MEDIA) View.VISIBLE else View.INVISIBLE
+        updateToggle()
         val state = states.getValue(value)
-        adapter.submit(state.items, gridMode && value == Tab.MEDIA)
         renderState(state)
-        if (!state.loaded && !state.loading) load()
+        if (!state.loaded && !state.loading) load(value) else loadUntilFilled(value)
     }
 
+    /**
+     * Loading is otherwise driven by scrolling, but a page asks for 25 messages and filtering to
+     * media leaves far fewer tiles. If those don't fill the screen the list can't scroll, so nothing
+     * would ever ask for more: keep going until it can, or until the results run out.
+     */
+    private fun loadUntilFilled(value: Tab) {
+        val list = recyclers[value] ?: return
+        list.addOnLayoutChangeListener(object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(
+                v: View, left: Int, top: Int, right: Int, bottom: Int,
+                oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int,
+            ) {
+                list.removeOnLayoutChangeListener(this)
+                val state = states.getValue(value)
+                if (value == tab && list.height > 0 && state.loaded && state.canLoadMore && !state.loading &&
+                    !list.canScrollVertically(1)
+                ) {
+                    load(value)
+                }
+            }
+        })
+        list.requestLayout()
+    }
+
+    /** One page per tab: a list that pages in more results as it nears the end. */
+    private inner class PageAdapter : RecyclerView.Adapter<PageAdapter.Page>() {
+        inner class Page(val list: RecyclerView) : RecyclerView.ViewHolder(list) {
+            var pageTab = Tab.MEDIA
+        }
+
+        override fun getItemCount() = Tab.entries.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Page {
+            val density = parent.resources.displayMetrics.density
+            val list = RecyclerView(parent.context).apply {
+                layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                clipToPadding = false
+                setPadding((10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt(), 0)
+            }
+            val page = Page(list)
+            list.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy <= 0) return
+                    val last = (recyclerView.layoutManager as? LinearLayoutManager)?.findLastVisibleItemPosition() ?: return
+                    if (last >= adapters.getValue(page.pageTab).itemCount - 4) load(page.pageTab)
+                }
+            })
+            return page
+        }
+
+        override fun onBindViewHolder(holder: Page, position: Int) {
+            val value = Tab.entries[position]
+            holder.pageTab = value
+            recyclers[value] = holder.list
+            holder.list.adapter = adapters.getValue(value)
+            applyLayout(value)
+        }
+    }
+
+    /** Media is the one tab with a grid; the others are always lists. */
+    private fun applyLayout(value: Tab) {
+        val list = recyclers[value] ?: return
+        val grid = gridMode && value == Tab.MEDIA
+        list.layoutManager = if (grid) GridLayoutManager(context, 3) else LinearLayoutManager(context)
+        adapters.getValue(value).submit(states.getValue(value).items, grid)
+    }
+
+    /** The selected tab takes the link colour and an underline; the rest sit muted, as in the mobile client. */
+    private fun styleTab(view: TextView, selected: Boolean) {
+        view.isSelected = selected
+        view.setTextColor(ThemedColor.resolve(view.context, if (selected) R.attr.colorTextLink else R.attr.colorInteractiveNormal))
+    }
+
+    /** The button shows the layout a tap switches to, so it reads differently in each mode. */
+    private fun updateToggle() {
+        binding.channelContentGridToggle.setImageResource(if (gridMode) R.drawable.ic_channel_content_list else R.drawable.ic_channel_content_grid)
+        binding.channelContentGridToggle.contentDescription = getString(if (gridMode) R.string.list else R.string.grid)
+    }
+
+    /** Only the toggle rebuilds the media list's layout; changing tabs leaves each page as it was. */
     private fun configureLayout() {
-        val grid = gridMode && tab == Tab.MEDIA
-        binding.channelContentGridToggle.setText(if (grid) R.string.list else R.string.grid)
-        binding.channelContentRecycler.layoutManager = if (grid) GridLayoutManager(context, 3) else LinearLayoutManager(context)
-        adapter.submit(states.getValue(tab).items, grid)
+        updateToggle()
+        applyLayout(Tab.MEDIA)
     }
 
-    private fun load() {
-        val requestedTab = tab
+    private fun load(requestedTab: Tab = tab) {
         val state = states.getValue(requestedTab)
         if (state.loading || !state.canLoadMore) return
         val api = RestAPI.apiOrNull ?: return
         state.loading = true
-        renderState(state)
+        if (tab == requestedTab) renderState(state)
         val body = RestAPIParams.SearchTabs(
             tabs = mapOf(requestedTab.key to RestAPIParams.SearchTabs.Tab(
                 has = requestedTab.has,
@@ -171,9 +264,10 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
             state.canLoadMore = state.cursor != null && added.isNotEmpty()
             state.loading = false
             state.loaded = true
+            adapters.getValue(requestedTab).submit(state.items, gridMode && requestedTab == Tab.MEDIA)
             if (tab == requestedTab) {
-                adapter.submit(state.items, gridMode && requestedTab == Tab.MEDIA)
                 renderState(state)
+                loadUntilFilled(requestedTab)
             }
         }
     }
@@ -196,16 +290,16 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
                     embed.video?.let { video ->
                         val stream = video.proxyUrl ?: video.url ?: return@forEach
                         if (!isDirectVideoUrl(stream)) return@forEach
-                        val poster = embed.thumbnail?.proxyUrl ?: embed.thumbnail?.url ?: mediaVideoPreviewUrl(stream, video.width, video.height)
+                        val poster = embed.thumbnail?.proxyUrl ?: video.proxyUrl?.let { mediaVideoPreviewUrl(it, video.width, video.height) }
                         add(Item(stream, poster, embed.title, video = true, attachment = MessageAttachment(stream, 0, 0, stream, "video.${Uri.parse(stream).path?.substringAfterLast('.', "mp4")}", video.width, video.height, contentType = "video/mp4"), channelId = message.channelId, messageId = message.id, metadata = metadata))
                         return@forEach
                     }
                     embed.image?.url?.let { url ->
-                        val proxy = embed.image.proxyUrl ?: url
-                        add(Item(url, proxy, embed.title, attachment = MessageAttachment(url, 0, 0, proxy, "image.png", embed.image.width, embed.image.height, contentType = "image/png"), channelId = message.channelId, messageId = message.id, metadata = metadata))
+                        val proxy = embed.image.proxyUrl
+                        add(Item(url, proxy, embed.title, attachment = MessageAttachment(url, 0, 0, proxy ?: url, "image.png", embed.image.width, embed.image.height, contentType = "image/png"), channelId = message.channelId, messageId = message.id, metadata = metadata))
                     } ?: embed.thumbnail?.url?.let { url ->
-                        val proxy = embed.thumbnail.proxyUrl ?: url
-                        add(Item(url, proxy, embed.title, attachment = MessageAttachment(url, 0, 0, proxy, "image.png", embed.thumbnail.width, embed.thumbnail.height, contentType = "image/png"), channelId = message.channelId, messageId = message.id, metadata = metadata))
+                        val proxy = embed.thumbnail.proxyUrl
+                        add(Item(url, proxy, embed.title, attachment = MessageAttachment(url, 0, 0, proxy ?: url, "image.png", embed.thumbnail.width, embed.thumbnail.height, contentType = "image/png"), channelId = message.channelId, messageId = message.id, metadata = metadata))
                     }
                 }
             }
@@ -272,7 +366,7 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
 
         inner class Holder(private val binding: WidgetChannelContentItemBinding) : RecyclerView.ViewHolder(binding.root) {
             fun bind(item: Item, grid: Boolean) {
-                val tileSize = (binding.root.resources.displayMetrics.widthPixels - dp(40)) / 3
+                val tileSize = (binding.root.resources.displayMetrics.widthPixels - dp(34)) / 3
                 binding.root.layoutParams = (binding.root.layoutParams as RecyclerView.LayoutParams).apply {
                     width = if (grid) tileSize else ViewGroup.LayoutParams.MATCH_PARENT
                     height = if (grid) width else ViewGroup.LayoutParams.WRAP_CONTENT
@@ -287,12 +381,23 @@ class WidgetChannelContent : AppFragment(R.layout.widget_channel_content) {
                 binding.channelContentDetails.visibility = if (grid) View.GONE else View.VISIBLE
                 val avatar = item.viewerContext?.avatarUrl
                 binding.channelContentGridAvatar.visibility = if (grid && avatar != null) View.VISIBLE else View.GONE
+                // Only the avatar that is on screen: the other is hidden and would just decode too.
                 avatar?.let {
-                    MGImages.setImage(binding.channelContentAvatar, it)
-                    MGImages.setImage(binding.channelContentGridAvatar, it)
+                    MGImages.setImage(if (grid) binding.channelContentGridAvatar else binding.channelContentAvatar, it)
                 }
                 binding.channelContentAvatar.visibility = if (avatar == null) View.GONE else View.VISIBLE
-                item.previewUrl?.let { MGImages.setImage(binding.channelContentPreview, it) }
+                item.previewUrl?.let {
+                    // Decode at tile size, and keep GIFs still: dozens of animating tiles at full
+                    // resolution is what made a long scroll slow and then got the app killed.
+                    val metrics = binding.root.resources.displayMetrics
+                    MGImages.setImage(
+                        binding.channelContentPreview,
+                        mediaTilePreviewUrl(it, if (grid) tileSize * 2 else metrics.widthPixels),
+                        width = if (grid) tileSize else metrics.widthPixels,
+                        height = if (grid) tileSize else dp(180),
+                        autoPlayAnimations = false,
+                    )
+                }
                 binding.channelContentPlay.visibility = if (item.video) View.VISIBLE else View.GONE
                 binding.channelContentTitle.text = item.title ?: item.url
                 binding.channelContentMetadata.text = listOfNotNull(item.description, item.metadata).joinToString("\n")

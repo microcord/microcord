@@ -930,13 +930,13 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         }
 
         private fun launchGalleryItems(context: Context, items: List<MediaGalleryItem>, selectedIndex: Int, initialPositionMs: Long = 0L) {
-            val selected = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-            items.getOrNull(selected)?.let { item ->
+            val (window, selected) = galleryWindow(items, selectedIndex)
+            window.getOrNull(selected)?.let { item ->
                 presentMedia(
                     context,
                     intentFor(item.args, initialPositionMs)
                         .putExtra(INTENT_VIEWER_CONTEXT, item.viewerContext)
-                        .putExtra(INTENT_GALLERY, ArrayList(items))
+                        .putExtra(INTENT_GALLERY, ArrayList(window))
                         .putExtra(INTENT_GALLERY_INDEX, selected),
                 )
             }
@@ -977,6 +977,23 @@ data class MediaViewerContext(
     val avatarUrl: String?,
     val timestampMs: Long?,
 ) : Serializable
+
+/**
+ * The slice of [items] the viewer is handed, and the selected item's index within it.
+ *
+ * The gallery travels in the launch `Intent`, and a channel's Media tab can have hundreds of items
+ * loaded; serialised, that passed Binder's ~1 MB transaction limit and `startActivity` threw
+ * `TransactionTooLargeException`. Bounding it around the tapped item keeps the swipe-through that
+ * matters and the intent small.
+ */
+internal fun <T> galleryWindow(items: List<T>, selectedIndex: Int, max: Int = MAX_GALLERY_ITEMS): Pair<List<T>, Int> {
+    val selected = selectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
+    if (items.size <= max) return items to selected
+    val start = (selected - max / 2).coerceIn(0, items.size - max)
+    return items.subList(start, start + max) to selected - start
+}
+
+private const val MAX_GALLERY_ITEMS = 60
 
 internal data class MediaGalleryItem(
     val args: MediaLaunchArgs,
@@ -1040,6 +1057,24 @@ internal fun mediaVideoPreviewUrl(url: String, width: Int? = null, height: Int? 
         1280 to 720
     }
     return "$proxied${if ('?' in proxied) '&' else '?'}format=webp&width=${dimensions.first}&height=${dimensions.second}"
+}
+
+private val RESIZE_QUERY_PARAMS = setOf("width", "height", "format", "animated")
+
+/**
+ * A still no larger than [boxPx] on its long side, for a grid or list tile.
+ *
+ * The media tab used to bind each tile to the original attachment, so scrolling a long list decoded
+ * full-resolution photos and 720p video posters for ~110 dp squares and the process ran out of
+ * memory. Only Discord's own CDN hosts understand the resize parameters; any other URL is returned
+ * untouched and relies on the decoder's resize options instead.
+ */
+internal fun mediaTilePreviewUrl(url: String, boxPx: Int): String {
+    if (!url.startsWith("https://cdn.discordapp.com/") && !url.startsWith("https://media.discordapp.net/")) return url
+    val base = url.substringBefore('?').replace("https://cdn.discordapp.com/", "https://media.discordapp.net/")
+    val kept = url.substringAfter('?', "").split('&')
+        .filter { it.isNotEmpty() && it.substringBefore('=') !in RESIZE_QUERY_PARAMS }
+    return "$base?" + (kept + listOf("format=webp", "width=$boxPx", "height=$boxPx")).joinToString("&")
 }
 
 internal fun launchArgs(embed: MessageEmbed): MediaLaunchArgs {
