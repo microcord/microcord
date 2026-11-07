@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="@drawable/message_menu_tile_bg" android:padding="12dp" android:layout_width="@dimen/chat_input_emoji_size" android:layout_height="@dimen/chat_input_emoji_size" android:src="@drawable/ic_chat_list_actions_add_reaction" android:contentDescription="@string/emoji_popout_show_more_emojis" app:actualImageScaleType="fitCenter" app:tint="?attr/colorInteractiveNormal"/>

@@ -101,7 +101,7 @@ abstract class AppBottomSheet(
         bottomSheetBehavior?.addBottomSheetCallback(bottomSheetCallback)
         appLogger.logImpression()
         // Posted: a sheet's own setup runs after this, and may still be inflating scrollers.
-        view.post { BounceEdgeEffectFactory.installAll(view) }
+        if (bouncesOverscroll) view.post { BounceEdgeEffectFactory.installAll(view) }
     }
 
     override fun onResume() {
@@ -124,8 +124,17 @@ abstract class AppBottomSheet(
         super.onDestroyView()
     }
 
+    /**
+     * Whether scrollers in this sheet rubber-band at their edges. A sheet that is also dragged away
+     * (a long menu) turns it off, so a pull at the top moves the sheet instead of stretching the list.
+     */
+    protected open val bouncesOverscroll: Boolean get() = true
+
     /** Subscriptions created here are disposed automatically on pause. */
     open fun bindSubscriptions(compositeSubscription: CompositeSubscription) = Unit
+
+    /** The sheet's position as it is dragged: 0 at its collapsed height, 1 fully expanded. */
+    protected open fun onSheetSlide(slideOffset: Float) = Unit
 
     /** Reports [BottomSheetBehavior] state transitions. */
     open fun onStateChanged(state: Int) = Unit
@@ -177,7 +186,7 @@ abstract class AppBottomSheet(
     // region bottom sheet behaviour
 
     private val bottomSheetCallback = object : BottomSheetBehavior.BottomSheetCallback() {
-        override fun onSlide(bottomSheet: View, slideOffset: Float) = Unit
+        override fun onSlide(bottomSheet: View, slideOffset: Float) = onSheetSlide(slideOffset)
 
         override fun onStateChanged(bottomSheet: View, newState: Int) {
             this@AppBottomSheet.onStateChanged(newState)

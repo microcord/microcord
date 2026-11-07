@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.discord.views.VitoImageView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/emoji_iv" android:background="@drawable/message_menu_tile_bg" android:padding="12dp" android:layout_width="@dimen/chat_input_emoji_size" android:layout_height="@dimen/chat_input_emoji_size" app:actualImageScaleType="fitCenter"/>

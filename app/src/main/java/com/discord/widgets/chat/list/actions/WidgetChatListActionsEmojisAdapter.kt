@@ -6,7 +6,7 @@ import com.discord.models.domain.emoji.Emoji
 import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
 import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 
-class WidgetChatListActionsEmojisAdapter(recycler: RecyclerView) :
+class WidgetChatListActionsEmojisAdapter(recycler: RecyclerView, val modern: Boolean = false) :
     MGRecyclerAdapterSimple<EmojiItem>(recycler, deferredDiffs = false) {
     var onClickEmoji: (Emoji) -> Unit = {}
     var onClickMoreEmojis: () -> Unit = {}

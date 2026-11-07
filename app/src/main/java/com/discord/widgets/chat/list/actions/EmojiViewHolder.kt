@@ -9,7 +9,7 @@ import com.discord.views.VitoImageView
 
 class EmojiViewHolder(adapter: WidgetChatListActionsEmojisAdapter) :
     MGRecyclerViewHolder<WidgetChatListActionsEmojisAdapter, EmojiItem>(
-        R.layout.view_chat_list_actions_emoji_item,
+        if (adapter.modern) R.layout.view_chat_list_actions_emoji_item_modern else R.layout.view_chat_list_actions_emoji_item,
         adapter,
     ) {
     private val changeDetector = MGImages.DistinctChangeDetector()

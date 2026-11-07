@@ -60,6 +60,8 @@ object FeatureFlags {
     fun setMaximumRefreshRateEnabled(enabled: Boolean) = setEnabled(ClientSettings.maximumRefreshRate, enabled)
     fun folderIconOnlyEnabled() = enabled(ClientSettings.folderIconOnly)
     fun setFolderIconOnlyEnabled(enabled: Boolean) = setEnabled(ClientSettings.folderIconOnly, enabled)
+    fun legacyMessageMenuEnabled() = enabled(ClientSettings.legacyMessageMenu)
+    fun setLegacyMessageMenuEnabled(enabled: Boolean) = setEnabled(ClientSettings.legacyMessageMenu, enabled)
     fun readableRoleColorsEnabled() = enabled(ClientSettings.readableRoleColors)
     fun setReadableRoleColorsEnabled(enabled: Boolean) = setEnabled(ClientSettings.readableRoleColors, enabled)
     fun cloudSettingsBackupEnabled() = enabled(ClientSettings.cloudSettingsBackup)

@@ -91,6 +91,8 @@ object ClientSettings {
     val headerCustomizations = register(BooleanSetting("feature_header_customizations"))
     val typingUserAvatars = register(BooleanSetting("feature_typing_user_avatars"))
     val readableRoleColors = register(BooleanSetting("feature_readable_role_colors"))
+    /** Off by default: the modern message menu is the default and this brings the old one back. */
+    val legacyMessageMenu = register(BooleanSetting("feature_legacy_message_menu"))
     val chatHeaderStatusIndicators = register(BooleanSetting("feature_chat_header_status_indicators"))
     val moreGifProviders = register(BooleanSetting("feature_more_gif_providers"))
     val gifUrlToInput = register(BooleanSetting("feature_gif_url_to_input"))

@@ -27,6 +27,11 @@ import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
 import com.discord.api.message.MessageFlags
 import com.discord.restapi.RestAPIParams
+import com.discord.utilities.feature.FeatureFlags
+import androidx.core.view.children
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.databinding.WidgetChatListActionsBinding
@@ -59,6 +64,8 @@ import com.discord.widgets.settings.themes.ThemeInstaller
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.share.ForwardingPolicy
 import com.discord.widgets.share.WidgetIncomingShare
+import java.util.concurrent.TimeUnit
+import com.google.android.material.bottomsheet.BottomSheetBehavior
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import com.discord.utilities.user.UserUtils.getDisplayName
@@ -84,7 +91,11 @@ class WidgetChatListActions : AppBottomSheet() {
     private var channelId = 0L
     private var messageId = 0L
 
-    override fun getContentViewResId() = R.layout.widget_chat_list_actions
+    /** The modern menu is the default; the legacy one stays behind a feature flag. Both share view ids. */
+    private val modern by lazy { !FeatureFlags.legacyMessageMenuEnabled() }
+
+    override fun getContentViewResId() =
+        if (modern) R.layout.widget_chat_list_actions_modern else R.layout.widget_chat_list_actions
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -92,7 +103,7 @@ class WidgetChatListActions : AppBottomSheet() {
         channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID)
         messageId = argumentsOrDefault.getLong(ARG_MESSAGE_ID)
         val recycler = binding.dialogChatActionsAddReactionEmojisList
-        emojiAdapter = WidgetChatListActionsEmojisAdapter(recycler).apply {
+        emojiAdapter = WidgetChatListActionsEmojisAdapter(recycler, modern).apply {
             onClickEmoji = ::addReaction
             onClickMoreEmojis = {
                 currentModel?.message?.let { message ->
@@ -104,6 +115,10 @@ class WidgetChatListActions : AppBottomSheet() {
         recycler.adapter = emojiAdapter
         recycler.itemAnimator = null
         dialog?.setTitle(R.string.message_actions_menu_label)
+        preloaded?.takeIf { it.message.id == messageId }?.let { model ->
+            preloaded = null
+            configureUI(model)
+        }
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
@@ -123,6 +138,9 @@ class WidgetChatListActions : AppBottomSheet() {
     }
 
     override fun onDestroyView() {
+        _binding?.dialogChatActionsContainer?.animate()?.cancel()
+        insetApplied = false
+        lastSlideOffset = 0f
         _binding?.dialogChatActionsAddReactionEmojisList?.let { recycler ->
             itemDecorator?.let(recycler::removeItemDecoration)
             recycler.adapter = null
@@ -135,6 +153,55 @@ class WidgetChatListActions : AppBottomSheet() {
     }
 
     private var currentModel: Model? = null
+
+    override val bouncesOverscroll get() = false
+
+    private var lastSlideOffset = 0f
+
+    /**
+     * The sheet only closes after a pull of half its default height, which on a menu this tall is
+     * most of the screen. Closing once it is released a fifth of the way below the default height
+     * makes an ordinary pull down enough.
+     */
+    override fun onStateChanged(state: Int) {
+        if (!modern) return
+        if (state == BottomSheetBehavior.STATE_COLLAPSED || state == BottomSheetBehavior.STATE_EXPANDED) {
+            lastSlideOffset = 0f
+        }
+        if (state == BottomSheetBehavior.STATE_SETTLING && lastSlideOffset < -CLOSE_PULL_FRACTION) {
+            // Posted: this runs inside the behaviour's own settle, which would otherwise carry on to
+            // the default height afterwards and leave the sheet parked off-screen but never hidden.
+            view?.post { if (isAdded) setBottomSheetState(BottomSheetBehavior.STATE_HIDDEN) }
+        }
+    }
+
+    private var insetApplied = false
+
+    /**
+     * A tall menu can be dragged all the way up, where the sheet runs under the status bar and
+     * would hide the top of its first row, so the content is moved down by the bar's height there.
+     *
+     * Done once on reaching the top (and undone on leaving it), never per frame: resizing the list
+     * while a drag or fling is in flight makes it jitter and ends the fling early. The step is eased
+     * with a translation so it does not read as a jump.
+     */
+    override fun onSheetSlide(slideOffset: Float) {
+        lastSlideOffset = slideOffset
+        if (!modern) return
+        val container = _binding?.dialogChatActionsContainer ?: return
+        val pad = when {
+            slideOffset >= INSET_ON -> true
+            slideOffset < INSET_OFF -> false
+            else -> insetApplied
+        }
+        if (pad == insetApplied) return
+        insetApplied = pad
+        val inset = ViewCompat.getRootWindowInsets(container)
+            ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        container.updatePadding(top = if (pad) inset else 0)
+        container.translationY = if (pad) -inset.toFloat() else inset.toFloat()
+        container.animate().translationY(0f).setDuration(INSET_EASE_MS).start()
+    }
 
     private fun configureUI(model: Model?) {
         currentModel = model
@@ -158,6 +225,7 @@ class WidgetChatListActions : AppBottomSheet() {
                 message.id,
             ),
             ::dismiss,
+            modern,
         )
 
         configureQuickReactions(model.recentEmojis, isLocal, manage.canAddReactions)
@@ -297,6 +365,7 @@ class WidgetChatListActions : AppBottomSheet() {
             )
         }
         // The XML stays hidden until all rows reflect this message and its permissions.
+        binding.dialogChatActionsContainer.children.filterIsInstance<MessageMenuGroup>().forEach(MessageMenuGroup::refresh)
         binding.dialogChatActionsContainer.isVisible = true
     }
 
@@ -544,6 +613,18 @@ class WidgetChatListActions : AppBottomSheet() {
         private const val ARG_CONTENT = "INTENT_EXTRA_MESSAGE_CONTENT"
         private const val ARG_TYPE = "INTENT_EXTRA_TYPE"
         private const val ARG_MEDIA_URL = "INTENT_EXTRA_MEDIA_URL"
+        private const val PRELOAD_TIMEOUT_MS = 400L
+
+        /** Messages whose sheet is being prepared, so a double long-press opens one sheet, not two. */
+        private val opening = HashSet<Pair<Long, Long>>()
+        private const val INSET_ON = 0.98f
+        private const val INSET_OFF = 0.9f
+        private const val INSET_EASE_MS = 120L
+        private const val CLOSE_PULL_FRACTION = 0.2f
+
+        /** The model the next sheet to open starts from; consumed once, by the matching message. */
+        @Volatile private var preloaded: Model? = null
+
         private const val TYPE_CHAT = 0
         private const val TYPE_PINS = 1
         private const val TYPE_SEARCH = 2
@@ -575,15 +656,37 @@ class WidgetChatListActions : AppBottomSheet() {
             messageContent: CharSequence?,
             type: Int,
             mediaUrl: String? = null,
-        ) = WidgetChatListActions().apply {
-            arguments = Bundle().apply {
-                putLong(ARG_CHANNEL_ID, channelId)
-                putLong(ARG_MESSAGE_ID, messageId)
-                putCharSequence(ARG_CONTENT, messageContent)
-                putInt(ARG_TYPE, type)
-                putString(ARG_MEDIA_URL, mediaUrl)
+        ) {
+            val key = channelId to messageId
+            if (!opening.add(key)) return
+            fun open() {
+                opening.remove(key)
+                if (fragmentManager.isStateSaved || fragmentManager.isDestroyed) {
+                    preloaded = null
+                    return
+                }
+                WidgetChatListActions().apply {
+                    arguments = Bundle().apply {
+                        putLong(ARG_CHANNEL_ID, channelId)
+                        putLong(ARG_MESSAGE_ID, messageId)
+                        putCharSequence(ARG_CONTENT, messageContent)
+                        putInt(ARG_TYPE, type)
+                        putString(ARG_MEDIA_URL, mediaUrl)
+                    }
+                }.show(fragmentManager, WidgetChatListActions::class.java.name)
             }
-        }.show(fragmentManager, WidgetChatListActions::class.java.name)
+            // The sheet is built from this model, so waiting for it first means the sheet opens with
+            // its content already laid out instead of growing when the model lands a moment later.
+            Model.get(channelId, messageId, messageContent, type)
+                .take(1)
+                .timeout(PRELOAD_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .computationLatest()
+                .ui()
+                .subscribe(
+                    { model -> preloaded = model; open() },
+                    { preloaded = null; open() },
+                )
+        }
 
         internal fun prepareMessageForEdit(message: Message, channel: Channel?, guild: Guild?): Observable<Message> =
             StoreStream.getEmojis().getEmojiSet(channel?.guildId ?: 0L, message.channelId).take(1)
