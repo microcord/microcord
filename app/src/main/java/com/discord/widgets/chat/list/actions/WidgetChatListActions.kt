@@ -25,6 +25,8 @@ import com.discord.api.channel.isSystemDM
 import com.discord.api.channel.isThread
 import com.discord.api.channel.isVoiceChannel
 import com.discord.api.permission.Permission
+import com.discord.api.message.MessageFlags
+import com.discord.restapi.RestAPIParams
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.databinding.WidgetChatListActionsBinding
@@ -251,6 +253,11 @@ class WidgetChatListActions : AppBottomSheet() {
             dismiss()
             WidgetContextCommandsSheet.show(parentFragmentManager, message.channelId, ApplicationCommandIndexCommand.TYPE_MESSAGE, message.id)
         }
+        bind(
+            binding.dialogChatActionsRemoveEmbeds,
+            message.author?.id == model.me.id && message.hasEmbeds() && !isLocal &&
+                (message.flags ?: 0L) and MessageFlags.SUPPRESS_EMBEDS == 0L,
+        ) { removeEmbeds(message) }
         bind(binding.dialogChatActionsReport, message.author?.id != model.me.id) {
             WidgetMobileReports.launchMessageReport(requireContext(), message.id, channelId)
             dismiss()
@@ -367,6 +374,22 @@ class WidgetChatListActions : AppBottomSheet() {
                             onNext = {},
                         )
                 }
+            }),
+        )
+    }
+
+    private fun removeEmbeds(message: Message) {
+        WidgetNoticeDialog.show(
+            fragmentManager = parentFragmentManager,
+            headerText = getString(R.string.suppress_embed_title),
+            bodyText = getString(R.string.suppress_embed_body),
+            okText = getString(R.string.suppress_embed_confirm),
+            cancelText = getString(R.string.cancel),
+            listenerMap = mapOf(R.id.notice_ok to { view ->
+                val flags = (message.flags ?: 0L) or MessageFlags.SUPPRESS_EMBEDS
+                RestAPI.api.editMessage(message.channelId, message.id, RestAPIParams.Message(flags = flags))
+                    .restSubscribeOn().ui(this)
+                    .appSubscribe(WidgetChatListActions::class.java, view.context) { dismiss() }
             }),
         )
     }

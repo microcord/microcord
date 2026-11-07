@@ -57,6 +57,19 @@ class MessageRestContractTest {
     }
 
     @Test
+    fun suppressingEmbedsPatchesOnlyTheFlags() {
+        enqueueMessage()
+
+        api.editMessage(42, 8, RestAPIParams.Message(flags = 0L or com.discord.api.message.MessageFlags.SUPPRESS_EMBEDS))
+            .toBlocking().single()
+
+        val request = server.takeRequest()
+        assertEquals("PATCH", request.method)
+        assertEquals("/api/v9/channels/42/messages/8", request.path)
+        assertEquals("{\"flags\":4}", request.body.readUtf8())
+    }
+
+    @Test
     fun pinsAndReactionsMatchPathsAndMethods() {
         server.enqueue(MockResponse().setBody("""{"items":[],"has_more":false}"""))
         api.getChannelPins(42).toBlocking().single()
