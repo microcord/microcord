@@ -7,6 +7,7 @@ import com.discord.api.commands.CommandChoice
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.utilities.string.stripAccents
 import com.discord.widgets.chat.input.DEFAULT_LEADING_IDENTIFIERS
+import com.discord.widgets.chat.input.SLASH_CHAR
 import com.discord.widgets.chat.input.getSelectedToken
 import com.discord.widgets.chat.input.models.ChatInputMentionsMap
 import com.discord.widgets.chat.input.models.MentionToken
@@ -152,8 +153,11 @@ object AutocompleteModelUtils {
         useNullLeadingIdentifier: Boolean = false,
     ): MentionToken? {
         val token: String = this ?: return null
+        // A slash only opens a command at the very start of the message ("see /tmp" is just text).
         val leading: Char? =
-            if (token.isNotBlank() && DEFAULT_LEADING_IDENTIFIERS.contains(token[0])) token[0] else null
+            if (token.isNotBlank() && DEFAULT_LEADING_IDENTIFIERS.contains(token[0]) &&
+                (token[0] != SLASH_CHAR || tokenPosition == 0)
+            ) token[0] else null
         if (leading == null && !useNullLeadingIdentifier) return null
         return MentionToken(
             leadingIdentifier = LeadingIdentifier.fromChar(leading),

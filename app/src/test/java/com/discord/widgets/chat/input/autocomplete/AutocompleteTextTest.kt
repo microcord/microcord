@@ -71,6 +71,11 @@ class AutocompleteTextTest {
     }
 
     @Test
+    fun aSlashAwayFromTheStartOfTheMessageIsNotACommand() {
+        assertNull(AutocompleteModelUtils.getMessageAutocompleteToken("hello /ban", 10..10))
+    }
+
+    @Test
     fun mentionsAreRewrittenToTheirServerFormInAscendingOrder() {
         val input = "see #general and #random"
         val map = mapOf(
