@@ -4169,17 +4169,18 @@ class StoreStream private constructor(
         @JvmStatic fun getPresences() = requireInstance().presences
 
         /**
-         * Publishes an activity an application set over RPC, on the store thread.
+         * Publishes (or, null, removes) the activity [key] set over RPC or by a plugin, on the store
+         * thread. Keys are independent, so several activities, even of one type, are live at once.
          *
-         * [StoreUserPresence.updateActivity] is `@StoreThread` and only *logs* when called from
+         * [StoreUserPresence.updateKeyedActivity] is `@StoreThread` and only *logs* when called from
          * anywhere else, so a caller off the dispatcher corrupts the presence quietly rather than
          * failing. RPC commands run on the socket's thread, hence the hop.
          */
         @JvmStatic
-        fun setRpcActivity(type: ActivityType, activity: Activity?) {
+        fun setRpcActivity(key: String, activity: Activity?) {
             val stream = requireInstance()
             stream.dispatcher.schedule {
-                stream.presences.updateActivity(type, activity, force = true)
+                stream.presences.updateKeyedActivity(key, activity)
             }
         }
         @JvmStatic fun getReadStates() = requireInstance().readStates

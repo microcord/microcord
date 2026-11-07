@@ -13,6 +13,7 @@ import com.discord.rpc.RpcCommand
 import com.discord.rpc.RpcCommands
 import com.discord.rpc.RpcError
 import com.discord.rpc.RpcErrors
+import com.discord.rpc.RpcLog
 import com.discord.rpc.RpcNumber
 import com.discord.rpc.RpcObject
 import com.discord.rpc.RpcScopeConfig
@@ -119,6 +120,31 @@ val setActivityCommand: Map<String, RpcCommand> = mapOf(
         }
     },
 )
+
+/**
+ * Publishes a plugin's [activity] the way an IPC client's `SET_ACTIVITY` would, minus the socket:
+ * the same schema, normalisation and asset resolution, then [RpcActivities] under [socketId].
+ * [shouldPublish] is asked again once the assets resolve, because the plugin may have cleared or
+ * replaced the activity (or stopped) in the meantime.
+ *
+ * @throws IllegalArgumentException when the activity breaks the RPC schema.
+ */
+internal fun publishPluginActivity(
+    socketId: String,
+    activity: JSONObject,
+    applicationName: String?,
+    applicationId: Long?,
+    shouldPublish: () -> Boolean,
+) {
+    activitySchema.validate("activity", activity)?.let { throw IllegalArgumentException(it) }
+    normalizeActivity(activity, applicationName, applicationId, RpcTransportTypes.IPC)
+    RpcActivityAssets.resolve(activity, applicationId).subscribe(
+        { resolved ->
+            if (shouldPublish()) RpcActivities.parse(resolved)?.let { RpcActivities.set(socketId, it) }
+        },
+        { RpcLog.log("plugin activity failed: $it") },
+    )
+}
 
 /** Rewrites the caller's own object in place; the reply echoes that same object. */
 private fun normalizeActivity(

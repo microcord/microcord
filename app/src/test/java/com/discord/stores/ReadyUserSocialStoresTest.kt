@@ -241,6 +241,62 @@ class ReadyUserSocialStoresTest {
     }
 
     @Test
+    fun keyedActivitiesCoexistAndTypeSlotsLeaveThemAlone() {
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val store = StoreUserPresence(Clock { 1L }, deck)
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+        fun names() = store.getLocalPresence().activities?.map { it.name }
+
+        dispatcher.schedule {
+            store.handleConnectionOpen(readyPayload(), null, null)
+            store.updateKeyedActivity("a", activity("first", 1))
+            store.updateKeyedActivity("b", activity("second", 2))
+        }
+        scheduler.triggerActions()
+        assertEquals(listOf("first", "second"), names())
+
+        dispatcher.schedule { store.updateKeyedActivity("a", activity("first, updated", 1)) }
+        scheduler.triggerActions()
+        assertEquals(listOf("second", "first, updated"), names())
+
+        // The PLAYING slot clearing must not take a keyed PLAYING activity with it.
+        dispatcher.schedule {
+            store.updateActivity(ActivityType.PLAYING, activity("game", 3))
+            store.updateActivity(ActivityType.PLAYING, null, force = true)
+        }
+        scheduler.triggerActions()
+        assertEquals(listOf("second", "first, updated"), names())
+
+        dispatcher.schedule { store.updateKeyedActivity("b", null) }
+        scheduler.triggerActions()
+        assertEquals(listOf("first, updated"), names())
+    }
+
+    @Test
+    fun keyedActivitiesAreSentAgainWhenASessionOpens() {
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val published = mutableListOf<List<String>>()
+        val store = StoreUserPresence(
+            Clock { 1L }, deck,
+            publishLocalPresence = { presence -> published += presence.activities.orEmpty().map { it.name } },
+        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+
+        // Set before the gateway session exists, so the first publish is dropped by the connection.
+        dispatcher.schedule { store.updateKeyedActivity("a", activity("early", 1)) }
+        scheduler.triggerActions()
+        published.clear()
+
+        dispatcher.schedule { store.handleConnectionOpen(readyPayload(), null, null) }
+        scheduler.triggerActions()
+        assertEquals(listOf(listOf("early")), published)
+    }
+
+    @Test
     fun richActivitiesSortBeforePlainActivities() {
         var now = 1L
         val scheduler = TestScheduler()

@@ -1,7 +1,6 @@
 package com.discord.rpc
 
 import com.discord.api.activity.Activity
-import com.discord.api.activity.ActivityType
 import com.discord.models.deserialization.gson.InboundGatewayGsonParser
 import com.discord.stores.StoreStream
 import com.google.gson.stream.JsonReader
@@ -15,12 +14,10 @@ object RpcActivities {
 
     @Synchronized
     fun set(socketId: String, activity: Activity?) {
-        val previous = bySocket[socketId]
         // Integrations republish presence on a timer; the gateway rate limits presence updates.
-        if (previous == activity) return
+        if (bySocket[socketId] == activity) return
         if (activity == null) bySocket.remove(socketId) else bySocket[socketId] = activity
-        // Clearing still has to name the type slot being emptied.
-        StoreStream.setRpcActivity(activity?.type ?: previous?.type ?: ActivityType.PLAYING, activity)
+        StoreStream.setRpcActivity(socketId, activity)
     }
 
     fun parse(activity: JSONObject): Activity? = runCatching {

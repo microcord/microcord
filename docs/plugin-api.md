@@ -467,6 +467,45 @@ The executor runs on the main thread, so it must not block. A command that needs
 slow work uses `pluginAsyncSlashCommand(...)` instead: its executor runs on a background thread and calls
 `respond` once with the text to send, or null to send nothing. The composer clears when it is submitted.
 
+## Activities (RPC)
+
+`scope.activities` publishes rich presence the way a game does over desktop RPC, without a socket
+(API level 3). `setActivity(pluginActivity("Name") { ... })` publishes an activity and replaces what the
+same key published before; `updateActivity { state = "..." }` changes fields of the published one and
+republishes it; `clearActivity()` removes it. Stopping the plugin removes everything it published.
+
+A plugin can run several activities at once by giving each its own key
+(`setActivity(activity, key = "music")`, `updateActivity("music") { ... }`, `clearActivity("music")`).
+Keys are independent, so activities of the same type coexist, as several RPC clients do on desktop.
+
+```kotlin
+scope.activities.setActivity(
+    pluginActivity("Spotify") {
+        type = PluginActivityType.LISTENING
+        details = "Song title"
+        state = "Artist"
+        startTimestampMs = System.currentTimeMillis()
+        applicationId = 123456789012345678 // needed for largeImage/smallImage
+        largeImage = "cover" // an asset key of that application, or an https URL
+        button("Open", "https://example.com")
+    },
+)
+
+scope.activities.updateActivity { state = "Another artist" }
+```
+
+The activity takes the exact path of an IPC `SET_ACTIVITY`: the same schema (an invalid activity throws
+`IllegalArgumentException` from `setActivity`), the same normalisation and the same asset resolution, then
+the existing RPC presence publisher. Without `applicationId` there is no application to resolve images
+against, so only the text shows. Links (`largeUrl`, `smallUrl`, `stateUrl`, `detailsUrl`) and `statusDisplay` (which line the status
+text under the name shows) are available. `localActivities()` lists what is on the account's presence
+right now, so a plugin can hide its own activity while Spotify is playing. Rich-presence secrets,
+party and join/spectate are not exposed.
+Presence is rate limited by the gateway, so republish on change, not on a timer.
+
+All activities, plugin and RPC, are sent to the gateway together in one presence update next to the
+custom status, Spotify and stage activities, which keep their one slot per type.
+
 ## Plugin View And Resource Context
 
 A plugin receives these view/resource capabilities through its scope and contribution factories:

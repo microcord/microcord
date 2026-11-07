@@ -136,6 +136,157 @@ interface PluginText {
     fun renderCodeBlock(content: String, language: String? = null): CharSequence
 }
 
+/** Rich presence, as an RPC client such as a game would publish it on desktop. */
+interface PluginActivities {
+    /**
+     * Publishes [activity] under [key], replacing what that key published before. A plugin can hold
+     * several keys at once, and each shows as its own activity, even when their types match.
+     *
+     * The activity goes through the same validation and asset resolution as an RPC `SET_ACTIVITY`:
+     * an invalid one throws [IllegalArgumentException] here, and image keys or URLs only resolve when
+     * [PluginActivity.applicationId] is set. Every key is removed when the plugin stops.
+     */
+    fun setActivity(activity: PluginActivity, key: String = DEFAULT_ACTIVITY_KEY)
+
+    /**
+     * Changes the activity published under [key], keeping every field [configure] leaves alone, and
+     * republishes it. Throws [IllegalStateException] when [key] has no activity yet.
+     */
+    fun updateActivity(key: String = DEFAULT_ACTIVITY_KEY, configure: PluginActivityBuilder.() -> Unit)
+
+    /** Removes the activity published under [key]. */
+    fun clearActivity(key: String = DEFAULT_ACTIVITY_KEY)
+
+    /** Everything on the account's presence right now, this plugin's own activities included. */
+    fun localActivities(): List<PluginLocalActivity>
+}
+
+interface PluginLocalActivity {
+    val name: String
+
+    /** The gateway activity type: 0 playing, 1 streaming, 2 listening, 3 watching, 4 custom status, 5 competing. */
+    val type: Int
+    val applicationId: Long?
+}
+
+/** Which of an activity's lines the status text under the name shows. */
+enum class PluginStatusDisplay(val value: Int) { NAME(0), STATE(1), DETAILS(2) }
+
+const val DEFAULT_ACTIVITY_KEY = "default"
+
+enum class PluginActivityType(val value: Int) { PLAYING(0), LISTENING(2), WATCHING(3), COMPETING(5) }
+
+class PluginActivityButton(val label: String, val url: String)
+
+interface PluginActivity {
+    val name: String
+    val applicationId: Long?
+    val type: PluginActivityType
+    val details: String?
+    val state: String?
+    val startTimestampMs: Long?
+    val endTimestampMs: Long?
+    val largeImage: String?
+    val largeText: String?
+    val smallImage: String?
+    val smallText: String?
+    val largeUrl: String?
+    val smallUrl: String?
+    val stateUrl: String?
+    val detailsUrl: String?
+    val statusDisplay: PluginStatusDisplay?
+    val buttons: List<PluginActivityButton>
+}
+
+class PluginActivityBuilder internal constructor(var name: String) {
+    /** The application whose asset keys [largeImage] and [smallImage] name; unset, only the text shows. */
+    var applicationId: Long? = null
+    var type: PluginActivityType = PluginActivityType.PLAYING
+    var details: String? = null
+    var state: String? = null
+    var startTimestampMs: Long? = null
+    var endTimestampMs: Long? = null
+    var largeImage: String? = null
+    var largeText: String? = null
+    var smallImage: String? = null
+    var smallText: String? = null
+
+    /** Links the large image, small image, state line and details line open. */
+    var largeUrl: String? = null
+    var smallUrl: String? = null
+    var stateUrl: String? = null
+    var detailsUrl: String? = null
+    var statusDisplay: PluginStatusDisplay? = null
+    private val buttons = mutableListOf<PluginActivityButton>()
+
+    /** At most two buttons, as in RPC. */
+    fun button(label: String, url: String) {
+        require(buttons.size < 2) { "an activity has at most two buttons" }
+        buttons += PluginActivityButton(label, url)
+    }
+
+    internal fun seed(activity: PluginActivity) = apply {
+        applicationId = activity.applicationId
+        type = activity.type
+        details = activity.details
+        state = activity.state
+        startTimestampMs = activity.startTimestampMs
+        endTimestampMs = activity.endTimestampMs
+        largeImage = activity.largeImage
+        largeText = activity.largeText
+        smallImage = activity.smallImage
+        smallText = activity.smallText
+        largeUrl = activity.largeUrl
+        smallUrl = activity.smallUrl
+        stateUrl = activity.stateUrl
+        detailsUrl = activity.detailsUrl
+        statusDisplay = activity.statusDisplay
+        buttons.clear()
+        buttons += activity.buttons
+    }
+
+    /** Drops the buttons so [configure] in [copy] can replace rather than add to them. */
+    fun clearButtons() = buttons.clear()
+
+    internal fun build(): PluginActivity = ActivityValue(
+        name, applicationId, type, details, state, startTimestampMs, endTimestampMs,
+        largeImage, largeText, smallImage, smallText, largeUrl, smallUrl, stateUrl, detailsUrl, statusDisplay,
+        buttons.toList(),
+    )
+}
+
+fun pluginActivity(name: String, configure: PluginActivityBuilder.() -> Unit = {}): PluginActivity {
+    require(name.isNotBlank()) { "activity name must not be blank" }
+    return PluginActivityBuilder(name).apply(configure).build()
+}
+
+/** This activity with [configure] applied on top, e.g. a new `state` or `startTimestampMs`. */
+fun PluginActivity.copy(configure: PluginActivityBuilder.() -> Unit): PluginActivity {
+    val builder = PluginActivityBuilder(name).seed(this).apply(configure)
+    require(builder.name.isNotBlank()) { "activity name must not be blank" }
+    return builder.build()
+}
+
+private data class ActivityValue(
+    override val name: String,
+    override val applicationId: Long?,
+    override val type: PluginActivityType,
+    override val details: String?,
+    override val state: String?,
+    override val startTimestampMs: Long?,
+    override val endTimestampMs: Long?,
+    override val largeImage: String?,
+    override val largeText: String?,
+    override val smallImage: String?,
+    override val smallText: String?,
+    override val largeUrl: String?,
+    override val smallUrl: String?,
+    override val stateUrl: String?,
+    override val detailsUrl: String?,
+    override val statusDisplay: PluginStatusDisplay?,
+    override val buttons: List<PluginActivityButton>,
+) : PluginActivity
+
 fun interface PluginRegistration {
     fun unregister()
 }

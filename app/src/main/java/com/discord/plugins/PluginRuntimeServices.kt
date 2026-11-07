@@ -25,7 +25,19 @@ import dev.mantikafasi.manticord.plugins.api.PluginStorage
 import dev.mantikafasi.manticord.plugins.api.PluginDialogs
 import dev.mantikafasi.manticord.plugins.api.PluginText
 import dev.mantikafasi.manticord.plugins.api.PluginOAuth
+import dev.mantikafasi.manticord.plugins.api.PluginActivities
+import dev.mantikafasi.manticord.plugins.api.PluginActivity
+import dev.mantikafasi.manticord.plugins.api.PluginActivityBuilder
+import dev.mantikafasi.manticord.plugins.api.PluginLocalActivity
+import dev.mantikafasi.manticord.plugins.api.copy
+import java.util.concurrent.ConcurrentHashMap
 import dev.mantikafasi.manticord.plugins.api.PluginManifest
+import com.discord.rpc.RpcActivities
+import com.discord.stores.StoreStream
+import com.discord.rpc.commands.publishPluginActivity
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicInteger
 import rx.Observable
 import rx.subjects.PublishSubject
 import java.util.concurrent.CopyOnWriteArrayList
@@ -435,6 +447,50 @@ internal class PluginScopeImpl(
         }
     }
 
+    override val activities: PluginActivities = object : PluginActivities {
+        private val current = ConcurrentHashMap<String, PluginActivity>()
+
+        /** Bumped by every set and clear of a key, so a slow asset lookup cannot publish over a newer state. */
+        private val generations = ConcurrentHashMap<String, AtomicInteger>()
+        private val cleanup by lazy { track(PluginRegistration { current.keys.toList().forEach(::clearActivity) }) }
+
+        private fun socketId(key: String) = "plugin:$pluginId:$key"
+        private fun generation(key: String) = generations.getOrPut(key) { AtomicInteger() }
+
+        override fun setActivity(activity: PluginActivity, key: String) {
+            check(!closed.get()) { "plugin scope is closed" }
+            cleanup
+            val version = generation(key).incrementAndGet()
+            current[key] = activity
+            publishPluginActivity(
+                socketId(key),
+                activity.toRpcJson(),
+                manifest.name,
+                activity.applicationId,
+            ) { !closed.get() && generation(key).get() == version }
+        }
+
+        override fun updateActivity(key: String, configure: PluginActivityBuilder.() -> Unit) {
+            val existing = checkNotNull(current[key]) { "no activity published under \"$key\"" }
+            setActivity(existing.copy(configure), key)
+        }
+
+        override fun clearActivity(key: String) {
+            generation(key).incrementAndGet()
+            current.remove(key)
+            RpcActivities.set(socketId(key), null)
+        }
+
+        override fun localActivities(): List<PluginLocalActivity> =
+            StoreStream.getPresences().getLocalPresence().activities.orEmpty().map { activity ->
+                object : PluginLocalActivity {
+                    override val name = activity.name
+                    override val type = activity.type.apiInt
+                    override val applicationId = activity.applicationId
+                }
+            }
+    }
+
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         registrations.forEach(PluginRegistration::unregister)
@@ -449,5 +505,33 @@ internal class PluginScopeImpl(
             error("plugin scope is closed")
         }
         return registration
+    }
+}
+
+private fun PluginActivity.toRpcJson(): JSONObject = JSONObject().apply {
+    put("name", name)
+    put("type", type.value)
+    details?.let { put("details", it) }
+    state?.let { put("state", it) }
+    if (startTimestampMs != null || endTimestampMs != null) {
+        put("timestamps", JSONObject().apply {
+            startTimestampMs?.let { put("start", it) }
+            endTimestampMs?.let { put("end", it) }
+        })
+    }
+    stateUrl?.let { put("state_url", it) }
+    detailsUrl?.let { put("details_url", it) }
+    statusDisplay?.let { put("status_display_type", it.value) }
+    val assets = listOf(
+        "large_image" to largeImage, "large_text" to largeText, "large_url" to largeUrl,
+        "small_image" to smallImage, "small_text" to smallText, "small_url" to smallUrl,
+    ).filter { it.second != null }
+    if (assets.isNotEmpty()) {
+        put("assets", JSONObject().apply { assets.forEach { (key, value) -> put(key, value) } })
+    }
+    if (buttons.isNotEmpty()) {
+        put("buttons", JSONArray().apply {
+            buttons.forEach { put(JSONObject().put("label", it.label).put("url", it.url)) }
+        })
     }
 }

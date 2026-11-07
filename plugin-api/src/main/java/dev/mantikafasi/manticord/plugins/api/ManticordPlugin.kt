@@ -6,11 +6,11 @@ import rx.Completable
 /**
  * The plugin API this Microcord build implements; a manifest's `manticordVersionMinimum` is checked
  * against it. 1: the initial API. 2: message delete/update interceptors, message decorators and
- * async slash commands.
+ * async slash commands. 3: activities (`PluginScope.activities`).
  * The manifest maximum is ignored: a plugin built for an older API still loads, and one that calls
  * something removed fails its own start without affecting the app.
  */
-const val PLUGIN_API_LEVEL = 2
+const val PLUGIN_API_LEVEL = 3
 
 interface PluginRequirement {
     val pluginId: String
@@ -115,6 +115,7 @@ interface PluginScope {
     val dialogs: PluginDialogs
     val oauth: PluginOAuth
     val text: PluginText
+    val activities: PluginActivities
 
     fun runOnMainThread(action: (Context) -> Unit)
 }

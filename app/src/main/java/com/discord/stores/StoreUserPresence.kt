@@ -43,6 +43,12 @@ class StoreUserPresence(
     private val presences = LinkedHashMap<Long, Presence>()
     private val userGuildPresences = HashMap<Long, MutableMap<Long, TimestampedPresence>>()
     private var presencesSnapshot: Map<Long, Presence> = emptyMap()
+
+    /**
+     * Activities published by key (an RPC client, a plugin) rather than by type, so any number of
+     * them, even of the same type, can be live at once. They are also part of the local presence list.
+     */
+    private val keyedActivities = LinkedHashMap<String, Activity>()
     private var meUser: MeUser? = null
     private var localPresence = Presence(
         ClientStatus.ONLINE,
@@ -67,6 +73,9 @@ class StoreUserPresence(
             presence.user?.let { handlePresenceUpdate(ME_GUILD_ID, it.id, presence.status, presence.clientStatus, presence.activities) }
         }
         updateSelfPresence(status, customStatus, payload.sessions, false)
+        // A new session starts with no activities, and one set while offline was never sent, so
+        // keyed activities (RPC clients, plugins) go out again; an unchanged one is not republished.
+        if (keyedActivities.isNotEmpty()) markChanged(LocalPresenceUpdateSource)
         markChanged()
     }
 
@@ -147,13 +156,36 @@ class StoreUserPresence(
     @StoreThread
     fun updateActivity(type: ActivityType, activity: Activity?, force: Boolean = false) {
         StoreThreadScheduler.assertCurrentThread()
-        val existing = localPresence.activities.orEmpty().firstOrNull { it.type == activity?.type }
+        val existing = localPresence.activities.orEmpty()
+            .firstOrNull { it.type == activity?.type && it !in keyedActivities.values }
         if (!force && existing == activity) return
         // When replacing, the removal key is the *new* activity's type, not [type]; the two differ
         // for callers that clear one slot while setting another. Only the first match is dropped,
         // matching the reference's index-based removal.
         val activities = removeActivityInList(activity?.type ?: type, localPresence.activities)
         activity?.let(activities::add)
+        setLocalActivities(activities)
+    }
+
+    /** Sets, replaces or (null) removes the activity published under [key]; other keys are untouched. */
+    @StoreThread
+    fun updateKeyedActivity(key: String, activity: Activity?) {
+        StoreThreadScheduler.assertCurrentThread()
+        val previous = keyedActivities[key]
+        if (previous == activity) return
+        val activities = localPresence.activities.orEmpty().toMutableList()
+        previous?.let(activities::remove)
+        if (activity == null) {
+            keyedActivities.remove(key)
+        } else {
+            keyedActivities[key] = activity
+            activities.add(activity)
+        }
+        setLocalActivities(activities)
+    }
+
+    @StoreThread
+    private fun setLocalActivities(activities: List<Activity>) {
         localPresence = Presence(localPresence.status, null, activities.filterNot { it.type == ActivityType.UNKNOWN })
         markChanged(LocalPresenceUpdateSource)
         meUser?.id?.let { userId ->
@@ -184,6 +216,7 @@ class StoreUserPresence(
         StoreThreadScheduler.assertCurrentThread()
         presences.clear()
         userGuildPresences.clear()
+        keyedActivities.clear()
         meUser = null
         localPresence = Presence(
             ClientStatus.ONLINE,
@@ -263,7 +296,7 @@ class StoreUserPresence(
      */
     private fun removeActivityInList(type: ActivityType, oldActivities: List<Activity>?): MutableList<Activity> {
         val activities = oldActivities?.toMutableList() ?: mutableListOf()
-        val index = activities.indexOfFirst { it.type == type }
+        val index = activities.indexOfFirst { it.type == type && it !in keyedActivities.values }
         if (index != -1) activities.removeAt(index)
         return activities
     }
