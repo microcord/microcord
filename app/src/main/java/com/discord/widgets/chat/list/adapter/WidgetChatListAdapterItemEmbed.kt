@@ -56,6 +56,7 @@ import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.InlineMediaView
+import com.discord.widgets.chat.list.bindGifFavorite
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.media.WidgetMedia
@@ -247,36 +248,7 @@ class WidgetChatListAdapterItemEmbed(
         }
     }
 
-    private fun configureGifFavorite(embed: MessageEmbed, button: ImageView) {
-        val gif = embed.favoriteGif()
-        if (gif == null) {
-            button.visibility = View.GONE
-            button.setOnClickListener(null)
-            return
-        }
-        val favorites = StoreStream.getMediaFavorites()
-        var isFavorite = favorites.isFavoriteGif(gif)
-
-        fun render() {
-            button.alpha = if (isFavorite) 1f else 0.7f
-            button.setColorFilter(
-                ContextCompat.getColor(button.context, if (isFavorite) R.color.status_yellow else R.color.white),
-            )
-            button.contentDescription = button.context.getString(
-                if (isFavorite) R.string.gif_tooltip_remove_from_favorites
-                else R.string.gif_tooltip_favorited_picker_button,
-            )
-        }
-
-        button.visibility = View.VISIBLE
-        render()
-        button.setOnClickListener {
-            favorites.setFavoriteGif(gif, !isFavorite)
-            isFavorite = !isFavorite
-            render()
-            Toast.makeText(button.context, button.contentDescription, Toast.LENGTH_SHORT).show()
-        }
-    }
+    private fun configureGifFavorite(embed: MessageEmbed, button: ImageView) = button.bindGifFavorite(embed.favoriteGif())
 
     private fun MessageEmbed.favoriteGif(): ModelGif? {
         if (!with(EmbedResourceUtils) { isAnimated() }) return null

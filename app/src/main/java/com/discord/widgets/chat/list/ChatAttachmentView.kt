@@ -19,6 +19,7 @@ import com.discord.simpleast.code.CodeRules
 import com.discord.simpleast.core.node.Node
 import com.discord.simpleast.core.parser.Parser
 import com.discord.models.domain.ModelUserRelationship
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.stores.StoreStream
 import com.discord.stores.UserSettings
 import com.discord.utilities.media.ContentSurface
@@ -97,6 +98,7 @@ class ChatAttachmentView @JvmOverloads constructor(
             inlineMedia.visibility = View.GONE
             binding.chatListItemAttachmentCard.visibility = View.GONE
             binding.chatListItemAttachmentSpoiler.visibility = View.GONE
+            binding.chatListItemAttachmentFavorite.visibility = View.GONE
             voiceMessage.visibility = View.VISIBLE
             voiceMessage.configure(entry.attachment)
             return
@@ -197,6 +199,7 @@ class ChatAttachmentView @JvmOverloads constructor(
         if (!canInline || (width <= 0 && height <= 0)) {
             binding.chatListItemAttachmentCard.visibility = View.VISIBLE
             inlineMedia.visibility = View.GONE
+            binding.chatListItemAttachmentFavorite.visibility = View.GONE
             inlineMedia.updateUIWithAttachment(attachment, autoPlayGifs = autoPlayGifs)
             return
         }
@@ -211,6 +214,12 @@ class ChatAttachmentView @JvmOverloads constructor(
         binding.chatListItemAttachmentCard.visibility = View.GONE
         inlineMedia.visibility = View.VISIBLE
         inlineMedia.updateUIWithAttachment(attachment, scaledWidth, scaledHeight, autoPlayGifs)
+        // Mosaic tiles are too small for a star on each one.
+        binding.chatListItemAttachmentFavorite.bindGifFavorite(
+            attachment.takeIf { tileSize == null && it.type == MessageAttachmentType.IMAGE }?.let {
+                ModelGif(gifImageUrl = it.proxyUrl, tenorGifUrl = it.url, width = width, height = height)
+            },
+        )
     }
 
     private fun configureFileData(
