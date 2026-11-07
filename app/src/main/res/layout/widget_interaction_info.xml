@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:background="?attr/colorBackgroundPrimary" style="@style/UiKit.ViewGroup.NestedScrollView">
+    <LinearLayout android:id="@+id/interaction_info_container" android:paddingTop="8dp" android:paddingBottom="16dp" style="@style/UiKit.ViewGroup.LinearLayout"/>
+</androidx.core.widget.NestedScrollView>

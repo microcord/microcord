@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="horizontal" android:gravity="center_vertical" android:background="?attr/selectableItemBackground" android:paddingLeft="20dp" android:paddingTop="8dp" android:paddingRight="20dp" android:paddingBottom="8dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <com.discord.views.VitoImageView android:id="@+id/interaction_info_avatar" android:layout_marginEnd="16dp" style="@style/Avatar.Standard"/>
+    <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+        <TextView android:textSize="@dimen/uikit_textsize_large" android:textColor="?attr/colorTextNormal" android:id="@+id/interaction_info_title" android:singleLine="true" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <TextView android:id="@+id/interaction_info_subtext" android:layout_width="wrap_content" android:layout_height="wrap_content" style="@style/UiKit.TextView.Subtext"/>
+    </LinearLayout>
+</LinearLayout>

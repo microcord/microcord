@@ -200,6 +200,10 @@ class WidgetChatListActions : AppBottomSheet() {
                 else -> R.string.save_file
             },
         )
+        bind(binding.dialogChatActionsInteractionInfo, message.interactionMetadata != null) {
+            WidgetInteractionInfo.show(parentFragmentManager, channelId, messageId)
+            dismiss()
+        }
         bind(binding.dialogChatActionsSaveMedia, mediaUrl != null) {
             requestMediaDownload { UserDownloadManager.enqueueRefreshed(requireContext(), mediaUrl!!, null) }
             dismiss()
