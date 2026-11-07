@@ -7,6 +7,9 @@ import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 interface ComponentActionListener {
     val componentEntry: BotUiComponentEntry? get() = null
 
+    /** A long press on a component's image or video. */
+    fun onMediaLongClicked(url: String) = Unit
+
     fun onButtonComponentClick(componentIndex: Int, customId: String)
 
     fun onSelectComponentClick(

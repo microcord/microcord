@@ -94,6 +94,10 @@ class WidgetChatListAdapterItemBotComponentRow(
     private fun option(label: String, id: Long) =
         SelectItem(label = label, value = id.toString(), emoji = null, description = null, default = false)
 
+    override fun onMediaLongClicked(url: String) {
+        adapter.eventHandler.onMediaLongClicked(entry.message, url, false)
+    }
+
     override fun onButtonComponentClick(componentIndex: Int, customId: String) {
         adapter.onBotUiComponentClicked(
             applicationId = entry.applicationId,

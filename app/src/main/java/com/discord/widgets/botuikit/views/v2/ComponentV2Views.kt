@@ -52,6 +52,7 @@ import com.discord.widgets.botuikit.views.ComponentActionListener
 import com.discord.widgets.botuikit.views.ComponentView
 import com.discord.widgets.chat.list.entries.BotUiComponentEntry
 import com.discord.widgets.media.MediaViewerContext
+import com.discord.widgets.chat.list.setMediaLongClick
 import com.discord.widgets.media.WidgetMedia
 import com.discord.widgets.media.mediaVideoPreviewUrl
 
@@ -192,7 +193,10 @@ class ThumbnailComponentView @JvmOverloads constructor(
         componentActionListener: ComponentActionListener,
     ) {
         val entry = componentActionListener.componentEntry ?: return
-        configureMedia(component, entry.message.id, entry.messageState, null, entry.toMediaViewerContext())
+        configureMedia(
+            component, entry.message.id, entry.messageState, null, entry.toMediaViewerContext(),
+            componentActionListener::onMediaLongClicked,
+        )
     }
 
     /**
@@ -208,6 +212,7 @@ class ThumbnailComponentView @JvmOverloads constructor(
         state: StoreMessageState.State?,
         key: String?,
         viewerContext: MediaViewerContext?,
+        onMediaLongClick: (String) -> Unit = {},
     ) {
         val binding = WidgetBotUiThumbnailComponentBinding.bind(this)
         val id = component.id ?: component.index
@@ -259,6 +264,8 @@ class ThumbnailComponentView @JvmOverloads constructor(
         }
         binding.image.setOnClickListener(openMedia)
         setOnClickListener(openMedia)
+        binding.image.setMediaLongClick { onMediaLongClick(attachment.url) }
+        setMediaLongClick { onMediaLongClick(attachment.url) }
     }
 
     companion object {
@@ -278,6 +285,7 @@ class MediaGalleryComponentView @JvmOverloads constructor(
     override fun type() = ComponentType.MEDIA_GALLERY
     private var boundComponent: MediaGalleryMessageComponent? = null
     private var boundEntry: BotUiComponentEntry? = null
+    private var boundListener: ComponentActionListener? = null
     private var laidOutWidth = 0
 
     override fun configure(
@@ -288,6 +296,7 @@ class MediaGalleryComponentView @JvmOverloads constructor(
         val entry = componentActionListener.componentEntry ?: return
         boundComponent = component
         boundEntry = entry
+        boundListener = componentActionListener
         layoutGallery(parentContentWidth() ?: width.takeIf { it > 0 } ?: provisionalWidth())
         post {
             val targetWidth = parentContentWidth() ?: width
@@ -347,7 +356,7 @@ class MediaGalleryComponentView @JvmOverloads constructor(
                 entry.messageState,
                 "$GALLERY_KEY_PREFIX$index",
                 entry.toMediaViewerContext(),
-            )
+            ) { boundListener?.onMediaLongClicked(it) }
             view
         }
         replaceViews(views)

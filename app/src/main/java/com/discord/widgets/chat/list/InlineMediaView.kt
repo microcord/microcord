@@ -217,6 +217,18 @@ class InlineMediaView @JvmOverloads constructor(
 
     private fun getPlayerView(): PlayerView = playerView ?: (binding.inlineMediaPlayerStub.inflate() as PlayerView).also {
         playerView = it
+        it.setOnLongClickListener(longClickListener)
+    }
+
+    private var longClickListener: OnLongClickListener? = null
+
+    /** The play button, volume toggle and player are clickable and would swallow the press, so they share it. */
+    override fun setOnLongClickListener(l: OnLongClickListener?) {
+        super.setOnLongClickListener(l)
+        longClickListener = l
+        binding.inlineMediaPlayButton.setOnLongClickListener(l)
+        binding.inlineMediaVolumeToggle.setOnLongClickListener(l)
+        playerView?.setOnLongClickListener(l)
     }
 
     private fun handlePlayerEvent(event: AppMediaPlayer.Event, params: ViewParams) {

@@ -543,6 +543,10 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             isThreadStarterMessage: Boolean,
         ) = Unit
 
+        /** A long press on one image, video or file: the message actions, plus a copy of that media's link. */
+        fun onMediaLongClicked(message: Message, mediaUrl: String?, isThreadStarterMessage: Boolean) =
+            onMessageLongClicked(message, message.content.orEmpty(), isThreadStarterMessage)
+
         fun onOldestMessageId(channelId: Long, oldestMessageId: Long) = Unit
 
         fun onOpenPinsClicked(message: Message) = Unit

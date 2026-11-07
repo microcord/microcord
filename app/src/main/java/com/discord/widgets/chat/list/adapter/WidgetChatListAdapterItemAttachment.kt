@@ -48,6 +48,11 @@ class WidgetChatListAdapterItemAttachment(
                 adapter.eventHandler.onMessageClicked(entry.message, entry.isThreadStarterMessage)
             },
             onQuickDownload = adapter.eventHandler::onQuickDownloadClicked,
+            onMediaLongClick = { attachment ->
+                adapter.eventHandler.onMediaLongClicked(
+                    entry.message, attachment.url, entry.isThreadStarterMessage,
+                )
+            },
         )
     }
 

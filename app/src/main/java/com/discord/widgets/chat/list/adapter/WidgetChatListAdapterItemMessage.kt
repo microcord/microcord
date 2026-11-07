@@ -808,7 +808,10 @@ class WidgetChatListAdapterItemMessage(
         // Only views that already swallow touches get the forwarder: making anything else
         // long-clickable would consume the gesture and stop the message row being pressed at all.
         fun apply(target: View) {
-            if (target !== view && target.isClickable) target.setOnLongClickListener(accessoryLongClickForward)
+            // Media wires its own long-press (copy link) that ends in the same sheet.
+            if (target !== view && target.isClickable && target.getTag(R.id.owns_long_click) == null) {
+                target.setOnLongClickListener(accessoryLongClickForward)
+            }
             if (target is ViewGroup) repeat(target.childCount) { apply(target.getChildAt(it)) }
         }
         apply(view)

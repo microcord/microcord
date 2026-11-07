@@ -57,6 +57,7 @@ import com.discord.views.ThemedColor
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.InlineMediaView
 import com.discord.widgets.chat.list.bindGifFavorite
+import com.discord.widgets.chat.list.setMediaLongClick
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.EmbedEntry
 import com.discord.widgets.media.WidgetMedia
@@ -182,6 +183,10 @@ class WidgetChatListAdapterItemEmbed(
             }
         }
 
+        val mediaUrl = embed.video?.url ?: embed.image?.url ?: embed.thumbnail?.url ?: embed.url
+        val mediaLongClick = { adapter.eventHandler.onMediaLongClicked(entry.message, mediaUrl, entry.isThreadStarterMessage) }
+        binding.embedInlineMedia.setMediaLongClick(mediaLongClick)
+        binding.chatListItemEmbedImage.setMediaLongClick(mediaLongClick)
         try {
             if (with(EmbedResourceUtils) { embed.isInlineEmbed() }) {
                 trimEmbedGallery(0)
@@ -505,7 +510,13 @@ class WidgetChatListAdapterItemEmbed(
             tile.setOnClickListener {
                 if (!model.isSpoilerHidden) WidgetMedia.launchEmbedGallery(it.context, model.embedEntry.embed, images, index)
             }
-            tile.setOnLongClickListener { itemView.performLongClick() }
+            tile.setMediaLongClick {
+                adapter.eventHandler.onMediaLongClicked(
+                    model.embedEntry.message,
+                    image.url?.takeIf(String::isNotBlank) ?: image.proxyUrl,
+                    model.embedEntry.isThreadStarterMessage,
+                )
+            }
         }
         if (binding.chatListItemEmbedImage.visibility != View.GONE) {
             MGImages.cancelImageRequests(binding.chatListItemEmbedImage)

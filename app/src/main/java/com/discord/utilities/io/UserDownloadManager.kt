@@ -11,6 +11,9 @@ import android.os.Build
 import android.os.Environment
 import androidx.annotation.MainThread
 import androidx.core.content.ContextCompat
+import com.discord.utilities.attachments.AttachmentUrlRefresher
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import java.net.URI
 import java.net.URLConnection
 import java.util.concurrent.ConcurrentHashMap
@@ -30,6 +33,17 @@ sealed interface UserDownloadResult {
 }
 
 object UserDownloadManager {
+    /**
+     * [enqueue] after re-signing [url]: an old row still holds the link it was sent with, and the CDN
+     * refuses one whose signature has lapsed.
+     */
+    fun enqueueRefreshed(context: Context, url: String, fileName: String?) {
+        AttachmentUrlRefresher.refreshExpired(listOf(url), System.currentTimeMillis())
+            .onErrorReturn { mapOf(url to url) }
+            .ui()
+            .appSubscribe(errorClass = UserDownloadManager::class.java) { enqueue(context, it[url] ?: url, fileName) }
+    }
+
     private val callbacks = ConcurrentHashMap<Long, (UserDownloadResult) -> Unit>()
 
     @MainThread

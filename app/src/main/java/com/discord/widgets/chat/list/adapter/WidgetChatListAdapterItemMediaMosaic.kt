@@ -81,6 +81,11 @@ class WidgetChatListAdapterItemMediaMosaic(
                 isSpoilerClickAllowed = adapter.data.isSpoilerClickAllowed,
                 onSpoilerBlocked = { adapter.eventHandler.onMessageClicked(item.message, item.isThreadStarterMessage) },
                 onQuickDownload = adapter.eventHandler::onQuickDownloadClicked,
+                onMediaLongClick = { attachment ->
+                    adapter.eventHandler.onMediaLongClicked(
+                        item.message, attachment.url, item.isThreadStarterMessage,
+                    )
+                },
             )
         }
     }

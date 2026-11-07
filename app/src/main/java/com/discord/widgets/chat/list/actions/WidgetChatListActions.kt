@@ -40,6 +40,9 @@ import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.permissions.ManageMessageContext
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.RestAPI
+import com.discord.api.message.attachment.IMAGE_MIME_TYPES
+import com.discord.api.message.attachment.VIDEO_MIME_TYPES
+import com.discord.utilities.io.UserDownloadManager
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
@@ -182,6 +185,23 @@ class WidgetChatListActions : AppBottomSheet() {
         }
         bind(binding.dialogChatActionsMarkUnread, !message.isFailed() && manage.canMarkUnread) {
             StoreStream.getMessageAck().markUnread(message.channelId, message.id)
+            dismiss()
+        }
+        val mediaUrl = argumentsOrDefault.getString(ARG_MEDIA_URL)
+        bind(binding.dialogChatActionsCopyMedia, mediaUrl != null) {
+            copy(mediaUrl!!, R.string.copy_media_link)
+            dismiss()
+        }
+        val mediaPath = mediaUrl?.substringBefore('?')?.lowercase().orEmpty()
+        binding.dialogChatActionsSaveMedia.setText(
+            when {
+                IMAGE_MIME_TYPES.any(mediaPath::endsWith) -> R.string.save_image
+                VIDEO_MIME_TYPES.any(mediaPath::endsWith) -> R.string.save_video
+                else -> R.string.save_file
+            },
+        )
+        bind(binding.dialogChatActionsSaveMedia, mediaUrl != null) {
+            requestMediaDownload { UserDownloadManager.enqueueRefreshed(requireContext(), mediaUrl!!, null) }
             dismiss()
         }
         bind(
@@ -496,6 +516,7 @@ class WidgetChatListActions : AppBottomSheet() {
         private const val ARG_MESSAGE_ID = "INTENT_EXTRA_MESSAGE_ID"
         private const val ARG_CONTENT = "INTENT_EXTRA_MESSAGE_CONTENT"
         private const val ARG_TYPE = "INTENT_EXTRA_TYPE"
+        private const val ARG_MEDIA_URL = "INTENT_EXTRA_MEDIA_URL"
         private const val TYPE_CHAT = 0
         private const val TYPE_PINS = 1
         private const val TYPE_SEARCH = 2
@@ -509,8 +530,13 @@ class WidgetChatListActions : AppBottomSheet() {
         fun showForSearch(fragmentManager: FragmentManager, channelId: Long, messageId: Long, messageContent: CharSequence) =
             show(fragmentManager, channelId, messageId, messageContent, TYPE_SEARCH)
 
-        fun show(fragmentManager: FragmentManager, channelId: Long, messageId: Long, _input: MessageActions.Input) =
-            show(fragmentManager, channelId, messageId, null, TYPE_CHAT)
+        fun show(
+            fragmentManager: FragmentManager,
+            channelId: Long,
+            messageId: Long,
+            _input: MessageActions.Input,
+            mediaUrl: String? = null,
+        ) = show(fragmentManager, channelId, messageId, null, TYPE_CHAT, mediaUrl)
 
         fun showForPin(fragmentManager: FragmentManager, channelId: Long, messageId: Long, _input: MessageActions.Input) =
             show(fragmentManager, channelId, messageId, null, TYPE_PINS)
@@ -521,12 +547,14 @@ class WidgetChatListActions : AppBottomSheet() {
             messageId: Long,
             messageContent: CharSequence?,
             type: Int,
+            mediaUrl: String? = null,
         ) = WidgetChatListActions().apply {
             arguments = Bundle().apply {
                 putLong(ARG_CHANNEL_ID, channelId)
                 putLong(ARG_MESSAGE_ID, messageId)
                 putCharSequence(ARG_CONTENT, messageContent)
                 putInt(ARG_TYPE, type)
+                putString(ARG_MEDIA_URL, mediaUrl)
             }
         }.show(fragmentManager, WidgetChatListActions::class.java.name)
 

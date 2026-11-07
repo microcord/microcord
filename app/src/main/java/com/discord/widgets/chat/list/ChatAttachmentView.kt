@@ -91,6 +91,7 @@ class ChatAttachmentView @JvmOverloads constructor(
         isSpoilerClickAllowed: Boolean,
         onSpoilerBlocked: () -> Unit,
         onQuickDownload: (Uri, String) -> Boolean,
+        onMediaLongClick: (MessageAttachment) -> Unit = {},
     ) {
         if (entry.message.isVoiceMessage()) {
             audioPlayer.releasePlayer()
@@ -120,6 +121,8 @@ class ChatAttachmentView @JvmOverloads constructor(
         val previewsText = entry.attachment.type == MessageAttachmentType.FILE &&
             isTextPreviewFilename(entry.attachment.filename)
         inlineMedia.setOnClickListener(openAttachment)
+        inlineMedia.setMediaLongClick { onMediaLongClick(entry.attachment) }
+        binding.chatListItemAttachmentCard.setMediaLongClick { onMediaLongClick(entry.attachment) }
         binding.chatListItemAttachmentCard.setOnClickListener(if (previewsText) null else openAttachment)
         configureTextPreview(entry.attachment, previewsText && !hiddenSpoiler)
     }

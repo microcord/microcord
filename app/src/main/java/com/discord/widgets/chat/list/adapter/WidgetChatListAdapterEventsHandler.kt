@@ -41,7 +41,6 @@ import com.discord.restapi.RestAPIParams
 import com.discord.stores.SelectedChannelAnalyticsLocation
 import com.discord.stores.StoreChat
 import com.discord.stores.StoreStream
-import com.discord.utilities.attachments.AttachmentUrlRefresher
 import com.discord.utilities.channel.ChannelSelector
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.guildscheduledevent.GuildScheduledEventUtilities
@@ -245,6 +244,10 @@ class WidgetChatListAdapterEventsHandler(
         if (!isThreadStarterMessage) showMessageActions(message)
     }
 
+    override fun onMediaLongClicked(message: Message, mediaUrl: String?, isThreadStarterMessage: Boolean) {
+        if (!isThreadStarterMessage) showMessageActions(message, mediaUrl)
+    }
+
     override fun onOpenPinsClicked(message: Message) = openPins(message.channelId)
 
     override fun onQuickAddReactionClicked(
@@ -260,17 +263,7 @@ class WidgetChatListAdapterEventsHandler(
     }
 
     override fun onQuickDownloadClicked(uri: Uri, fileName: String): Boolean {
-        host.requestMediaDownload {
-            val url = uri.toString()
-            // An old row still holds the link it was sent with, and the CDN refuses one whose
-            // signature has lapsed, so it is re-signed before the download is handed off.
-            AttachmentUrlRefresher.refreshExpired(listOf(url), System.currentTimeMillis())
-                .onErrorReturn { mapOf(url to url) }
-                .ui()
-                .appSubscribe(errorClass = WidgetChatListAdapterEventsHandler::class.java) { refreshed ->
-                    UserDownloadManager.enqueue(host.requireContext(), refreshed[url] ?: url, fileName)
-                }
-        }
+        host.requestMediaDownload { UserDownloadManager.enqueueRefreshed(host.requireContext(), uri.toString(), fileName) }
         return true
     }
 
@@ -554,7 +547,7 @@ class WidgetChatListAdapterEventsHandler(
 
     private fun dp(view: View, value: Int) = (value * view.resources.displayMetrics.density).toInt()
 
-    private fun showMessageActions(message: Message) {
+    private fun showMessageActions(message: Message, mediaUrl: String? = null) {
         val channel = StoreStream.getChannels().getChannel(message.channelId) ?: return
         WidgetChatListActions.show(
             fragmentManager,
@@ -571,6 +564,7 @@ class WidgetChatListAdapterEventsHandler(
                 pinned = message.pinned == true,
                 channelType = channel.type,
             ),
+            mediaUrl,
         )
     }
 
