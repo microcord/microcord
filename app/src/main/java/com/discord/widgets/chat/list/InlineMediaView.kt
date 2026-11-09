@@ -218,6 +218,8 @@ class InlineMediaView @JvmOverloads constructor(
     private fun getPlayerView(): PlayerView = playerView ?: (binding.inlineMediaPlayerStub.inflate() as PlayerView).also {
         playerView = it
         it.setOnLongClickListener(longClickListener)
+        // Being long-clickable makes the player consume the whole touch, so a tap is handed back to this card's click.
+        it.setOnClickListener { performClick() }
     }
 
     private var longClickListener: OnLongClickListener? = null
