@@ -30,6 +30,7 @@ import com.discord.stores.StoreThreadsActiveJoined.ActiveJoinedThread
 import com.discord.stores.StoreThreadsJoined.JoinedThread
 import com.discord.models.user.User
 import com.discord.utilities.channel.ChannelNotificationSettingsUtils
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.deniesAccessTo
 import com.discord.utilities.grantsAccessTo
 import com.discord.utilities.guilds.RoleUtils
@@ -802,6 +803,7 @@ data class WidgetChannelListModel(
             val forceViewCategories = HashSet<Long>()
 
             val optInEnabled = isOptInEnabled(guild)
+            val hideSuggested = FeatureFlags.hideSuggestedChannelsEnabled()
 
             /**
              * Under opt-in, the categories that hold something the viewer opted into, or that they
@@ -908,9 +910,10 @@ data class WidgetChannelListModel(
                             // channel they never opted into is hidden unless it pings them or they
                             // read it lately; those it keeps are moved to the Suggested section.
                             // As in RN's Recents, reading a muted channel (or one in a muted
-                            // category) is not enough; only a mention brings it back.
+                            // category) is not enough; only a mention brings it back. With Hide
+                            // Suggested Channels on, reading it lately is never enough either.
                             val notOptedIn = suggestedOnly && mentionCount <= 0 &&
-                                (id !in guild.recentlyReadChannelIds || isMuted || isCategoryMuted)
+                                (hideSuggested || id !in guild.recentlyReadChannelIds || isMuted || isCategoryMuted)
                             val result = !inFocus &&
                                 areAllChildThreadsRead(id) &&
                                 (collapsedAway || mutedAway || notOptedIn)

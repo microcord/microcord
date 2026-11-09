@@ -91,6 +91,7 @@ object ClientSettings {
     val headerCustomizations = register(BooleanSetting("feature_header_customizations"))
     val typingUserAvatars = register(BooleanSetting("feature_typing_user_avatars"))
     val whoReacted = register(BooleanSetting("feature_who_reacted"))
+    val hideSuggestedChannels = register(BooleanSetting("feature_hide_suggested_channels"))
     val readableRoleColors = register(BooleanSetting("feature_readable_role_colors"))
     /** Off by default: the modern message menu is the default and this brings the old one back. */
     val legacyMessageMenu = register(BooleanSetting("feature_legacy_message_menu"))

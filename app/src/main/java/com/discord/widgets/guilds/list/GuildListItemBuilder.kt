@@ -11,6 +11,7 @@ import com.discord.models.guild.Guild
 import com.discord.stores.StoreGuildsSorted
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isThread
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.channel.ChannelNotificationSettingsUtils
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -315,6 +316,7 @@ internal object GuildListItemBuilder {
         val settings = storeState.guildSettings[guild.id]
         // Opt-in only applies to community guilds, as in the channel list.
         val optInEnabled = settings?.isOptInChannelsEnabled == true && GuildFeature.COMMUNITY in guild.features
+        val hideSuggested = FeatureFlags.hideSuggestedChannelsEnabled()
         return guildChannelIds.any { channelId ->
             if (channelId !in storeState.unreadChannelIds) return@any false
             val channel = storeState.channels[channelId] ?: return@any false
@@ -336,8 +338,9 @@ internal object GuildListItemBuilder {
             if (optInEnabled && isDecayed(channel)) return@any false
             // Nor does a channel the viewer never opted into, unless it pings them or they read it
             // lately; the list hides the rest, so they would light a dot nobody can trace (RN `canBeUnread`).
+            // Hide Suggested Channels drops the "read lately" exception from the list, so here too.
             if (optInEnabled && mentions == 0 && !channel.isThread() && !isOptedIn(channel, settings) &&
-                channelId !in storeState.recentlyReadChannelIds
+                (hideSuggested || channelId !in storeState.recentlyReadChannelIds)
             ) return@any false
             // Only a computed permission can rule a channel out; an absent one means permissions
             // have not been calculated yet, and a missing dot is worse than a late one.

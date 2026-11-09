@@ -98,6 +98,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.whoReactedEnabled()
             setOnCheckedListener(FeatureFlags::setWhoReactedEnabled)
         }
+        binding.settingsFeatureHideSuggestedChannels.apply {
+            isChecked = FeatureFlags.hideSuggestedChannelsEnabled()
+            setOnCheckedListener(FeatureFlags::setHideSuggestedChannelsEnabled)
+        }
         binding.settingsFeatureLegacyMessageMenu.apply {
             isChecked = FeatureFlags.legacyMessageMenuEnabled()
             setOnCheckedListener(FeatureFlags::setLegacyMessageMenuEnabled)
