@@ -1,9 +1,13 @@
 package com.discord.stores
 
+import com.discord.api.message.PollVoteEvent
 import com.discord.models.domain.ModelMessageDelete
 import com.discord.models.message.Message
+import com.discord.restapi.RestAPIInterface
 import com.discord.stores.updates.ObservationDeck
+import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.filterNull
+import com.discord.utilities.rx.restSubscribeOn
 import rx.Observable
 
 /**
@@ -24,6 +28,7 @@ class StoreMessageReplies @JvmOverloads constructor(
     private val dispatcher: Dispatcher,
     private val storeMessages: StoreMessages,
     private val observationDeck: ObservationDeck,
+    private val restApi: () -> RestAPIInterface? = { null },
 ) : StoreV2() {
 
     /** What is known about a message some reply points at. */
@@ -50,6 +55,9 @@ class StoreMessageReplies @JvmOverloads constructor(
     }
 
     private val repliedMessagesCache = MessageCache<Long, MessageState>()
+
+    /** Poll messages whose results were requested, so each is fetched at most once per session. */
+    private val pollResultsFetched = HashSet<Long>()
 
     /** Channel id to the set of message ids referenced from that channel. */
     private val channelMap = HashMap<Long, Set<Long>>()
@@ -94,6 +102,14 @@ class StoreMessageReplies @JvmOverloads constructor(
         val cached = repliedMessagesCache[message.id] as? MessageState.Loaded ?: return
         val merged = cached.message.merge(message)
         updateCache(merged.id, merged.channelId, MessageState.Loaded(merged))
+        markChanged()
+    }
+
+    /** A thread starter lives only here, so its poll would otherwise never see a vote. */
+    @StoreThread
+    fun handlePollVote(event: PollVoteEvent, added: Boolean, meUserId: Long) {
+        val cached = repliedMessagesCache[event.messageId] as? MessageState.Loaded ?: return
+        updateCache(event.messageId, event.channelId, MessageState.Loaded(cached.message.withPollVote(event, added, meUserId)))
         markChanged()
     }
 
@@ -191,7 +207,24 @@ class StoreMessageReplies @JvmOverloads constructor(
             referencedMessage.channelId,
             MessageState.Loaded(referencedMessage),
         )
+        fetchPollResultsIfMissing(referencedMessage)
         if (referencedMessage.type == MESSAGE_TYPE_REPLY) processMessage(referencedMessage)
+    }
+
+    /**
+     * An inlined `referenced_message` carries its poll without `results`, which would draw a thread
+     * starter's poll as if nobody had voted. The message itself is fetched once to fill them in.
+     */
+    @StoreThread
+    private fun fetchPollResultsIfMissing(message: Message) {
+        if (message.poll == null || message.poll.results != null || !pollResultsFetched.add(message.id)) return
+        val api = restApi() ?: return
+        api.getChannelMessagesAround(message.channelId, 1, message.id)
+            .restSubscribeOn()
+            .appSubscribe(errorClass = StoreMessageReplies::class.java) { messages ->
+                val fetched = messages.firstOrNull { it.id == message.id } ?: return@appSubscribe
+                dispatcher.schedule { handleLoadMessages(listOf(Message(fetched))) }
+            }
     }
 
     @StoreThread

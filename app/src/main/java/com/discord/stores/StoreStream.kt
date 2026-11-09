@@ -558,7 +558,9 @@ class StoreStream private constructor(
         requestGuildMembers = { guildId, query -> gatewayConnection.requestGuildMembers(guildId, query) },
     )
     private val threadMessages = StoreThreadMessages(messages, channels, observationDeck)
-    private val messageReplies = StoreMessageReplies(dispatcher, messages, observationDeck)
+    private val messageReplies = StoreMessageReplies(dispatcher, messages, observationDeck) {
+        if (::restApi.isInitialized) restApi else null
+    }
     private val messageReactions = StoreMessageReactions(dispatcher, users, observationDeck) {
         if (::restApi.isInitialized) restApi else null
     }
@@ -2428,6 +2430,7 @@ class StoreStream private constructor(
             messages.handlePollVote(vote, true, meUserId)
             pinnedMessages.handlePollVote(vote, true, meUserId)
             forumPostMessages.handlePollVote(vote, true, meUserId)
+            messageReplies.handlePollVote(vote, true, meUserId)
         }
         dispatchSubscribe(events.pollVoteAddMany, "streamMessagePollVoteAddMany") { batch ->
             val meUserId = users.getMeInternal().id
@@ -2443,6 +2446,7 @@ class StoreStream private constructor(
                     messages.handlePollVote(vote, true, meUserId)
                     pinnedMessages.handlePollVote(vote, true, meUserId)
                     forumPostMessages.handlePollVote(vote, true, meUserId)
+            messageReplies.handlePollVote(vote, true, meUserId)
                 }
             }
         }
@@ -2451,6 +2455,7 @@ class StoreStream private constructor(
             messages.handlePollVote(vote, false, meUserId)
             pinnedMessages.handlePollVote(vote, false, meUserId)
             forumPostMessages.handlePollVote(vote, false, meUserId)
+            messageReplies.handlePollVote(vote, false, meUserId)
         }
 
         // Voice, calls and streams

@@ -97,6 +97,38 @@ class StoreMessageRepliesTest {
         assertTrue(fixture.store.getAllMessageReferences().containsKey(14L))
     }
 
+    /** A thread starter's poll lives only in this store, so votes in the parent must reach it. */
+    @Test
+    fun pollVotesUpdateAThreadStartersPoll() {
+        val fixture = fixture()
+        val poll = com.discord.api.message.MessagePoll(
+            question = com.discord.api.message.PollMedia("q"),
+            answers = listOf(com.discord.api.message.PollAnswer(1, com.discord.api.message.PollMedia("a"))),
+            expiry = null,
+            allowMultiselect = false,
+            layoutType = 1,
+        )
+        fixture.dispatcher.schedule {
+            fixture.store.handleMessageCreate(
+                com.discord.api.message.Message(
+                    id = 25,
+                    channelId = CHANNEL,
+                    content = "",
+                    type = 21,
+                    messageReference = MessageReference(null, CHANNEL, 15),
+                    referencedMessage = com.discord.api.message.Message(id = 15, channelId = CHANNEL, content = "", poll = poll),
+                ),
+            )
+            fixture.store.handlePollVote(com.discord.api.message.PollVoteEvent(7, CHANNEL, 15, null, 1), true, 7)
+        }
+        fixture.scheduler.triggerActions()
+
+        val state = fixture.store.getAllMessageReferences()[15L] as StoreMessageReplies.MessageState.Loaded
+        val count = state.message.poll!!.results!!.answerCounts.single()
+        assertEquals(1, count.count)
+        assertTrue(count.meVoted)
+    }
+
     private fun reply(id: Long, referencedId: Long, inlineReferenced: Boolean) =
         com.discord.api.message.Message(
             id = id,
