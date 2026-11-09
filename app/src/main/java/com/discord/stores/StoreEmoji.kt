@@ -16,7 +16,11 @@ import com.discord.utilities.user.UserUtils.isPremium
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import java.util.Locale
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 import java.util.regex.Pattern
+import kotlin.concurrent.thread
 import rx.Observable
 
 /**
@@ -81,15 +85,33 @@ class StoreEmoji(
 
     // endregion
 
+    private var preload: FutureTask<Unit>? = null
+
     /**
-     * Reads `assets/data/emojis.json` on the calling thread.
+     * Starts reading and indexing the catalog on a background thread so it overlaps the rest of
+     * store-graph startup. [initBlocking] still waits for it, so nothing observes a partial catalog.
+     */
+    fun startPreload(context: Context) {
+        val task = FutureTask(Callable { handleLoadedUnicodeEmojis(loadUnicodeEmojisFromDisk(context)) })
+        preload = task
+        thread(isDaemon = true, name = "StoreEmojiPreload") { task.run() }
+    }
+
+    /**
+     * Reads `assets/data/emojis.json`, or waits for [startPreload] to finish doing so.
      *
      * Blocking is deliberate and matches the reference: message parsing cannot start until the
-     * catalog exists, so deferring it to a background thread would only create a window in which
-     * emoji silently fail to render.
+     * catalog exists, so returning before it is loaded would only create a window in which emoji
+     * silently fail to render. `Future.get` publishes the preload thread's writes to this thread.
      */
     fun initBlocking(context: Context) {
-        handleLoadedUnicodeEmojis(loadUnicodeEmojisFromDisk(context))
+        val task = preload ?: return handleLoadedUnicodeEmojis(loadUnicodeEmojisFromDisk(context))
+        preload = null
+        try {
+            task.get()
+        } catch (e: ExecutionException) {
+            throw e.cause ?: e
+        }
     }
 
     /** Resolves a custom-status/reaction emoji id without knowing which guild owns it. */

@@ -44,8 +44,9 @@ val releaseRequested = gradle.startParameter.taskNames.any { it.substringAfterLa
 android {
     namespace = "com.discord"
     // The engine opens the Krisp models with openFd, which only works on stored entries.
+    // Fonts are stored too: a deflated font is inflated and copied on every getFont at startup.
     androidResources {
-        noCompress += "kw"
+        noCompress += listOf("kw", "ttf", "otf")
     }
     compileSdk {
         version = release(37)

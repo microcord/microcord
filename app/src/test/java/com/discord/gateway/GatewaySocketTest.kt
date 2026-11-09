@@ -27,6 +27,19 @@ class GatewaySocketTest {
     }
 
     @Test
+    fun decoderIsCreatedOnTheGatewaySchedulerRatherThanByTheConstructor() {
+        // The socket is constructed on the main thread in Application.onCreate; the zstd context
+        // loads a native library, so it must wait for the first scheduled connect.
+        val harness = Harness(identifyOnOpen = true)
+        harness.gateway.connect()
+        assertEquals(0, harness.decodersCreated)
+
+        harness.scheduler.runCurrent()
+
+        assertEquals(1, harness.decodersCreated)
+    }
+
+    @Test
     fun fastConnectIdentifiesOnOpenWithoutWaitingForHello() {
         val harness = Harness(identifyOnOpen = true)
 
@@ -322,6 +335,7 @@ class GatewaySocketTest {
         val factory = FakeSocketFactory()
         val handler = RecordingHandler()
         val logger = RecordingLogger()
+        var decodersCreated = 0
         val gateway = GatewaySocket(
             identifyDataProvider = { identifyData },
             identifyProperties = { mapOf("os" to "Android", "browser" to "Discord Android", "device" to "fixture") },
@@ -332,7 +346,7 @@ class GatewaySocketTest {
             gatewaySocketLogger = logger,
             jitter = { 1.0 },
             identifyOnOpen = identifyOnOpen,
-            decoderFactory = { IdentityDecoder() },
+            decoderFactory = { decodersCreated++; IdentityDecoder() },
         )
 
         val socket: FakeSocket get() = factory.sockets.last()

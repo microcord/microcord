@@ -9,8 +9,11 @@ import dev.mantikafasi.manticord.plugins.api.PluginSettings
 import rx.Observable
 import rx.subjects.BehaviorSubject
 import java8.util.concurrent.CompletableFuture
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
 internal enum class PluginState {
@@ -66,6 +69,18 @@ internal class PluginManager(
     private var startupStartedAt = 0L
     private var discoveryDurationMs = 0L
     private var resolutionDurationMs = 0L
+    @Volatile private var prefetchedDiscovery: Future<List<PluginHandle>>? = null
+
+    /**
+     * Runs startup discovery (PackageManager IPC) on the coordinator so it overlaps the rest of
+     * `Application.onCreate`; the next [initialize] awaits it instead of querying again. Loading
+     * and blocking plugins still happen in [initialize], so their ordering and waits are unchanged.
+     */
+    fun prefetchDiscovery(context: Context) {
+        if (!loadingEnabled()) return
+        val appContext = context.applicationContext
+        prefetchedDiscovery = coordinator.submit(Callable { discover(appContext) })
+    }
 
     fun initialize(context: Context?): PluginLoadPlan {
         if (!loadingEnabled()) return PluginLoadPlan(emptyList(), emptyMap())
@@ -76,11 +91,15 @@ internal class PluginManager(
             startupStartedAt = SystemClock.elapsedRealtimeNanos()
             ++generation
         }
-        PluginLoadingPolicy.recoverInterruptedBlockingStart()
-
-        val discoveryStartedAt = SystemClock.elapsedRealtimeNanos()
-        val handles = source.discover(appContext)
-        discoveryDurationMs = elapsedMs(discoveryStartedAt)
+        val prefetched = prefetchedDiscovery
+        prefetchedDiscovery = null
+        val handles = prefetched?.let {
+            try {
+                it.get()
+            } catch (e: ExecutionException) {
+                throw e.cause ?: e
+            }
+        } ?: discover(appContext)
         val preflightStartedAt = SystemClock.elapsedRealtimeNanos()
         val preflight = PluginDependencyResolver.resolve(
             handles.map { PluginCandidate(it.manifest, PluginLoadingPolicy.isPluginEnabled(it.manifest.id)) },
@@ -108,6 +127,12 @@ internal class PluginManager(
         }
         if (asyncHandles.isEmpty()) publishCompletedMetrics()
         return blockingPlan
+    }
+
+    private fun discover(appContext: Context): List<PluginHandle> {
+        PluginLoadingPolicy.recoverInterruptedBlockingStart()
+        val discoveryStartedAt = SystemClock.elapsedRealtimeNanos()
+        return source.discover(appContext).also { discoveryDurationMs = elapsedMs(discoveryStartedAt) }
     }
 
     @Synchronized
@@ -343,6 +368,7 @@ internal object PluginRuntime {
         Thread(runnable, "ManticordPluginControls").apply { isDaemon = true }
     }
 
+    fun prefetchDiscovery(context: Context) = manager.prefetchDiscovery(context)
     fun initialize(context: Context) = manager.initialize(context)
     fun observeSnapshots(): Observable<List<PluginSnapshot>> = manager.observeSnapshots()
     fun observeMetrics(): Observable<PluginMetrics> = manager.observeMetrics()

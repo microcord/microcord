@@ -143,7 +143,7 @@ test("valid manifest exposes full build identity and caches only slim validated 
   const { apkUrl, ...cacheFields } = expected;
   assert.deepEqual([...cached.keys()], [`${origin}/_release-cache/v4/latest`]);
   assert.deepEqual(await cached.values().next().value.clone().json(), {
-    ...cacheFields, assetId: 7, abis: {}, notes: release.body, notesTruncated: false,
+    ...cacheFields, assetId: 7, dms: {}, abis: {}, notes: release.body, notesTruncated: false,
   });
   assert.deepEqual(await (await request()).json(), expected);
   assert.equal(await (await request("/latest.json", { method: "HEAD" })).text(), "");
@@ -824,3 +824,33 @@ function withManifestOf(base) {
   const body = JSON.stringify(manifest);
   return { ...base, assets: [...base.assets, { id: 8, name: "update-manifest.json", state: "uploaded", size: Buffer.byteLength(body) }] };
 }
+
+test("releases list each APK's baseline profiles, which download like their APK", async () => {
+  const profile = (id, name, digit) => ({ id, name, state: "uploaded", size: 8, digest: `sha256:${digit.repeat(64)}` });
+  const profiled = { ...splitRelease, assets: [...splitRelease.assets,
+    profile(90, "app-release-api28.dm", "e"), profile(91, "app-release-api31.dm", "f"),
+    profile(92, "app-arm64-v8a-release-api31.dm", "9"),
+    // Optional files never fail a release closed: a broken digest or an unknown range is left out.
+    { ...profile(93, "app-arm64-v8a-release-api28.dm", "8"), digest: null }, profile(94, "app-x86-release-api29.dm", "7"),
+  ] };
+  responses.push(Response.json(withManifestOf(profiled)), new Response(JSON.stringify(manifest)));
+  const feed = await (await request()).json();
+  assert.deepEqual(feed.dexMetadata, [
+    { url: `${origin}/releases/build-42-api28.dm`, sha256: "e".repeat(64), size: 8, minSdk: 28, maxSdk: 30 },
+    { url: `${origin}/releases/build-42-api31.dm`, sha256: "f".repeat(64), size: 8, minSdk: 31 },
+  ]);
+  assert.deepEqual(feed.apks["arm64-v8a"].dexMetadata, [
+    { url: `${origin}/releases/build-42-arm64-v8a-api31.dm`, sha256: "9".repeat(64), size: 8, minSdk: 31 },
+  ]);
+  assert.equal(feed.apks.x86.dexMetadata, undefined);
+  responses.push(Response.json(profiled), upstreamApk());
+  const dm = await request("/releases/build-42-arm64-v8a-api31.dm");
+  assert.equal(dm.status, 200);
+  assert.equal(dm.headers.get("Content-Type"), "application/octet-stream");
+  assert.equal(dm.headers.get("Content-Disposition"), 'attachment; filename="microcord-build-42-arm64-v8a-api31.dm"');
+  assert.equal(calls.at(-1).url, `${api}/releases/assets/92`);
+  assert.ok(cached.has(`${origin}/_apk-cache/v1/build-42/arm64-v8a-api31/${"9".repeat(64)}`));
+  for (const path of ["/releases/build-42-arm64-v8a-api28.dm", "/releases/build-42-x86-api29.dm", "/releases/build-42-api31.apk"]) {
+    assert.equal((await request(path)).status, 404);
+  }
+});

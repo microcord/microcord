@@ -207,6 +207,8 @@ class WidgetSettingsUpdates : AppFragment(R.layout.widget_settings_updates) {
             AppUpdater.prepareInstall(context).ui(this).subscribe({ file ->
                 preparingInstall = false
                 render(AppUpdater.state)
+                // Null: the update went to an installer session with its baseline profile, which asks the user itself.
+                if (file == null) return@subscribe
                 try {
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                     startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")

@@ -32,6 +32,11 @@ or the Android app. Local `.env*` and `.dev.vars*` files are ignored. The Worker
   When the release has per-architecture APKs, `apks` maps each ABI (`arm64-v8a`, `armeabi-v7a`,
   `x86_64`, `x86`) to its own `apkUrl`, `sha256` and `size`. The app downloads the first one its
   `Build.SUPPORTED_ABIS` lists, and the universal APK otherwise; older clients ignore `apks`.
+  The universal APK and each `apks` entry may carry `dexMetadata`: that APK's baseline profiles as
+  `{url, sha256, size, minSdk, maxSdk}` (`maxSdk` absent when unbounded), one per API range AGP builds
+  (28-30 as `api28`, 31+ as `api31`). On Android 9+ the app installs the matching one as `base.dm`
+  beside the APK so ART compiles the update with it; without one it installs the APK alone. Older
+  clients ignore the field, and a profile asset with a broken digest is left out rather than failing.
 - `GET /latest.apk`: redirects to the latest published release's version-pinned APK URL.
   The redirect is not cached; release selection uses the same 60-second metadata cache as
   `latest.json`. Share https://microcord.mantikafasi.dev/latest.apk as the stable download link.
@@ -39,6 +44,8 @@ or the Android app. Local `.env*` and `.dev.vars*` files are ignored. The Worker
   architecture, or to its universal APK when the release predates the split.
 - `GET /releases/build-163.apk`: that exact published release's universal APK, not whichever is latest.
 - `GET /releases/build-218-arm64-v8a.apk` (and the other ABIs): that release's APK for one architecture.
+- `GET /releases/build-218-api31.dm`, `GET /releases/build-218-arm64-v8a-api28.dm` (and the other
+  ABIs and ranges): a baseline profile for that APK, served through the same edge cache as APKs.
 - `GET /releases/build-166/changes.json?from=<installed SHA>`: notes and commit titles for that
   exact published APK. Requires exactly one `from` parameter containing a full 40-hex installed
   commit SHA (case-insensitive, returned lowercase). No repository, branch or other inputs.
@@ -142,6 +149,9 @@ all five, checks the package and version, and streams SHA-256 over the universal
 loading it into memory. The workflow publishes the universal APK as `app-release.apk` beside the
 splits. The splits share the universal APK's build identity, so the manifest describes only the
 universal APK; the Worker takes the splits' digests and sizes from GitHub's release assets.
+The workflow also publishes each APK's baseline profiles from AGP's `baselineProfiles/` output as
+`app[-<abi>]-release-api28.dm` and `-api31.dm`, failing if AGP's API ranges stop matching the Worker's;
+their digests likewise come from the release assets.
 Output: `app/build/outputs/update/release/update-manifest.json`.
 
 The UTF-8 JSON object contains:

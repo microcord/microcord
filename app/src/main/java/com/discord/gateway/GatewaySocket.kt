@@ -113,7 +113,9 @@ class GatewaySocket(
         .create()
     private val incomingParser = IncomingParser(InboundGatewayGsonParser.gatewayGsonInstance)
     private val compression = initialCompression
-    private var decoder: GatewayStreamDecoder = decoderFactory(compression)
+    // Lazy: creating the zstd context loads its native library (~8 ms), and the socket is built
+    // on the main thread during Application.onCreate. First touched on the scheduler thread.
+    private val decoder: GatewayStreamDecoder by lazy { decoderFactory(compression) }
     private var state = State.DISCONNECTED
     private var socket: GatewayWebSocket? = null
     private var generation = 0
@@ -325,7 +327,6 @@ class GatewaySocket(
             return
         }
         state = State.CONNECTING
-        decoder.reset()
         val currentGeneration = ++generation
         val endpoint = url.trimEnd('/') + "/?encoding=json&v=9&compress=${compression.queryValue}"
         logInfo("connecting host=${runCatching { java.net.URI(url).host }.getOrNull().orEmpty()}")
@@ -361,6 +362,9 @@ class GatewaySocket(
             scheduleReconnect("Gateway socket creation failed")
             null
         }
+        // After the connect is in flight so a first-use decoder (a native library load) overlaps the
+        // handshake. Still before any frame: listener callbacks are queued behind this task.
+        decoder.reset()
     }
 
     private fun handleBinaryMessage(bytes: ByteArray, receivedNanos: Long) {

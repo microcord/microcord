@@ -1,0 +1,20 @@
+# Hand-maintained startup rules merged with the generated release profile.
+# The generator records a fresh login, so it never decodes a warm Persister cache: without these
+# rules Kryo's read path, emoji setup and the first store/list models run interpreted on every
+# launch after an install (measured: ~68 JIT compilations, ~130 ms of JIT work in the first second).
+HSPLcom/esotericsoftware/kryo/**->**(**)**
+Lcom/esotericsoftware/kryo/**;
+HSPLcom/discord/utilities/persister/**->**(**)**
+HSPLcom/google/gson/**->**(**)**
+HSPLcom/discord/stores/StoreEmoji**->**(**)**
+HSPLcom/discord/stores/StoreChannels**->**(**)**
+HSPLcom/discord/stores/StoreReadStates**->**(**)**
+HSPLcom/discord/stores/updates/ObservationDeck**->**(**)**
+HSPLcom/discord/utilities/permissions/PermissionUtils**->**(**)**
+HSPLcom/discord/utilities/collections/ShallowPartitionMap**->**(**)**
+HSPLcom/discord/widgets/chat/input/autocomplete/**->**(**)**
+HSPLcom/discord/widgets/chat/input/emoji/EmojiPickerViewModel**->**(**)**
+HSPLcom/discord/widgets/chat/list/entries/ChatListEntry**->**(**)**
+HSPLcom/discord/widgets/chat/list/model/WidgetChatListModel**->**(**)**
+HSPLcom/discord/widgets/channels/list/WidgetChannelListModel**->**(**)**
+HSPLcom/discord/widgets/guilds/list/GuildListItemBuilder**->**(**)**

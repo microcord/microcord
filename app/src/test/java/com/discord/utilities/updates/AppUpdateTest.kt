@@ -108,6 +108,42 @@ class AppUpdateTest {
         }
     }
 
+    @Test fun `each Android version takes its APK's own profile and a missing or malformed one installs the APK alone`() {
+        fun dm(path: String, minSdk: Int?, maxSdk: Int? = null, sha: String = "d".repeat(64)) =
+            AppUpdate.DexMetadata("https://microcord.mantikafasi.dev/releases/$path.dm", sha, 9, minSdk, maxSdk)
+        val arm64 = AppUpdate.Apk("https://microcord.mantikafasi.dev/releases/build-42-arm64-v8a.apk", "c".repeat(64), 7,
+            listOf(dm("build-42-arm64-v8a-api28", 28, 30), dm("build-42-arm64-v8a-api31", 31)))
+        val universal = listOf(dm("build-42-api28", 28, 30))
+        // Through JSON, as the feed arrives; an absent maxSdk means no upper bound.
+        val feed = Gson().fromJson(Gson().toJson(update.copy(apks = mapOf("arm64-v8a" to arm64), dexMetadata = universal)),
+            AppUpdate::class.java)
+        val phone = feed.forAbis(listOf("arm64-v8a")).validate()
+        assertNull(phone.dexMetadataFor(27))
+        assertEquals(arm64.dexMetadata!![0], phone.dexMetadataFor(28))
+        assertEquals(arm64.dexMetadata!![0], phone.dexMetadataFor(30))
+        assertEquals(arm64.dexMetadata!![1], phone.dexMetadataFor(36))
+        // No split for this phone: the universal APK and its profiles, here only for Android 9 to 11.
+        val other = feed.forAbis(listOf("x86")).validate()
+        assertEquals(universal[0], other.dexMetadataFor(29))
+        assertNull(other.dexMetadataFor(31))
+        // Feeds from before profiles were published.
+        assertNull(update.dexMetadataFor(34))
+        val legacy = Gson().fromJson("""{"release":"build-42","apkUrl":"${update.apkUrl}","sha256":"$digest","size":${bytes.size}}""",
+            AppUpdate::class.java).validate()
+        assertNull(legacy.dexMetadataFor(34))
+        // A malformed profile is skipped, never failing the update itself.
+        val good = dm("build-42-api31", 31)
+        listOf(
+            dm("build-42-api31", 31, sha = "bad"), dm("build-42-api31", null), dm("build-42-api27", 27),
+            dm("build-43-api31", 31), dm("build-42-api28", 31), dm("build-42-mips-api31", 31),
+            good.copy(url = "https://evil.example/releases/build-42-api31.dm"), good.copy(url = "${good.url}?x=1"),
+            good.copy(url = null), good.copy(size = 0), good.copy(size = Long.MAX_VALUE),
+        ).forEach { bad ->
+            assertNull(update.copy(dexMetadata = listOf(bad)).validate().dexMetadataFor(34))
+            assertEquals(good, update.copy(dexMetadata = listOf(bad, good)).dexMetadataFor(34))
+        }
+    }
+
     @Test fun `release changes are bound to the installed and published source revisions`() {
         val from = "a".repeat(40)
         val changes = AppUpdateChanges(update.release, from, update.commitSha, "## Fixed\n- A bug", false,

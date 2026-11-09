@@ -35,7 +35,9 @@ class SystemLogCapture {
         synchronized(persistenceLock) {
             val current = File(filesDir, CURRENT_LOG_FILE)
             val previous = File(filesDir, PREVIOUS_LOG_FILE)
-            if (current.exists()) current.copyTo(previous, overwrite = true)
+            // A rename instead of a copy: this runs in Application.onCreate and the file is up to
+            // half a megabyte. The copy stays as the fallback for a filesystem that refuses it.
+            if (current.exists() && !current.renameTo(previous)) current.copyTo(previous, overwrite = true)
             current.delete()
             currentLogFile = current
             previousLogFile = previous
@@ -53,7 +55,12 @@ class SystemLogCapture {
         start = true,
         isDaemon = true,
         name = SystemLogCapture::class.java.simpleName,
-    ) { start() }
+    ) {
+        // Background priority (inherited by the forked logcat) so the tail never competes with the
+        // main thread during startup. logd buffers what it has not read yet, so nothing is lost.
+        runCatching { AndroidProcess.setThreadPriority(AndroidProcess.THREAD_PRIORITY_BACKGROUND) }
+        start()
+    }
 
     fun appendOutput(sb: StringBuilder) {
         tombstoneBuffer.appendString(sb)
@@ -98,7 +105,11 @@ class SystemLogCapture {
                     while (true) {
                         val line = reader.readLine() ?: break
                         captureLine(line)
-                        if (SystemLogUtils.regexExtractTombstone.matches(line)) {
+                        // Both tombstone alternatives contain one of these literals; the cheap
+                        // check spares the backtracking regex on every ordinary line.
+                        if ((line.contains("DEBUG") || line.contains("[libdiscord_version]")) &&
+                            SystemLogUtils.regexExtractTombstone.matches(line)
+                        ) {
                             tombstoneBuffer.addLine(line)
                         }
                     }
@@ -115,20 +126,21 @@ class SystemLogCapture {
     }
 
     private fun captureLine(line: String) {
-        if (!shouldIncludeLogLine(line)) return
+        // Drops the kernel's "chatty" rate-limit notices, which are pure noise and can outnumber
+        // the real lines during a burst. One match per line: this runs for every line logged.
+        if (line.contains(CHATTY_MARKER)) return
+        val match = LOG_LINE.matchEntire(line) ?: return
         val safeLine = AppLog.redactSecrets(line)
         buffer.addLine(safeLine)
-        LOG_LINE.matchEntire(line)?.let { match ->
-            val priority = priority(match.groupValues[1])
-            if (match.groupValues[2] != APP_LOG_TAG) {
-                AppLog.captureLogcat(priority, safeLine, isSystem = true)
-            }
-            // Each persist rewrites the whole buffer (up to 512 KB). Counting lines re-armed itself on
-            // the line after every persist, so it ran per line and took ~9% of startup CPU; errors
-            // still go to disk at once, everything else at most every couple of seconds.
-            val now = SystemClock.uptimeMillis()
-            if (priority >= Log.ERROR || now - lastPersistAt >= PERSIST_INTERVAL_MS) persist()
+        val priority = priority(match.groupValues[1])
+        if (match.groupValues[2] != APP_LOG_TAG) {
+            AppLog.captureLogcat(priority, safeLine, isSystem = true)
         }
+        // Each persist rewrites the whole buffer (up to 512 KB). Counting lines re-armed itself on
+        // the line after every persist, so it ran per line and took ~9% of startup CPU; errors
+        // still go to disk at once, everything else at most every couple of seconds.
+        val now = SystemClock.uptimeMillis()
+        if (priority >= Log.ERROR || now - lastPersistAt >= PERSIST_INTERVAL_MS) persist()
     }
 
     private fun persist() {
@@ -145,13 +157,7 @@ class SystemLogCapture {
         private const val MAX_TOMBSTONE_BUFFER_CHARACTERS = 102_400
         private const val RESTART_DELAY_MS = 1_000L
 
-        /**
-         * Drops the kernel's "chatty" rate-limit notices, which are pure noise and can outnumber
-         * the real lines during a burst.
-         */
-        internal fun shouldIncludeLogLine(line: String): Boolean =
-            !line.contains("chatty  : uid=") && LOG_LINE.matches(line)
-
+        private const val CHATTY_MARKER = "chatty  : uid="
         private val LOG_LINE = Regex("^([VDIWE])/([^(:]+)\\(\\s*\\d+\\):\\s?(.*)$")
 
         private const val APP_LOG_TAG = "Discord"

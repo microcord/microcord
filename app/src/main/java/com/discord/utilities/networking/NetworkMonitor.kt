@@ -12,6 +12,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArraySet
+import kotlin.concurrent.thread
 import rx.Observable
 import rx.subjects.BehaviorSubject
 
@@ -37,7 +38,11 @@ class NetworkMonitor(context: Context) {
     private val availableNetworks = CopyOnWriteArraySet<Network>()
 
     init {
-        registerConnectivityNetworkMonitor(applicationContext)
+        // The registrations are ~10 ms of binder IPC and this is built in Application.onCreate. The
+        // initial state above is still read synchronously; registering republishes it (the default
+        // network callback reports the current network, the connectivity broadcast is sticky), and
+        // callbacks and receivers are delivered on their own threads regardless of who registers.
+        thread(isDaemon = true, name = TAG) { registerConnectivityNetworkMonitor(applicationContext) }
     }
 
     fun observeState(): Observable<State> = networkStateSubject.onBackpressureBuffer().distinctUntilChanged()

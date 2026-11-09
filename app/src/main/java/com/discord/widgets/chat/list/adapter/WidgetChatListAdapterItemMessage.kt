@@ -39,6 +39,7 @@ import com.discord.i18n.Hook
 import com.discord.i18n.I18nHooks
 import com.discord.models.member.GuildMember
 import com.discord.models.message.Message
+import com.discord.models.presence.Presence
 import com.discord.models.user.CoreUser
 import com.discord.models.user.User
 import com.discord.stores.StoreMessageReplies
@@ -56,6 +57,8 @@ import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.intent.IntentUtils
 import com.discord.utilities.message.MessageUtils
 import com.discord.utilities.permissions.PermissionUtils
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MarkupEligibility
@@ -86,6 +89,7 @@ import com.discord.widgets.emoji.WidgetEmojiSheet
 import com.discord.widgets.roles.RoleIconView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
 import kotlin.math.max
+import rx.Subscription
 
 /**
  * A message: the author block, the body, the reply header above it and the failure state below it.
@@ -143,6 +147,8 @@ class WidgetChatListAdapterItemMessage(
         itemView.findViewById(R.id.chat_list_adapter_item_text_avatar_decoration)
     private val itemStatus: StatusView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_status)
+    private var presenceSubscription: Subscription? = null
+    override val subscription: Subscription? get() = presenceSubscription
     private val itemName: TextView? = itemView.findViewById(R.id.chat_list_adapter_item_text_name)
     private val itemRoleIcon: RoleIconView? =
         itemView.findViewById(R.id.chat_list_adapter_item_text_role_icon)
@@ -433,12 +439,24 @@ class WidgetChatListAdapterItemMessage(
     private fun configureAvatar(entry: MessageEntry, message: Message) {
         val itemAvatar = itemAvatar ?: return
         val statusUser = message.author?.let(::CoreUser)
-        val presence = statusUser?.let { StoreStream.getPresences().getPresences()[it.id] }
-        itemStatus?.apply {
-            val visible = FeatureFlags.chatHeaderStatusIndicatorsEnabled() &&
-                statusUser != null && UserUtils.isStatusVisible(statusUser, presence, true)
-            visibility = if (visible) View.VISIBLE else View.GONE
-            if (visible) setPresence(presence)
+        presenceSubscription?.unsubscribe()
+        presenceSubscription = null
+        val status = itemStatus
+        if (status != null && statusUser != null && FeatureFlags.chatHeaderStatusIndicatorsEnabled()) {
+            fun showPresence(presence: Presence?) {
+                val visible = UserUtils.isStatusVisible(statusUser, presence, true)
+                status.visibility = if (visible) View.VISIBLE else View.GONE
+                if (visible) status.setPresence(presence)
+            }
+            showPresence(StoreStream.getPresences().getPresences()[statusUser.id])
+            // Presences arrive and change after the row is bound; nothing else rebinds it for that.
+            StoreStream.getPresences().observePresenceForUser(statusUser.id).ui().appSubscribe(
+                errorClass = WidgetChatListAdapterItemMessage::class.java,
+                subscriptionHandler = { presenceSubscription = it },
+                onNext = ::showPresence,
+            )
+        } else {
+            status?.visibility = View.GONE
         }
         val guildMember = chatIdentityMember(entry.author)
         itemAvatarDecoration?.bind(guildMember?.avatarDecoration ?: message.author?.avatarDecorationData?.value)

@@ -45,6 +45,8 @@ object AppUpdater {
         OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS).build()
     }
+    // Release files redirect to their media host; their feed digest, not the host, vouches for the bytes.
+    private val assetHttp by lazy { http.newBuilder().followRedirects(true).build() }
     private var restored = false
     private var polling: Subscription? = null
     private var queuedNoticeSha: String? = null
@@ -171,6 +173,7 @@ object AppUpdater {
                                 copyVerifiedUpdate(it, File(directory, "${update.sha256}.apk"), update)
                             }
                             verifyPackage(app, file, update)
+                            runCatching { downloadDexMetadata(directory, update) }
                         }.subscribeOn(Schedulers.io()).ui().subscribe({
                             states.onNext(State(Phase.READY, update))
                         }, {
@@ -199,17 +202,45 @@ object AppUpdater {
         states.onNext(State(Phase.AVAILABLE, state.update))
     }
 
-    fun prepareInstall(context: Context): Observable<File> {
+    /**
+     * The verified APK to hand to the system installer, or null once it went to an installer session
+     * together with its baseline profile; that session asks the user and reports through [AppUpdateSession].
+     */
+    fun prepareInstall(context: Context): Observable<File?> {
         val app = context.applicationContext
         val update = requireNotNull(state.update)
         kotlin.check(state.phase == Phase.READY && isNewer(update))
-        return Observable.fromCallable {
-            val file = File(app.filesDir, "updates/${update.sha256}.apk")
+        return Observable.fromCallable<File?> {
+            val directory = File(app.filesDir, "updates")
+            val file = File(directory, "${update.sha256}.apk")
             // Recheck private bytes as well as Android package/signers immediately before granting access.
             verifyUpdateFile(file, update)
             verifyPackage(app, file, update)
-            file
+            file.takeUnless { installWithProfile(app, directory, file, update) }
         }.subscribeOn(Schedulers.io())
+    }
+
+    /** A profile session failed: drop the profile so the next attempt hands the APK alone to the system installer. */
+    internal fun onInstallSessionFailed(context: Context) {
+        File(context.filesDir, "updates").listFiles()?.filter { it.extension == "dm" }?.forEach { it.delete() }
+        if (state.phase == Phase.READY) states.onNext(state.copy(error = R.string.updater_install_failed))
+    }
+
+    /** The profile ART compiles the update with at install time; without it the APK still installs alone. */
+    private fun downloadDexMetadata(directory: File, update: AppUpdate) {
+        val dm = update.dexMetadataFor(Build.VERSION.SDK_INT) ?: return
+        assetHttp.newCall(Request.Builder().url(requireNotNull(dm.url)).build()).execute().use { response ->
+            kotlin.check(response.isSuccessful)
+            copyVerifiedFile(requireNotNull(response.body).byteStream(), File(directory, "${dm.sha256}.dm"),
+                requireNotNull(dm.size), requireNotNull(dm.sha256))
+        }
+    }
+
+    private fun installWithProfile(context: Context, directory: File, apk: File, update: AppUpdate): Boolean {
+        val dm = update.dexMetadataFor(Build.VERSION.SDK_INT) ?: return false
+        val dmFile = File(directory, "${dm.sha256}.dm").takeIf(File::isFile) ?: return false
+        // Any session problem falls back to the system installer with the APK alone.
+        return runCatching { AppUpdateSession.commit(context, apk, update, dmFile, dm) }.isSuccess
     }
 
     fun invalidateDownload(context: Context) {

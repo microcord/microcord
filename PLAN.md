@@ -189,6 +189,13 @@ beside the implementation; investigate their evidence before changing them.
   message notifications. This is not background polling or an OS update alert.
 - DownloadManager owns background downloads. Downloads and installation start
   only through the user's actions.
+- Releases publish per-APK baseline profiles (`-api28`/`-api31.dm`). On API 28+
+  the updater installs the matching SHA-256-verified `.dm` with the APK through a
+  PackageInstaller session, so ART compiles at install (`reason=install-dm`,
+  verified via adb on the A065); any profile failure falls back to ACTION_VIEW with
+  the APK alone. The first update onto this build still uses the old APK-only path.
+  `app/src/main/baseline-prof.txt` adds the warm-cache Kryo read path and other
+  startup classes the fresh-login generator never records.
 
 Endpoint contracts, deployment instructions and cache limits live in
 [tools/update-worker/README.md](tools/update-worker/README.md).

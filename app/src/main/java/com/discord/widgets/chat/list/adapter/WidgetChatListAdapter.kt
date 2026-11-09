@@ -18,6 +18,7 @@ import com.discord.api.application.Application
 import com.discord.api.channel.Channel
 import com.discord.api.guildscheduledevent.GuildScheduledEvent
 import com.discord.api.message.activity.MessageActivityType
+import com.discord.api.message.embed.MessageEmbed
 import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.sticker.BaseSticker
 import com.discord.api.sticker.Sticker
@@ -36,6 +37,7 @@ import com.discord.api.botuikit.ComponentType
 import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.entries.ChatListEntry
+import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
 import com.discord.widgets.chat.list.model.WidgetChatListModel
@@ -73,11 +75,17 @@ class WidgetChatListAdapter @JvmOverloads constructor(
      */
     var data: Data = EmptyData()
         set(value) {
-            val viewerChanged = field.userId != value.userId
-            // Channel names only change when the store re-snapshots after READY; message-only
-            // updates reuse the same snapshot object, so a reference check is free and only a real
-            // name change forces a rebind (channel links otherwise stay "#deleted-channel").
-            val namesChanged = field.channelNames !== value.channelNames
+            // An empty previous list was just bound in full by the differ.
+            val rebound = field.list.isNotEmpty()
+            val viewerChanged = rebound && field.userId != value.userId
+            // Rows bound before a channel's name was known show "#deleted-channel" until rebound.
+            // The store re-snapshots names on any channel change anywhere, so rebind only the rows
+            // that link a channel whose name actually changed.
+            val renamed = if (rebound && !viewerChanged) {
+                renamedChannelIds(field.channelNames, value.channelNames)
+            } else {
+                emptySet()
+            }
             if (field.channelId == value.channelId &&
                 StoreStream.getMessagesLoader().hasTopPageUpdate(value.channelId)
             ) {
@@ -90,7 +98,13 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             pendingStickToBottom = stickToBottom && newestGrew && atBottom
             field = value
             setData(value.list)
-            if ((viewerChanged || namesChanged) && itemCount > 0) notifyItemRangeChanged(0, itemCount)
+            if (viewerChanged && itemCount > 0) {
+                notifyItemRangeChanged(0, itemCount)
+            } else if (renamed.isNotEmpty()) {
+                value.list.forEachIndexed { position, entry ->
+                    if (entry.linksChannel(renamed)) notifyItemChanged(position)
+                }
+            }
         }
 
     /**
@@ -840,5 +854,41 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             numKnownMessages >= NEW_MESSAGES_MAX_SCROLLBACK_COUNT -> NEW_MESSAGES_MAX_SCROLLBACK_COUNT
             else -> numKnownMessages
         }
+
+        private val CHANNEL_LINK = Regex("<#(\\d+)>")
+
+        /** Channels whose display name differs between two snapshots, including added and removed ones. */
+        internal fun renamedChannelIds(old: Map<Long, String>, new: Map<Long, String>): Set<Long> {
+            if (old === new) return emptySet()
+            val ids = HashSet<Long>()
+            new.forEach { (id, name) -> if (old[id] != name) ids += id }
+            old.keys.forEach { id -> if (id !in new) ids += id }
+            return ids
+        }
+
+        /**
+         * Whether this row renders a link to one of [channelIds]. Every channel link is a `<#id>`
+         * token in the text of the row's message, its reply preview or a forwarded snapshot.
+         */
+        internal fun ChatListEntry.linksChannel(channelIds: Set<Long>): Boolean {
+            val message = highlightMessage ?: (this as? ForwardedMessageEntry)?.parentMessage ?: return false
+            return message.content.linksChannel(channelIds) ||
+                message.embeds.linksChannel(channelIds) ||
+                message.referencedMessage?.let { it.content.linksChannel(channelIds) || it.embeds.linksChannel(channelIds) } == true ||
+                message.messageSnapshots.orEmpty().any {
+                    it.message.content.linksChannel(channelIds) || it.message.embeds.linksChannel(channelIds)
+                }
+        }
+
+        private fun List<MessageEmbed>?.linksChannel(channelIds: Set<Long>): Boolean = orEmpty().any { embed ->
+            embed.title.linksChannel(channelIds) ||
+                embed.description.linksChannel(channelIds) ||
+                embed.footer?.text.linksChannel(channelIds) ||
+                embed.fields.orEmpty().any { it.name.linksChannel(channelIds) || it.value.linksChannel(channelIds) }
+        }
+
+        private fun String?.linksChannel(channelIds: Set<Long>): Boolean =
+            this != null && "<#" in this &&
+                CHANNEL_LINK.findAll(this).any { it.groupValues[1].toLongOrNull() in channelIds }
     }
 }

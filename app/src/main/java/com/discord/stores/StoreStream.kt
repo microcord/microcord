@@ -1303,6 +1303,8 @@ class StoreStream private constructor(
 
     private fun init(context: Context) {
         applicationContext = context.applicationContext
+        // Overlaps the catalog read with the work below; `emoji.initBlocking` still waits for it.
+        emoji.startPreload(context)
         val api = createRestApi(context)
         val networkMonitor = NetworkMonitor(context)
         val rtcLatencyApi = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context)).build(

@@ -134,6 +134,34 @@ class PluginDependencyResolverTest {
     }
 
     @Test
+    fun `startup discovery is prefetched off the caller thread and consumed once`() {
+        val discoveryThreads = java.util.concurrent.CopyOnWriteArrayList<Thread>()
+        val manager = PluginManager(
+            source = PluginSource { _ ->
+                discoveryThreads += Thread.currentThread()
+                emptyList()
+            },
+            loadingEnabled = { true },
+        )
+        val context = object : android.content.ContextWrapper(null) {
+            override fun getApplicationContext(): android.content.Context = this
+        }
+
+        manager.prefetchDiscovery(context)
+        manager.initialize(context)
+
+        assertEquals(1, discoveryThreads.size)
+        assertTrue(discoveryThreads.single() !== Thread.currentThread())
+
+        // A later reload must query again rather than reuse the startup result.
+        manager.shutdown()
+        manager.initialize(context)
+
+        assertEquals(2, discoveryThreads.size)
+        assertSame(Thread.currentThread(), discoveryThreads.last())
+    }
+
+    @Test
     fun `requirements load first and priority orders ready plugins`() {
         val plan = resolveAtAppVersionOne(
             listOf(

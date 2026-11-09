@@ -85,6 +85,8 @@ class App : Application() {
         ThemeRuntime.install(this)
         BootLog.record(BootLogEvent.PLATFORM_READY)
         BootLog.record(BootLogEvent.NATIVE_READY)
+        // Package queries run in the background while the store graph builds; initialize awaits them.
+        PluginRuntime.prefetchDiscovery(this)
         StoreStream.initialize(this)
         PluginRuntime.initialize(this)
         val restorePreferences = SharedPreferencesProvider.getPrefsSessionDurable()

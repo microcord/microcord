@@ -5,6 +5,10 @@ const ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"];
 const ABI_PATTERN = "arm64-v8a|armeabi-v7a|x86_64|x86";
 // Release APKs are immutable per tag and digest; the edge keeps them so downloads don't hit GHES.
 const APK_CACHE_CONTROL = "public, max-age=31536000, immutable";
+// Baseline profiles the app installs beside an APK, one per API range AGP builds them for. The release
+// workflow fails if AGP's ranges stop matching these, and the app checks `minSdk` against the file name.
+const DEX_METADATA = [{ name: "api28", minSdk: 28, maxSdk: 30 }, { name: "api31", minSdk: 31 }];
+const DEX_METADATA_PATTERN = DEX_METADATA.map(({ name }) => name).join("|");
 const MANIFEST_NAME = "update-manifest.json";
 const MAX_MANIFEST_BYTES = 16 * 1024;
 const MAX_COMPARE_BYTES = 4 * 1024 * 1024;
@@ -110,6 +114,26 @@ function apkDigest(asset) {
   return digest[1].toLowerCase();
 }
 
+/** The profiles published for one APK (`app-release` or `app-<abi>-release`), keyed by range name. */
+function dexMetadata(assets, prefix) {
+  const found = {};
+  for (const { name } of DEX_METADATA) {
+    const asset = assets.find(asset => asset.name === `${prefix}-${name}.dm` && asset.state === "uploaded");
+    // A profile only speeds up compilation, so a broken one is left out instead of failing the release closed.
+    try {
+      if (asset) found[name] = { assetId: asset.id, sha256: apkDigest(asset), size: asset.size };
+    } catch {}
+  }
+  return found;
+}
+
+function dexMetadataFeed(origin, tag, abi, dms = {}) {
+  return DEX_METADATA.filter(({ name }) => dms[name]).map(({ name, minSdk, maxSdk }) => ({
+    url: `${origin}/releases/${tag}${abi ? `-${abi}` : ""}-${name}.dm`,
+    sha256: dms[name].sha256, size: dms[name].size, minSdk, ...(maxSdk ? { maxSdk } : {}),
+  }));
+}
+
 async function releaseMetadata(tag, token, origin) {
   const cacheKey = new Request(`${origin}/_release-cache/v4/${tag ?? "latest"}`);
   const cache = caches.default;
@@ -139,7 +163,9 @@ async function releaseMetadata(tag, token, origin) {
   const abis = {};
   for (const abi of ABIS) {
     const split = release.assets.find(asset => asset.name === `app-${abi}-release.apk` && asset.state === "uploaded");
-    if (split) abis[abi] = { assetId: split.id, sha256: apkDigest(split), size: split.size };
+    if (split) {
+      abis[abi] = { assetId: split.id, sha256: apkDigest(split), size: split.size, dms: dexMetadata(release.assets, `app-${abi}-release`) };
+    }
   }
   // Release notes are intentionally public; cache only bounded notes and validated APK metadata.
   const metadata = {
@@ -148,6 +174,7 @@ async function releaseMetadata(tag, token, origin) {
     assetId: apk.id,
     sha256: digest,
     size: apk.size,
+    dms: dexMetadata(release.assets, "app-release"),
     abis,
     notes: typeof release.body === "string" ? release.body.slice(0, 4000) : "",
     notesTruncated: typeof release.body === "string" && release.body.length > 4000,
@@ -229,7 +256,9 @@ async function handle(request, env, ctx) {
   const url = new URL(request.url);
   const latest = url.pathname === "/latest.json";
   const latestApk = new RegExp(`^/latest(?:-(${ABI_PATTERN}))?\\.apk$`).exec(url.pathname);
-  const download = new RegExp(`^/releases/(build-[1-9]\\d{0,9})(?:-(${ABI_PATTERN}))?\\.apk$`).exec(url.pathname);
+  const download = new RegExp(
+    `^/releases/(build-[1-9]\\d{0,9})(?:-(${ABI_PATTERN}))?(?:-(${DEX_METADATA_PATTERN})\\.dm|\\.apk)$`,
+  ).exec(url.pathname);
   const changes = /^\/releases\/(build-[1-9]\d{0,9})\/changes\.json$/.exec(url.pathname);
   const from = url.searchParams.get("from");
   if ((!latest && !latestApk && !download && !changes) ||
@@ -288,26 +317,37 @@ async function handle(request, env, ctx) {
       versionName: release.versionName,
       packageName: release.packageName,
     };
+    // Optional, so clients from before profiles were published keep reading the same feed.
+    const dms = dexMetadataFeed(url.origin, release.release, null, release.dms);
+    if (dms.length) feed.dexMetadata = dms;
     const abis = Object.entries(release.abis ?? {});
     if (abis.length) {
-      feed.apks = Object.fromEntries(abis.map(([abi, apk]) => [abi, {
-        apkUrl: `${url.origin}/releases/${release.release}-${abi}.apk`, sha256: apk.sha256, size: apk.size,
-      }]));
+      feed.apks = Object.fromEntries(abis.map(([abi, apk]) => {
+        const dexMetadata = dexMetadataFeed(url.origin, release.release, abi, apk.dms);
+        return [abi, {
+          apkUrl: `${url.origin}/releases/${release.release}-${abi}.apk`, sha256: apk.sha256, size: apk.size,
+          ...(dexMetadata.length ? { dexMetadata } : {}),
+        }];
+      }));
     }
     return Response.json(feed, { headers: { "Cache-Control": "public, max-age=60", "X-Content-Type-Options": "nosniff" } });
   }
 
   const abi = download[2];
+  const dm = download[3];
   const apk = abi ? release.abis?.[abi] : release;
-  if (!apk) return error(404, "No APK for this architecture in that release");
-  const filename = `microcord-${release.release}${abi ? `-${abi}` : ""}.apk`;
-  const cached = await cachedApk(request, url, release.release, abi, apk, env.GITHUB_TOKEN);
-  if (cached) return apkResponse(cached, filename);
+  // A profile is served like its APK: the same digest-keyed edge cache and upstream fallback.
+  const asset = dm ? apk?.dms?.[dm] : apk;
+  if (!asset) return error(404, dm ? "No profile for this APK in that release" : "No APK for this architecture in that release");
+  const filename = `microcord-${release.release}${abi ? `-${abi}` : ""}${dm ? `-${dm}.dm` : ".apk"}`;
+  const type = dm ? "application/octet-stream" : "application/vnd.android.package-archive";
+  const cached = await cachedApk(request, url, release.release, `${abi ?? "universal"}${dm ? `-${dm}` : ""}`, asset, env.GITHUB_TOKEN);
+  if (cached) return apkResponse(cached, filename, type);
 
   const headers = githubHeaders(env.GITHUB_TOKEN, "application/octet-stream");
   if (range) headers.Range = range;
   if (range && request.headers.has("If-Range")) headers["If-Range"] = request.headers.get("If-Range");
-  const response = await fetch(`${API}/releases/assets/${apk.assetId}`, {
+  const response = await fetch(`${API}/releases/assets/${asset.assetId}`, {
     method: request.method,
     headers,
     redirect: "manual",
@@ -331,7 +371,7 @@ async function handle(request, env, ctx) {
     throw new Error("APK download failed");
   }
   // Do not buffer APKs or attach a short timeout to a potentially long-running download.
-  return apkResponse(response, filename);
+  return apkResponse(response, filename, type);
 }
 
 function isApkType(response) {
@@ -339,9 +379,9 @@ function isApkType(response) {
   return ["application/octet-stream", "application/vnd.android.package-archive"].includes(contentType);
 }
 
-function apkResponse(response, filename) {
+function apkResponse(response, filename, type) {
   const outgoing = new Headers({
-    "Content-Type": "application/vnd.android.package-archive",
+    "Content-Type": type,
     "Content-Disposition": `attachment; filename="${filename}"`,
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -359,9 +399,9 @@ function apkResponse(response, filename) {
  * `null` when the cache cannot be used: workers.dev has none, a HEAD miss should not pull a whole
  * APK, and a failed fill leaves nothing behind. The caller then falls back to redirecting to GHES.
  */
-async function cachedApk(request, url, tag, abi, apk, token) {
+async function cachedApk(request, url, tag, variant, apk, token) {
   if (url.hostname.endsWith(".workers.dev")) return null;
-  const key = `${url.origin}/_apk-cache/v1/${tag}/${abi ?? "universal"}/${apk.sha256}`;
+  const key = `${url.origin}/_apk-cache/v1/${tag}/${variant}/${apk.sha256}`;
   const lookup = () => {
     const headers = new Headers();
     const range = request.headers.get("Range");

@@ -65,7 +65,7 @@ internal class ExternalPluginSource : PluginSource {
 
     override fun discover(context: Context): List<PluginHandle> {
         return PluginLoadingPolicy.enabledPackages()
-            .flatMap { packageName -> catalog(context, packageName) }
+            .flatMap { packageName -> catalog(context, packageName, loadIcons = false) }
             .filter { descriptor ->
                 PluginLoadingPolicy.approvedSigner(descriptor.packageName) == descriptor.signerSha256
             }
@@ -75,11 +75,12 @@ internal class ExternalPluginSource : PluginSource {
             .map { descriptor -> PluginHandle(descriptor.manifest) { load(context, descriptor) } }
     }
 
-    fun catalog(context: Context): List<ExternalPluginDescriptor> = catalog(context, null)
+    fun catalog(context: Context): List<ExternalPluginDescriptor> = catalog(context, null, loadIcons = true)
 
     fun failure(packageName: String): String? = failures[packageName]
 
-    private fun catalog(context: Context, packageName: String?): List<ExternalPluginDescriptor> {
+    /** Startup discovery never shows an icon, and decoding one out of another APK costs milliseconds. */
+    private fun catalog(context: Context, packageName: String?, loadIcons: Boolean): List<ExternalPluginDescriptor> {
         val packageManager = context.packageManager
         val intent = Intent(PLUGIN_ACTION).apply { `package` = packageName }
         val matches = if (Build.VERSION.SDK_INT >= 33) {
@@ -115,9 +116,10 @@ internal class ExternalPluginSource : PluginSource {
                 .split(';')
                 .filter(String::isNotBlank)
                 .mapNotNull(::parseRequirement)
+            val label = service.applicationInfo.loadLabel(packageManager).toString()
             val manifest = pluginManifest(
                 pluginId,
-                service.applicationInfo.loadLabel(packageManager).toString(),
+                label,
                 packageInfo.versionName.orEmpty().ifBlank { versionCode.toString() },
                 versionCode,
             ) {
@@ -131,10 +133,10 @@ internal class ExternalPluginSource : PluginSource {
             }
             ExternalPluginDescriptor(
                 packageName = service.packageName,
-                label = service.applicationInfo.loadLabel(packageManager).toString(),
+                label = label,
                 entrypoint = entrypoint,
                 signerSha256 = signerFingerprint(packageManager, service.packageName),
-                icon = runCatching { service.applicationInfo.loadIcon(packageManager) }.getOrNull(),
+                icon = if (loadIcons) runCatching { service.applicationInfo.loadIcon(packageManager) }.getOrNull() else null,
                 manifest = manifest,
             )
             }.getOrNull()
