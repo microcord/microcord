@@ -9,8 +9,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import com.discord.models.message.Message
-import com.discord.simpleast.core.node.Node
-import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.view.text.LinkifiedTextView
 import com.discord.R
 import com.discord.api.botuikit.ComponentType
@@ -20,7 +18,6 @@ import com.discord.api.channel.isPrivate
 import com.discord.api.message.MessageFlags
 import com.discord.api.message.attachment.MessageAttachment
 import com.discord.api.message.attachment.MessageAttachmentType
-import com.discord.api.message.embed.MessageEmbed
 import com.discord.databinding.WidgetChatListAdapterItemForwardedMessageBinding
 import com.discord.models.botuikit.ContainerMessageComponent
 import com.discord.stores.StoreStream
@@ -60,6 +57,7 @@ class WidgetChatListAdapterItemForwardedMessage(
     private val mediaViews = ArrayList<InlineMediaView>()
     private val voiceMessageViews = ArrayList<VoiceMessageView>()
     private val audioPlayerViews = ArrayList<AudioAttachmentPlayerView>()
+    private val embedHolders = ArrayList<WidgetChatListAdapterItemEmbed>()
     private val sourceGuildIconChangeDetector = MGImages.DistinctChangeDetector()
     private var rowsRenderKey: Any? = null
 
@@ -189,13 +187,15 @@ class WidgetChatListAdapterItemForwardedMessage(
         voiceMessageViews.clear()
         audioPlayerViews.forEach(AudioAttachmentPlayerView::releasePlayer)
         audioPlayerViews.clear()
+        embedHolders.forEach(WidgetChatListAdapterItemEmbed::onPause)
         binding.forwardedMessageRows.removeAllViews()
         if (entry.state != ForwardedMessageEntry.State.CONTENT) return
 
+        var embedIndex = 0
         entry.rows.forEach { row ->
             when (row) {
                 is AttachmentEntry -> bindAttachment(row)
-                is EmbedEntry -> bindEmbed(row)
+                is EmbedEntry -> bindEmbed(row, embedIndex++)
                 is StickerEntry -> bindSticker(row)
                 is BotUiComponentEntry -> bindComponents(row)
                 else -> Unit
@@ -263,43 +263,24 @@ class WidgetChatListAdapterItemForwardedMessage(
         }
     }
 
-    private fun bindEmbed(entry: EmbedEntry) {
-        val embed = entry.embed
-        val container = LinearLayout(itemView.context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = matchWidthParams()
+    /** The full embed card, so a forwarded embed keeps its colour bar, author, thumbnail and footer. */
+    private fun bindEmbed(entry: EmbedEntry, index: Int) {
+        val holder = embedHolders.getOrNull(index)
+            ?: WidgetChatListAdapterItemEmbed(parentAdapter).also { embedHolders += it }
+        holder.bind(0, entry)
+        val view = holder.itemView
+        // The forward card owns the press, highlight and long-press, as a message row does for its own.
+        view.background = null
+        view.setOnClickListener(null)
+        view.isClickable = false
+        view.isLongClickable = false
+        view.findViewById<View>(R.id.chat_list_adapter_item_highlighted_bg).visibility = View.GONE
+        view.findViewById<View>(R.id.chat_list_adapter_item_gutter_bg).visibility = View.GONE
+        (view.findViewById<View>(R.id.chat_list_item_embed_container_card).layoutParams as ViewGroup.MarginLayoutParams).apply {
+            marginStart = dp(ACCESSORY_INSET_DP)
+            marginEnd = dp(ACCESSORY_INSET_DP)
         }
-        val renderContext = renderContext(entry.message)
-        val improvedMarkdown = MarkupEligibility.allowsImprovedMarkdown(entry.message)
-        fun addText(ast: MutableList<Node<MessageRenderContext>>, semibold: Boolean = false) {
-            MessagePreprocessor(parentAdapter.data.userId).process(ast)
-            container.addView(accessoryText(semibold).apply {
-                setDraweeSpanStringBuilder(AstRenderer.render(ast, renderContext))
-            })
-        }
-        embed.title?.takeIf(String::isNotBlank)?.let { addText(embed.parseTitle(it), semibold = true) }
-        embed.description?.takeIf { it.isNotBlank() && embed.showsDescription() }?.let {
-            addText(embed.parseDescription(it, improvedMarkdown))
-        }
-        parseFields(embed.fields, improvedMarkdown)?.forEach { field ->
-            addText(field.parsedName, semibold = true)
-            addText(field.parsedValue)
-        }
-        val dimensions = embedDimensions(embed)
-        if (dimensions != null) {
-            val (scaledWidth, scaledHeight) = dimensions
-            val media = createMedia(scaledWidth, scaledHeight).apply {
-                contentDescription = listOfNotNull(embed.title, embed.description).joinToString(". ")
-                updateUIWithEmbed(embed, scaledWidth, scaledHeight, entry.autoPlayGifs)
-                if (with(EmbedResourceUtils) { embed.isPlayable() }) {
-                    setOnClickListener { WidgetMedia.launch(context, embed, currentPositionMs) }
-                } else {
-                    embed.url?.let { url -> setOnClickListener { UriHandler.handleOrUntrusted(context, url) } }
-                }
-            }
-            container.addView(media)
-        }
-        if (container.childCount > 0) binding.forwardedMessageRows.addView(container)
+        binding.forwardedMessageRows.addView(view)
     }
 
     private fun bindSticker(entry: StickerEntry) {
@@ -350,19 +331,6 @@ class WidgetChatListAdapterItemForwardedMessage(
         ) = Unit
     }
 
-    private fun embedDimensions(embed: MessageEmbed): Pair<Int, Int>? {
-        val width = embed.image?.width ?: embed.video?.width ?: embed.thumbnail?.width ?: return null
-        val height = embed.image?.height ?: embed.video?.height ?: embed.thumbnail?.height ?: return null
-        if (width <= 0 || height <= 0) return null
-        return EmbedResourceUtils.calculateScaledSize(
-            actualWidth = width,
-            actualHeight = height,
-            maxWidth = EmbedResourceUtils.computeMaximumImageWidthPx(itemView.context),
-            maxHeight = EmbedResourceUtils.MAX_IMAGE_VIEW_HEIGHT_PX,
-            resources = itemView.resources,
-        )
-    }
-
     private fun addMedia(width: Int, height: Int, bind: (InlineMediaView) -> Unit) {
         binding.forwardedMessageRows.addView(createMedia(width, height).also(bind))
     }
@@ -377,10 +345,10 @@ class WidgetChatListAdapterItemForwardedMessage(
         mediaViews += this
     }
 
-    private fun accessoryText(semibold: Boolean = false) = LinkifiedTextView(itemView.context).apply {
+    private fun accessoryText() = LinkifiedTextView(itemView.context).apply {
         layoutParams = matchWidthParams()
         setPadding(dp(ACCESSORY_INSET_DP), dp(ACCESSORY_SPACING_DP), dp(ACCESSORY_INSET_DP), 0)
-        setTextAppearance(if (semibold) R.style.UiKit_TextView_Semibold else R.style.UiKit_TextView)
+        setTextAppearance(R.style.UiKit_TextView)
         setTextColor(ColorCompat.getThemedColor(context, R.attr.colorTextNormal))
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         gravity = Gravity.START
@@ -450,9 +418,13 @@ class WidgetChatListAdapterItemForwardedMessage(
         mediaViews.forEach(InlineMediaView::onPause)
         voiceMessageViews.forEach(VoiceMessageView::releasePlayer)
         audioPlayerViews.forEach(AudioAttachmentPlayerView::releasePlayer)
+        embedHolders.forEach(WidgetChatListAdapterItemEmbed::onPause)
     }
 
-    override fun onResume() = mediaViews.forEach(InlineMediaView::onResume)
+    override fun onResume() {
+        mediaViews.forEach(InlineMediaView::onResume)
+        embedHolders.forEach(WidgetChatListAdapterItemEmbed::onResume)
+    }
 
     private companion object {
         const val ACCESSORY_INSET_DP = 12
