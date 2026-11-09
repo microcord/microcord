@@ -11,6 +11,7 @@ import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import rx.Observable
+import java.util.concurrent.TimeUnit
 
 /**
  * Who reacted with what — the user list behind a reaction pill, not the counts.
@@ -66,18 +67,39 @@ class StoreMessageReactions @JvmOverloads constructor(
     private val reactions = HashMap<Long, MutableMap<String, EmojiResults>>()
     private var reactionsSnapshot: Map<Long, Map<String, EmojiResults>> = emptyMap()
 
+    /** `messageId:emoji` pairs with a request in flight, so rebinding a row never sends a second. */
+    private val fetching = HashSet<String>()
+
+    /**
+     * Background fetches for the reaction chips, run one at a time with a pause between them, as
+     * Vencord's WhoReacted does. Newest first, so the rows just scrolled into view load before
+     * ones long gone. A key leaves [queuedKeys] when it starts, or when the sheet takes it over.
+     */
+    private val fetchQueue = ArrayDeque<QueuedFetch>()
+    private val queuedKeys = HashSet<String>()
+    private var queueBusy = false
+
+    private data class QueuedFetch(
+        val key: String,
+        val channelId: Long,
+        val messageId: Long,
+        val emoji: MessageReactionEmoji,
+    )
+
     /**
      * The reacting users for one emoji, fetching them on first subscription.
      *
      * Emits [EmojiResults.Loading] immediately so the sheet can render a spinner without a
-     * separate "has a request started" flag.
+     * separate "has a request started" flag. [queued] callers wait their turn in the background
+     * queue instead of fetching at once.
      */
     fun observeMessageReactions(
         channelId: Long,
         messageId: Long,
         emoji: MessageReactionEmoji,
+        queued: Boolean = false,
     ): Observable<EmojiResults> {
-        dispatcher.schedule { fetchReactions(channelId, messageId, emoji) }
+        dispatcher.schedule { fetchReactions(channelId, messageId, emoji, queued) }
         return observationDeck.connectRx(this) {
             reactionsSnapshot[messageId]?.get(emoji.reactionKey) ?: EmojiResults.Loading
         }.distinctUntilChanged()
@@ -87,7 +109,7 @@ class StoreMessageReactions @JvmOverloads constructor(
     fun forceRetryFetchReactions(channelId: Long, messageId: Long, emoji: MessageReactionEmoji) =
         dispatcher.schedule {
             reactions[messageId]?.remove(emoji.reactionKey)
-            fetchReactions(channelId, messageId, emoji)
+            fetchReactions(channelId, messageId, emoji, queued = false)
             markChanged()
         }
 
@@ -107,6 +129,7 @@ class StoreMessageReactions @JvmOverloads constructor(
      */
     @StoreThread
     fun handleConnectionOpen() {
+        clearQueue()
         if (reactions.isNotEmpty()) {
             reactions.clear()
             markChanged()
@@ -161,6 +184,7 @@ class StoreMessageReactions @JvmOverloads constructor(
 
     @StoreThread
     fun handlePreLogout() {
+        clearQueue()
         if (reactions.isNotEmpty()) {
             reactions.clear()
             markChanged()
@@ -168,29 +192,87 @@ class StoreMessageReactions @JvmOverloads constructor(
     }
 
     /**
-     * Fetches the user list unless one is already loaded and non-empty.
+     * Fetches the user list unless one is already loaded and non-empty, already being fetched, or
+     * failed.
      *
      * The "non-empty" part is deliberate: an empty [EmojiResults.Users] means the last reactor
      * just removed their reaction, and re-fetching is how the list recovers if it comes back.
+     * Every reaction chip subscribes on each bind, so neither an in-flight request nor a failure
+     * (often a rate limit) is repeated here; the sheet retries through [forceRetryFetchReactions].
      */
     @StoreThread
-    private fun fetchReactions(channelId: Long, messageId: Long, emoji: MessageReactionEmoji) {
+    private fun fetchReactions(channelId: Long, messageId: Long, emoji: MessageReactionEmoji, queued: Boolean) {
         val existing = ensureReactionResults(messageId, emoji.reactionKey)
         if (existing is EmojiResults.Users && existing.users.isNotEmpty()) return
+        if (existing is EmojiResults.Failure) return
+        val requestKey = "$messageId:${emoji.reactionKey}"
+        if (requestKey in fetching) return
+        if (queued) {
+            if (queuedKeys.add(requestKey)) {
+                fetchQueue.addFirst(QueuedFetch(requestKey, channelId, messageId, emoji))
+                drainQueue()
+            }
+            return
+        }
+        queuedKeys -= requestKey
+        startFetch(requestKey, channelId, messageId, emoji) {}
+    }
 
-        val restApi = api() ?: return
+    @StoreThread
+    private fun drainQueue() {
+        if (queueBusy) return
+        while (true) {
+            val next = fetchQueue.removeFirstOrNull() ?: return
+            if (!queuedKeys.remove(next.key)) continue
+            queueBusy = true
+            startFetch(next.key, next.channelId, next.messageId, next.emoji) {
+                Observable.timer(QUEUE_GAP_MS, TimeUnit.MILLISECONDS).subscribe {
+                    dispatcher.schedule {
+                        queueBusy = false
+                        drainQueue()
+                    }
+                }
+            }
+            return
+        }
+    }
+
+    @StoreThread
+    private fun clearQueue() {
+        fetchQueue.clear()
+        queuedKeys.clear()
+    }
+
+    /** [onTerminated] runs on whichever thread the request ends on. */
+    @StoreThread
+    private fun startFetch(
+        requestKey: String,
+        channelId: Long,
+        messageId: Long,
+        emoji: MessageReactionEmoji,
+        onTerminated: () -> Unit,
+    ) {
+        val restApi = api() ?: return onTerminated()
+        fetching += requestKey
         reactions[messageId]?.put(emoji.reactionKey, EmojiResults.Loading)
 
         restApi.getReactionUsers(channelId, messageId, getReactionEmojiRequestParam(emoji), REACTION_USER_PAGE_SIZE)
             .restSubscribeOn()
             .appSubscribe(
                 errorClass = StoreMessageReactions::class.java,
+                onTerminated = onTerminated,
                 errorHandler = {
-                    dispatcher.schedule { handleLoadReactionUsersFailure(channelId, messageId, emoji) }
+                    dispatcher.schedule {
+                        fetching -= requestKey
+                        handleLoadReactionUsersFailure(channelId, messageId, emoji)
+                    }
                 },
                 onNext = { apiUsers ->
                     val users = apiUsers.map(::CoreUser)
-                    dispatcher.schedule { handleReactionUsers(channelId, messageId, emoji, users) }
+                    dispatcher.schedule {
+                        fetching -= requestKey
+                        handleReactionUsers(channelId, messageId, emoji, users)
+                    }
                 },
             )
     }
@@ -253,5 +335,8 @@ class StoreMessageReactions @JvmOverloads constructor(
     private companion object {
         /** Matches the reference's single-page fetch; the sheet does not paginate further. */
         const val REACTION_USER_PAGE_SIZE = 100
+
+        /** Vencord's pause between WhoReacted fetches. */
+        const val QUEUE_GAP_MS = 250L
     }
 }

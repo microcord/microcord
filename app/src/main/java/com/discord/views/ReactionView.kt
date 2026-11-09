@@ -3,6 +3,8 @@ package com.discord.views
 import android.content.Context
 import android.content.res.ColorStateList
 import android.util.AttributeSet
+import android.view.LayoutInflater
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextSwitcher
 import android.widget.TextView
@@ -11,6 +13,8 @@ import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.models.domain.emoji.ModelEmojiUnicode
 import com.discord.models.domain.emoji.toCodePoints
+import com.discord.models.user.User
+import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.view.text.SimpleDraweeSpanTextView
 import com.facebook.drawee.span.DraweeSpanStringBuilder
@@ -77,6 +81,35 @@ class ReactionView @JvmOverloads constructor(
     fun a(reaction: MessageReaction, messageId: Long, animateEmojis: Boolean) =
         configure(reaction, messageId, animateEmojis)
 
+    /** Built on first use, so chips stay a plain emoji and count while "Who Reacted" is off. */
+    private var reactors: LinearLayout? = null
+
+    /** The first few people who reacted, after the count; tapping one calls [onClick] with their id. */
+    fun setReactors(users: List<User>, onClick: (Long) -> Unit) {
+        val shown = users.take(MAX_REACTORS)
+        val row = reactors ?: if (shown.isEmpty()) return else LinearLayout(context).also {
+            it.gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(it)
+            reactors = it
+        }
+        row.visibility = if (shown.isEmpty()) View.GONE else View.VISIBLE
+        while (row.childCount < shown.size) {
+            val avatar = LayoutInflater.from(context).inflate(R.layout.reaction_user_avatar, row, false)
+            // Each photo tucks under the next one; only the first is spaced off the count.
+            if (row.childCount == 0) (avatar.layoutParams as MarginLayoutParams).marginStart = (4 * resources.displayMetrics.density).toInt()
+            row.addView(avatar)
+        }
+        for (index in 0 until row.childCount) {
+            val avatar = row.getChildAt(index) as VitoImageView
+            val user = shown.getOrNull(index)
+            avatar.visibility = if (user == null) View.GONE else View.VISIBLE
+            if (user == null) continue
+            IconUtils.setIcon(avatar, user, R.dimen.avatar_size_small)
+            avatar.contentDescription = user.username
+            avatar.setOnClickListener { onClick(user.id) }
+        }
+    }
+
     fun setMeTextColor(color: ColorStateList) {
         meTextColor = color
     }
@@ -124,6 +157,8 @@ internal fun renderReactionEmoji(
 }
 
 private const val HAIR_SPACE = '\u200A'
+
+private const val MAX_REACTORS = 5
 
 private class ReactionEmojiRenderContext(
     override val context: Context,

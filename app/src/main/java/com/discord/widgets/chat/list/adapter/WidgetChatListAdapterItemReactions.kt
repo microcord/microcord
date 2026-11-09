@@ -8,6 +8,11 @@ import android.widget.ImageView
 import androidx.core.content.ContextCompat
 import com.discord.R
 import com.discord.api.message.reaction.MessageReaction
+import com.discord.stores.StoreMessageReactions
+import com.discord.stores.StoreStream
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.ui
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
@@ -15,6 +20,8 @@ import com.discord.views.ReactionView
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.ReactionsEntry
 import com.google.android.flexbox.FlexboxLayout
+import rx.Subscription
+import rx.subscriptions.CompositeSubscription
 
 /**
  * The reaction strip under a message.
@@ -38,9 +45,15 @@ class WidgetChatListAdapterItemReactions(
     private val quickAddReactionView: ImageView = LayoutInflater.from(itemView.context)
         .inflate(R.layout.reaction_quick_add, null, false) as ImageView
 
+    /** The "Who Reacted" user lists for the chips on screen; replaced on every bind. */
+    private var reactorSubscription: Subscription? = null
+    override val subscription: Subscription? get() = reactorSubscription
+
     override fun onConfigure(position: Int, data: ChatListEntry) {
         super.onConfigure(position, data)
         val entry = data as ReactionsEntry
+        reactorSubscription?.unsubscribe()
+        reactorSubscription = null
         configureCellHighlight(entry.message, highlightBackground, gutterBackground, entry.isPendingReply)
         displayReactions(
             reactions = entry.message.getReactionsMap().values,
@@ -49,7 +62,44 @@ class WidgetChatListAdapterItemReactions(
             canCreateReactions = entry.canCreateReactions,
             animateEmojis = entry.animateEmojis,
         )
+        bindReactors(entry)
     }
+
+    /**
+     * Fills each chip with the people who reacted, from the same per-emoji user list the reactions
+     * sheet uses, so each emoji is fetched once and then kept current by gateway reaction events.
+     */
+    private fun bindReactors(entry: ReactionsEntry) {
+        val reactions = entry.message.getReactionsMap().values.toList()
+        // Like Vencord's WhoReacted, a message this busy is left alone: it is a request per emoji.
+        if (!FeatureFlags.whoReactedEnabled() || reactions.size > MAX_WHO_REACTED_REACTIONS) {
+            reactions.indices.forEach { reactionView(it).setReactors(emptyList()) {} }
+            return
+        }
+        val message = entry.message
+        val subscriptions = CompositeSubscription()
+        reactorSubscription = subscriptions
+        reactions.forEachIndexed { index, reaction ->
+            val view = reactionView(index)
+            view.setReactors(emptyList()) {}
+            StoreStream.getMessageReactions()
+                .observeMessageReactions(message.channelId, message.id, reaction.emoji, queued = true)
+                .map { (it as? StoreMessageReactions.EmojiResults.Users)?.users?.values?.toList() }
+                .filter { it != null }
+                .distinctUntilChanged()
+                .ui()
+                .appSubscribe(
+                    errorClass = WidgetChatListAdapterItemReactions::class.java,
+                    subscriptionHandler = subscriptions::add,
+                ) { users ->
+                    view.setReactors(users.orEmpty()) { userId ->
+                        adapter.eventHandler.onUserMentionClicked(userId, message.channelId, adapter.data.guildId)
+                    }
+                }
+        }
+    }
+
+    private fun reactionView(index: Int) = reactionsContainer.getChildAt(index) as ReactionView
 
     private fun displayReactions(
         reactions: Collection<MessageReaction>,
@@ -117,6 +167,7 @@ class WidgetChatListAdapterItemReactions(
     private companion object {
         /** Discord stops offering the "+" chip once a message carries this many distinct emoji. */
         private const val REACTION_LIMIT = 20
+        private const val MAX_WHO_REACTED_REACTIONS = 10
         private const val REACTION_HORIZONTAL_PADDING_DP = 6
         private const val REACTION_VIEW_HEIGHT_DP = 26
     }

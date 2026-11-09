@@ -94,6 +94,10 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             isChecked = FeatureFlags.typingUserAvatarsEnabled()
             setOnCheckedListener(FeatureFlags::setTypingUserAvatarsEnabled)
         }
+        binding.settingsFeatureWhoReacted.apply {
+            isChecked = FeatureFlags.whoReactedEnabled()
+            setOnCheckedListener(FeatureFlags::setWhoReactedEnabled)
+        }
         binding.settingsFeatureLegacyMessageMenu.apply {
             isChecked = FeatureFlags.legacyMessageMenuEnabled()
             setOnCheckedListener(FeatureFlags::setLegacyMessageMenuEnabled)
