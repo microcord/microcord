@@ -7,6 +7,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
+import androidx.core.view.doOnAttach
 import androidx.core.view.doOnLayout
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
@@ -114,6 +115,7 @@ class WidgetChatListActions : AppBottomSheet() {
         }
         recycler.adapter = emojiAdapter
         recycler.itemAnimator = null
+        if (modern) reserveStatusBar(binding.dialogChatActionsContainer)
         dialog?.setTitle(R.string.message_actions_menu_label)
         preloaded?.takeIf { it.message.id == messageId }?.let { model ->
             preloaded = null
@@ -138,8 +140,6 @@ class WidgetChatListActions : AppBottomSheet() {
     }
 
     override fun onDestroyView() {
-        _binding?.dialogChatActionsContainer?.animate()?.cancel()
-        insetApplied = false
         lastSlideOffset = 0f
         _binding?.dialogChatActionsAddReactionEmojisList?.let { recycler ->
             itemDecorator?.let(recycler::removeItemDecoration)
@@ -175,32 +175,26 @@ class WidgetChatListActions : AppBottomSheet() {
         }
     }
 
-    private var insetApplied = false
+    override fun onSheetSlide(slideOffset: Float) {
+        lastSlideOffset = slideOffset
+    }
 
     /**
      * A tall menu can be dragged all the way up, where the sheet runs under the status bar and
-     * would hide the top of its first row, so the content is moved down by the bar's height there.
+     * would hide the top of its first row, so the content sits a status bar's height lower (less the
+     * gap it already has).
      *
-     * Done once on reaching the top (and undone on leaving it), never per frame: resizing the list
-     * while a drag or fling is in flight makes it jitter and ends the fling early. The step is eased
-     * with a translation so it does not read as a jump.
+     * Fixed padding, set once. Toggling it as the sheet reaches the top resized the content in the
+     * middle of a drag or fling, which made the menu jump and cut the fling short.
      */
-    override fun onSheetSlide(slideOffset: Float) {
-        lastSlideOffset = slideOffset
-        if (!modern) return
-        val container = _binding?.dialogChatActionsContainer ?: return
-        val pad = when {
-            slideOffset >= INSET_ON -> true
-            slideOffset < INSET_OFF -> false
-            else -> insetApplied
+    private fun reserveStatusBar(container: View) = container.doOnAttach {
+        // Posted: the window's insets are not dispatched yet at the moment of attaching.
+        it.post {
+            val inset = ViewCompat.getRootWindowInsets(it)
+                ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+            val gap = (STATUS_BAR_GAP_DP * resources.displayMetrics.density).toInt()
+            it.updatePadding(top = (inset - gap).coerceAtLeast(0))
         }
-        if (pad == insetApplied) return
-        insetApplied = pad
-        val inset = ViewCompat.getRootWindowInsets(container)
-            ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-        container.updatePadding(top = if (pad) inset else 0)
-        container.translationY = if (pad) -inset.toFloat() else inset.toFloat()
-        container.animate().translationY(0f).setDuration(INSET_EASE_MS).start()
     }
 
     private fun configureUI(model: Model?) {
@@ -617,9 +611,7 @@ class WidgetChatListActions : AppBottomSheet() {
 
         /** Messages whose sheet is being prepared, so a double long-press opens one sheet, not two. */
         private val opening = HashSet<Pair<Long, Long>>()
-        private const val INSET_ON = 0.98f
-        private const val INSET_OFF = 0.9f
-        private const val INSET_EASE_MS = 120L
+        private const val STATUS_BAR_GAP_DP = 8
         private const val CLOSE_PULL_FRACTION = 0.2f
 
         /** The model the next sheet to open starts from; consumed once, by the matching message. */
