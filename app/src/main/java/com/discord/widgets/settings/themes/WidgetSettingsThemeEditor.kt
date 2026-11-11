@@ -58,6 +58,7 @@ class WidgetSettingsThemeEditor : ThemeEditorPage(R.layout.widget_settings_theme
             ModelUserSettings.THEME_DARKER to binding.themeEditorBaseDarker,
             ModelUserSettings.THEME_MIDNIGHT to binding.themeEditorBaseOnyx,
             ModelUserSettings.THEME_LIGHT to binding.themeEditorBaseLight,
+            ModelUserSettings.THEME_MATERIAL_YOU to binding.themeEditorBaseMaterialYou,
         )
         baseRadios = RadioManager(bases.values.toList())
         bases.forEach { (base, radio) ->

@@ -17,6 +17,7 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.WorkerThread
 import com.discord.R
 import com.discord.app.AppLog
+import com.discord.models.domain.ModelUserSettings
 import java.io.File
 import java.security.MessageDigest
 
@@ -55,6 +56,7 @@ object ThemeRuntime {
     private const val HEALTHY_AFTER_MS = 3_000L
     private const val MAX_UNCONFIRMED_LAUNCHES = 2
     private const val SYSTEM_COLOR = "\"system_"
+    private const val MATERIAL_YOU_BASE = "\"${ModelUserSettings.THEME_MATERIAL_YOU}\""
 
     @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.R)
     val isSupported: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
@@ -246,7 +248,7 @@ object ThemeRuntime {
     /**
      * Resource ids change with every APK, so the installed APK is part of the key. So are:
      * - the downloaded assets, so a file that arrives later is picked up;
-     * - the device's Material You colors, when a theme uses them.
+     * - the device's Material You colors, when a theme uses them or sits on the Material You base.
      */
     private fun cacheKey(context: Context, texts: List<String>): String {
         val apk = File(context.applicationInfo.sourceDir)
@@ -254,7 +256,7 @@ object ThemeRuntime {
         texts.forEach { digest.update(it.toByteArray()); digest.update(0) }
         digest.update("${AliucordMapping.VERSION}|${ArscWriter.VERSION}|${apk.lastModified()}|${apk.length()}".toByteArray())
         ThemeAssets.dir(context).listFiles()?.sortedBy { it.name }?.forEach { digest.update("${it.name}:${it.length()}|".toByteArray()) }
-        if (texts.any { SYSTEM_COLOR in it }) SystemColors.all(context).forEach { digest.update(it.toString().toByteArray()) }
+        if (texts.any { SYSTEM_COLOR in it || MATERIAL_YOU_BASE in it }) SystemColors.all(context).forEach { digest.update(it.toString().toByteArray()) }
         return digest.digest().take(8).joinToString("") { Integer.toHexString((it.toInt() and 0xFF) or 0x100).substring(1) }
     }
 

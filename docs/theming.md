@@ -63,7 +63,7 @@ The format is Aliucord's JSON plus two sections of our own:
 | `background` | `url`, `overlay_alpha` (0–255) and `blur_radius` (0–25), as in Aliucord. |
 | `fonts`, `raws` | Font (`*` for all) and sound name → `https://` link or `file://` path, as in Aliucord. |
 | `attrs` | Ours. Theme attribute name → color, exported as `#AARRGGBB`. Names prefixed `android:` refer to framework attributes. |
-| `microcord` | Ours. `formatVersion`, `base` (`dark`, `darker`, `midnight` or `light`) and `transparency`. |
+| `microcord` | Ours. `formatVersion`, `base` (`dark`, `darker`, `midnight`, `light` or `materialYou`) and `transparency`. |
 | Unknown keys | Kept verbatim. |
 
 Aliucord's legacy flat format (`simple_accent_color`, `color_*`, `drawablecolor_*`, …) is converted on import. Themes can also be installed from a `.json` attachment through the message actions, and `manifest.updater` is checked when the Themes screen opens.

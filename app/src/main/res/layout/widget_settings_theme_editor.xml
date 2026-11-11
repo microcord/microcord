@@ -17,6 +17,7 @@
             <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_darker" android:saveEnabled="false" app:cs_text="@string/theme_dark" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
             <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_onyx" android:saveEnabled="false" app:cs_text="@string/theme_onyx" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
             <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_light" android:saveEnabled="false" app:cs_text="@string/theme_light" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/theme_editor_base_material_you" android:saveEnabled="false" app:cs_text="@string/theme_material_you" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
             <View style="@style/UiKit.Settings.Divider"/>
             <TextView android:id="@+id/theme_editor_quick_header" android:text="@string/microcord_theme_quick_colors" style="@style/UiKit.Settings.Item.Header"/>
             <LinearLayout android:id="@+id/theme_editor_quick_colors" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>

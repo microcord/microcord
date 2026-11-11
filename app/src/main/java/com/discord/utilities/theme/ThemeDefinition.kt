@@ -124,12 +124,13 @@ data class ThemeDefinition(
         const val SECTION_ATTRS = "attrs"
         const val SECTION_DRAWABLE_TINTS = "drawable_tints"
 
-        /** Built-in themes a custom theme may sit on. Material You is excluded: its colors are the wallpaper's. */
+        /** Built-in themes a custom theme may sit on. Material You's colors come from the wallpaper. */
         val BASES = listOf(
             ModelUserSettings.THEME_DARK,
             ModelUserSettings.THEME_DARKER,
             ModelUserSettings.THEME_MIDNIGHT,
             ModelUserSettings.THEME_LIGHT,
+            ModelUserSettings.THEME_MATERIAL_YOU,
         )
 
         /** The fonts Aliucord themes can replace, by resource name. [ALL_FONTS] replaces all of them. */
