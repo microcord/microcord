@@ -94,15 +94,23 @@ class StoreUser(
         ?.let(::updateUser)
     @StoreThread fun handleUserRelationshipAdd(relationship: ModelUserRelationship) = relationship.user?.let(::updateUser)
     @StoreThread fun handleMessageCreateOrUpdate(message: Message) {
-        message.author?.let(::updateUser)
-        message.mentions.orEmpty().forEach(::updateUser)
+        updateMessageUsers(message)
         if (message.isUrgent() && me.flags and URGENT_MESSAGE_USER_FLAG == 0) {
             me = me.copy(flags = me.flags or URGENT_MESSAGE_USER_FLAG)
             users[me.id] = me
             markChanged(MeUpdate, UsersUpdate)
         }
     }
-    @StoreThread fun handleMessagesLoaded(messages: List<Message>) = messages.forEach(::handleMessageCreateOrUpdate)
+    /**
+     * History only teaches us users. An urgent message already sitting in the system DM must not
+     * raise the flag again, or the dialog returns each time that DM loads, which is where its
+     * Okay button sends you.
+     */
+    @StoreThread fun handleMessagesLoaded(messages: List<Message>) = messages.forEach(::updateMessageUsers)
+    private fun updateMessageUsers(message: Message) {
+        message.author?.let(::updateUser)
+        message.mentions.orEmpty().forEach(::updateUser)
+    }
     @StoreThread fun handleThreadMemberListUpdate(members: List<GuildMember>, presences: List<Presence>) {
         members.forEach { updateUser(it.user) }
         presences.mapNotNull(Presence::user).forEach(::updateUser)

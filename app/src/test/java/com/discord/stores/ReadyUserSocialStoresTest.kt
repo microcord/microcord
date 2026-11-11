@@ -175,6 +175,27 @@ class ReadyUserSocialStoresTest {
     }
 
     @Test
+    fun loadedHistoryDoesNotRaiseTheUrgentFlag() {
+        val scheduler = TestScheduler()
+        val deck = ObservationDeck()
+        val dispatcher = Dispatcher(scheduler)
+        val store = StoreUser(
+            dispatcher = dispatcher,
+            observationDeck = deck,
+            meCache = Persister("test-urgent-history-${System.nanoTime()}", StoreUser.EMPTY_ME_USER),
+        )
+        dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(store), deck))
+
+        dispatcher.schedule {
+            store.handleConnectionOpen(readyPayload())
+            store.handleMessagesLoaded(listOf(Message(id = 1, flags = 16)))
+        }
+        scheduler.triggerActions()
+
+        assertEquals(0, store.getMe().flags and 8192)
+    }
+
+    @Test
     fun relationshipsPersistLoadedEmptyAndReturnToUnloadedOnLogout() {
         val scheduler = TestScheduler()
         val deck = ObservationDeck()
