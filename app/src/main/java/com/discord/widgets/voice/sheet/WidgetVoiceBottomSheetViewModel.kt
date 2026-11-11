@@ -57,12 +57,8 @@ class WidgetVoiceBottomSheetViewModel(
     private val mediaSettingsStore: StoreMediaSettings = StoreStream.getMediaSettings(),
     private val userSettingsStore: StoreUserSettings = StoreStream.getUserSettings(),
     private val callsStore: StoreCalls = StoreStream.getCalls(),
-    /**
-     * `StoreStream` constructs no [StoreApplicationStreamPreviews] — it needs a REST-backed fetch
-     * lambda only the store graph can supply — so this stays optional. Without it the participant
-     * rows render normally and only the stream *thumbnails* are absent.
-     */
-    private val storeApplicationStreamPreviews: StoreApplicationStreamPreviews? = null,
+    private val storeApplicationStreamPreviews: StoreApplicationStreamPreviews =
+        StoreStream.getApplicationStreamPreviews(),
     private val clock: Clock = ClockFactory.get(),
     private val tooltipManager: TooltipManager =
         TooltipManager.Provider.get(FloatingViewManager.Provider.get()),
@@ -476,13 +472,10 @@ class WidgetVoiceBottomSheetViewModel(
 
     /**
      * Reports whether there is any participant row to show, fetching each stream preview once on
-     * the way through. `null` previews store means no thumbnails, but the list still renders.
+     * the way through.
      */
-    private fun refreshStreams(listItems: List<CallParticipantsAdapter.ListItem>): Boolean {
-        val previews = storeApplicationStreamPreviews
-            ?: return listItems.any { it is CallParticipantsAdapter.ListItem.VoiceUser }
-        return ParticipantsListItemGenerator.refreshStreams(listItems, fetchedPreviews, previews)
-    }
+    private fun refreshStreams(listItems: List<CallParticipantsAdapter.ListItem>): Boolean =
+        ParticipantsListItemGenerator.refreshStreams(listItems, fetchedPreviews, storeApplicationStreamPreviews)
 
     companion object {
 
