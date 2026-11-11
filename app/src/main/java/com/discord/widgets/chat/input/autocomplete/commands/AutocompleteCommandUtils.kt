@@ -200,7 +200,7 @@ object AutocompleteCommandUtils {
         }
         if (autocomplete) {
             return mentions.mentions.values.filterIsInstance<ApplicationCommandChoiceAutocompletable>()
-                .any { it.optionName == name }
+                .any { it.optionName == name || it.optionName == untranslatedName }
         }
         return when (type) {
             ApplicationCommandType.STRING -> parsed is StringOptionValue && parsed.value.toString().isNotBlank()

@@ -324,6 +324,51 @@ class CommandBrowserAndRemoteOptionTest {
     }
 
     @Test
+    fun reopeningAFilledOptionAnswersUnderTheWholeValueNotTheTextBeforeTheCaret() {
+        val scheduler = TestScheduler()
+        val option = option("key", autocomplete = true)
+        val command = command("params", listOf(option))
+        val viewModel = AutocompleteViewModel(
+            channelId = 7L,
+            memberChunkNonces = { Observable.never() },
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.never() },
+            remoteOptionRequest = { _, _, _ -> },
+            commandIndexRequest = {},
+            clearRemoteResults = {},
+            channelGuildId = { 20L },
+            remoteRequestScheduler = scheduler,
+        )
+        var state: AutocompleteViewState = AutocompleteViewState.Hidden
+        viewModel.observeViewState().subscribe { state = it }
+        viewModel.selectAutocompleteItem(
+            ApplicationCommandAutocompletable(Application(10L, "Tools", commandCount = 1), command, true, true),
+        )
+        viewModel.selectCommandOption(option)
+
+        // Reopened: the caret sits at the start of the value that is already there.
+        viewModel.onInputChanged("/params key:42", 12..12)
+        assertTrue((state as AutocompleteViewState.Autocomplete).isLoading)
+        scheduler.advanceTimeBy(1, TimeUnit.SECONDS)
+        // The app answers for the value it was sent.
+        viewModel.onCommandStateChanged(
+            AutocompleteViewModel.CommandState(
+                remoteResults = mapOf(
+                    "key" to mapOf(
+                        "42" to CommandAutocompleteState.Choices(
+                            listOf(ApplicationCommandAutocompleteChoice("Alice", "42")),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val shown = state as AutocompleteViewState.Autocomplete
+        assertFalse(shown.isLoading)
+        assertEquals("42", shown.autocompletables.single().getInputReplacement())
+    }
+
+    @Test
     fun blankOptionalBuiltInArgumentIsOmittedAndValid() {
         val option = option("message", required = false)
         val command = BuiltInCommand("-2", -1L, "tableflip", options = listOf(option)) {
@@ -397,6 +442,34 @@ class CommandBrowserAndRemoteOptionTest {
         assertTrue(valid.validInputs)
         assertEquals(listOf("1", "2", "3", "4"), valid.values.map { it.value })
         assertFalse(data("/inspect user:<@&2>").validInputs)
+    }
+
+    @Test
+    fun aChoiceLoadedOnRequestCountsAsFilledOnceItIsPicked() {
+        val key = option("key", autocomplete = true)
+        val command = command("params", listOf(key))
+        val application = Application(10L, "Tools", commandCount = 1)
+        val viewModel = AutocompleteViewModel(
+            channelId = 7L,
+            memberChunkNonces = { Observable.never() },
+            autocompletablesSource = { Observable.just(emptyMap()) },
+            commandStateSource = { Observable.never() },
+            commandIndexRequest = {},
+            clearRemoteResults = {},
+            channelGuildId = { 20L },
+            remoteRequestScheduler = TestScheduler(),
+        )
+        viewModel.selectAutocompleteItem(ApplicationCommandAutocompletable(application, command, true, false))
+        viewModel.selectCommandOption(key)
+
+        // The app answered with a name and an id; neither is in any store.
+        viewModel.selectAutocompleteItem(
+            ApplicationCommandChoiceAutocompletable(CommandChoice("Alice", "42"), key.untranslatedName),
+        )
+        val input = "/params key:42 "
+        viewModel.onInputChanged(input, input.length..input.length)
+
+        assertTrue(viewModel.buildSelectedCommandData(input, emptyList())?.validInputs == true)
     }
 
     private fun option(

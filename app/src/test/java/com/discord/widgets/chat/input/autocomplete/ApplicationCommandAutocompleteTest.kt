@@ -8,6 +8,7 @@ import com.discord.models.commands.Application
 import com.discord.models.commands.CommandPermissionContext
 import com.discord.models.commands.ApplicationCommandOption
 import com.discord.models.commands.RemoteApplicationCommand
+import com.discord.widgets.chat.input.autocomplete.commands.AutocompleteCommandUtils
 import com.discord.widgets.chat.input.models.MentionToken
 import com.discord.widgets.chat.input.autocomplete.sources.ApplicationCommandsAutocompletableSource
 import org.junit.Assert.assertEquals
@@ -72,6 +73,36 @@ class ApplicationCommandAutocompleteTest {
             allowEmptyQuery = true,
         ) as AutocompleteViewState.Autocomplete
         assertEquals(2, state.autocompletables.size)
+    }
+
+    @Test
+    fun aPickedChoiceWhoseValueDiffersFromItsNameKeepsTheOptionValid() {
+        val option = option(ApplicationCommandType.STRING, "name").copy(autocomplete = true)
+        val command = RemoteApplicationCommand(
+            id = "1",
+            applicationId = 10L,
+            name = "command1",
+            options = listOf(option),
+            guildId = 20L,
+            version = "1",
+        )
+        val input = "/command1 name:42 "
+        val picked = ApplicationCommandChoiceAutocompletable(
+            com.discord.api.commands.CommandChoice("Alice", "42"),
+            option.untranslatedName,
+        )
+        val mentions = AutocompleteModelUtils.mapInputToMentions(
+            input,
+            emptyMap(),
+            mapOf(IntRange(input.indexOf("42"), input.indexOf("42") + 2) to picked),
+            isCommand = true,
+        )
+        val parsed = AutocompleteCommandUtils.parseCommandOptions(input, command, mentions, emptyMap())
+
+        assertEquals(
+            mapOf(option to true),
+            AutocompleteCommandUtils.getInputValidity(command, parsed, emptyMap(), mentions),
+        )
     }
 
     private fun option(type: ApplicationCommandType, name: String) = ApplicationCommandOption(

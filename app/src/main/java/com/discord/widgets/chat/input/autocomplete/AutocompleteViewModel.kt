@@ -19,6 +19,7 @@ import com.discord.utilities.applicationcommands.CommandPermissionContexts
 import com.discord.widgets.chat.input.WidgetChatInputDiscoveryCommandsModel
 import com.discord.widgets.chat.input.autocomplete.commands.buildRemoteCommandOptionRequest
 import com.discord.widgets.chat.input.autocomplete.commands.AutocompleteCommandUtils
+import com.discord.models.commands.flatten
 import com.discord.widgets.chat.input.models.ApplicationCommandData
 import com.discord.widgets.chat.input.models.ApplicationCommandValue
 import com.discord.widgets.chat.input.models.AttachmentOptionValue
@@ -103,6 +104,9 @@ class AutocompleteViewModel(
     private var lastCommandQuery: String? = null
     private var commandState: CommandState = CommandState()
     private var pendingRemoteQuery: Pair<String, String>? = null
+
+    /** The value of the focused option as the app is asked about it; the key its answer is filed under. */
+    private var focusedRemoteQuery: String = ""
     private var sentRemoteQuery: Pair<String, String>? = null
     private val remoteRequests = PublishSubject.create<RemoteOptionRequest>()
     private val events = PublishSubject.create<Event>()
@@ -133,6 +137,13 @@ class AutocompleteViewModel(
      * (b) preserve the exact candidate the user chose for an unchanged range.
      */
     private var inputMentionsMap: ChatInputMentionsMap = ChatInputMentionsMap("", emptyMap())
+
+    /**
+     * Choices picked from an app's autocomplete. An app that loads its options on request returns
+     * them to this view model only, so they are in no store the mention map is built from, and the
+     * text of a pick would never be recognised as one. Kept until the command is dropped.
+     */
+    private val pickedChoices = LinkedHashSet<ApplicationCommandChoiceAutocompletable>()
 
     private var currentChannelId: Long? = null
 
@@ -291,7 +302,7 @@ class AutocompleteViewModel(
         }
         inputMentionsMap = AutocompleteModelUtils.mapInputToMentions(
             input = text,
-            autocompletables = autocompletables,
+            autocompletables = withPickedChoices(autocompletables),
             currentInputMentionMap = if (inputMentionsMap.input == text) inputMentionsMap.mentions else emptyMap(),
             isCommand = currentToken?.let { it.isAtStart && it.leadingIdentifier == LeadingIdentifier.APP_COMMAND } == true,
         )
@@ -316,6 +327,7 @@ class AutocompleteViewModel(
     }
 
     fun selectAutocompleteItem(item: Autocompletable): Boolean {
+        if (item is ApplicationCommandChoiceAutocompletable) pickedChoices += item
         if (item !is ApplicationCommandAutocompletable) return true
         val application = item.application ?: return false
         if (!item.hasPermissionToUse) return false
@@ -485,7 +497,13 @@ class AutocompleteViewModel(
     }
 
     @MainThread
+    private fun withPickedChoices(
+        all: Map<LeadingIdentifier, Set<Autocompletable>>,
+    ): Map<LeadingIdentifier, Set<Autocompletable>> = if (pickedChoices.isEmpty()) all else
+        all + (LeadingIdentifier.NONE to (all[LeadingIdentifier.NONE].orEmpty() + pickedChoices))
+
     private fun clearSelectedCommand() {
+        pickedChoices.clear()
         selectedCommand = null
         selectedCommandOption = null
         clearAttachmentAssignments()
@@ -505,27 +523,24 @@ class AutocompleteViewModel(
             return
         }
         val channelId = currentChannelId ?: return
-        val token = currentToken ?: return
-        val query = token.formattedToken
+        currentToken ?: return
+        val application = selected.application ?: return
+        val data = buildRemoteCommandOptionRequest(
+            input,
+            application,
+            selected.command,
+            option,
+            inputMentionsMap.mentions.values,
+        )
+        // What the store files the answer under is the whole value that is sent, not the part
+        // before the caret. Reopening a filled option puts the caret at the start of its value, so
+        // asking by the token waited for an answer under a key that never arrives.
+        val query = data.values.flatten().firstOrNull { it.focused == true }?.value?.toString().orEmpty()
+        focusedRemoteQuery = query
         val key = option.untranslatedName to query
         if (key == pendingRemoteQuery) return
         pendingRemoteQuery = key
-        val application = selected.application ?: return
-        remoteRequests.onNext(
-            RemoteOptionRequest(
-                option,
-                query,
-                channelId,
-                channelGuildId(channelId),
-                buildRemoteCommandOptionRequest(
-                    input,
-                    application,
-                    selected.command,
-                    option,
-                    inputMentionsMap.mentions.values,
-                ),
-            ),
-        )
+        remoteRequests.onNext(RemoteOptionRequest(option, query, channelId, channelGuildId(channelId), data))
     }
 
     /**
@@ -572,12 +587,11 @@ class AutocompleteViewModel(
         val remoteState = selectedCommandOption
             ?.takeIf(ApplicationCommandOption::autocomplete)
             ?.let { option ->
-                val query = currentToken?.formattedToken.orEmpty()
-                commandState.remoteResults[option.untranslatedName]?.get(query)
+                commandState.remoteResults[option.untranslatedName]?.get(focusedRemoteQuery)
             }
         val visibleRemoteState = remoteState.takeUnless {
             pendingRemoteQuery ==
-                (selectedCommandOption?.untranslatedName to currentToken?.formattedToken.orEmpty())
+                (selectedCommandOption?.untranslatedName to focusedRemoteQuery)
         }
         val optionCandidates = selectedCommandOption?.let {
             AutocompleteModelUtils.autocompletablesForCommandOption(it, autocompletables)
