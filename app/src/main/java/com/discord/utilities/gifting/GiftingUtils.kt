@@ -1,5 +1,6 @@
 package com.discord.utilities.gifting
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.annotation.PluralsRes
@@ -32,7 +33,7 @@ object GiftingUtils {
     private const val NITRO_SKU_ID = 521_847_234_246_082_599L
 
     /** The shareable form of a gift code. */
-    fun generateGiftUrl(giftCode: String): String = "https://discord.gift/$giftCode"
+    fun generateGiftUrl(giftCode: String): String = "${ClientBackend.giftBase}/$giftCode"
 
     /**
      * The Nitro tier a store SKU grants, or null for anything that is not a Nitro subscription.

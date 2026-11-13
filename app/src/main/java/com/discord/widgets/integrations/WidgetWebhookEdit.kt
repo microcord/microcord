@@ -1,5 +1,6 @@
 package com.discord.widgets.integrations
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -213,7 +214,7 @@ class WidgetWebhookEdit : AppFragment(R.layout.widget_webhook_edit) {
         private const val ARG_TOKEN = "com.discord.intent.extra.EXTRA_WEBHOOK_TOKEN"
         private const val ARG_TYPE = "com.discord.intent.extra.EXTRA_WEBHOOK_TYPE"
         private const val REQUEST_KEY_CHANNEL = "WEBHOOK_EDIT_CHANNEL"
-        private const val WEBHOOK_URL_PREFIX = "https://discord.com/api/webhooks/"
+        private val WEBHOOK_URL_PREFIX: String get() = "${ClientBackend.active.api}webhooks/"
 
         fun launch(context: Context, webhook: ModelWebhook) = AppScreenRouter.launch(
             context,

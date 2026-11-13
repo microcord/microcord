@@ -1,5 +1,6 @@
 package com.discord.dialogs.useractions
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.utilities.rest.contextPropertiesOf
 import androidx.annotation.StringRes
 import com.discord.R
@@ -57,7 +58,7 @@ class UserActionsDialogViewModel(
             /** Only a friend can carry a friend nickname, so only they are offered one. */
             val showFriendNicknameItem: Boolean get() = isFriend
 
-            val profileLink: String get() = "https://discord.com/users/${user.id}"
+            val profileLink: String get() = "${ClientBackend.active.web}/users/${user.id}"
         }
     }
 

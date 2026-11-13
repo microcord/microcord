@@ -251,6 +251,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.behavior to ::WidgetSettingsBehavior,
             R.id.language to ::WidgetSettingsLanguage,
             R.id.activity_status to ::WidgetSettingsActivityStatus,
+            R.id.backend to ::WidgetSettingsBackend,
             R.id.proxy to ::WidgetSettingsProxy,
             R.id.feature_flags to ::WidgetSettingsFeatureFlags,
             R.id.plugins to ::WidgetSettingsPlugins,

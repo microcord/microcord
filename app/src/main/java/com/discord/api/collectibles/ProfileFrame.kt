@@ -1,5 +1,6 @@
 package com.discord.api.collectibles
 
+import com.discord.utilities.rest.ClientBackend
 import com.google.gson.annotations.SerializedName
 import java.io.Serializable
 
@@ -62,6 +63,6 @@ data class ProfileFrameLayer(
         const val TYPE_STAPLE = "staple"
         const val ANCHOR_TOP = "top"
         const val ORDER_FRONT = "front"
-        private const val CDN = "https://cdn.discordapp.com"
+        private val CDN: String get() = "${ClientBackend.active.cdn}"
     }
 }

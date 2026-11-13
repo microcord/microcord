@@ -1,5 +1,6 @@
 package com.discord.widgets.user.profile
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -56,7 +57,7 @@ class UserStatusPresenceCustomView(context: Context, attrs: AttributeSet) : Line
         val url = when {
             value?.id != null -> {
                 val extension = if (value.isAnimated) "gif" else "webp"
-                "https://cdn.discordapp.com/emojis/${value.id}.$extension?size=32"
+                "${ClientBackend.active.cdn}/emojis/${value.id}.$extension?size=32"
             }
             value?.name != null -> ModelEmojiUnicode.getImageUri(
                 value.name.toCodePoints(),

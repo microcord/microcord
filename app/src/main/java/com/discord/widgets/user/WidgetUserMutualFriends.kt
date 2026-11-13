@@ -1,5 +1,6 @@
 package com.discord.widgets.user
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -123,7 +124,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
                     root.contentDescription = guild.name
                     root.findViewById<VitoImageView>(R.id.user_profile_adapter_item_friend_mutual_image).apply {
                         visibility = if (guild.icon == null) View.GONE else View.VISIBLE
-                        setImageURI(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=64" })
+                        setImageURI(guild.icon?.let { "${ClientBackend.active.cdn}/icons/${guild.id}/$it.webp?size=64" })
                     }
                     root.findViewById<TextView>(R.id.user_profile_adapter_item_friend_mutual_text).apply {
                         visibility = if (guild.icon == null) View.VISIBLE else View.GONE; text = guild.shortName
@@ -142,7 +143,7 @@ class WidgetUserMutualFriends : AppFragment(R.layout.widget_user_mutual_friends)
     }
 
     private fun avatarUrl(user: User): String? = user.avatar?.let {
-        "https://cdn.discordapp.com/avatars/${user.id}/$it.webp?size=128"
+        "${ClientBackend.active.cdn}/avatars/${user.id}/$it.webp?size=128"
     }
 
     companion object {

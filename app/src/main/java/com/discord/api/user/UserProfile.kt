@@ -1,5 +1,6 @@
 package com.discord.api.user
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.utilities.icon.IconUtils
 
 import com.discord.api.application.ProfileApplication
@@ -27,7 +28,7 @@ data class AvatarDecorationData(
         ?.let { "$CDN/avatar-decoration-presets/$it.png?size=${presetSize()}&passthrough=$animate" }
 
     private companion object {
-        const val CDN = "https://cdn.discordapp.com"
+        val CDN: String get() = "${ClientBackend.active.cdn}"
         /** Small and drawn in bulk, so the rung below is accepted when it is close enough. */
         fun presetSize() = IconUtils.proxySizePx(IconUtils.AVATAR_DECORATION_SIZE_DP, allowUpscaling = true)
     }

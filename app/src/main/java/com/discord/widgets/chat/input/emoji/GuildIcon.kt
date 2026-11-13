@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.input.emoji
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.util.AttributeSet
 import com.discord.models.guild.Guild
@@ -14,6 +15,6 @@ class GuildIcon : VitoImageView {
     fun updateView(guild: Guild) {
         if (!guild.hasIcon()) return
         val size = IconUtils.getMediaProxySize(layoutParams.width)
-        setImageURI("https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.webp?size=$size")
+        setImageURI("${ClientBackend.active.cdn}/icons/${guild.id}/${guild.icon}.webp?size=$size")
     }
 }

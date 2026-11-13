@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.input.attachments
 
+import com.discord.utilities.rest.ClientBackend
 import android.app.Dialog
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -273,7 +274,7 @@ class PhotoEditorDialog : DialogFragment() {
     private fun showStickerPicker() = WidgetStickerPickerSheet.show(
         parentFragmentManager,
         StickerPickerListener { sticker ->
-            val url = "https://media.discordapp.net/stickers/${sticker.getStickerId()}.png?size=320"
+            val url = "${ClientBackend.active.media}/stickers/${sticker.getStickerId()}.png?size=320"
             loadAsync(::addOverlay) { URL(url).openStream().use(BitmapFactory::decodeStream) }
         },
         selectionOnly = true,

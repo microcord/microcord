@@ -1,5 +1,6 @@
 package com.discord.utilities.intent
 
+import com.discord.utilities.rest.ClientBackend
 import java.net.URI
 import java.net.URLDecoder
 import java.net.IDN
@@ -8,7 +9,7 @@ import java.util.Locale
 
 object DeepLinkParser {
     private val shortDiscordHosts = setOf("discord.gg", "discord.gift", "discord.new")
-    private val discordHosts = setOf("discord.com", "discordapp.com")
+    private val discordHosts = setOf("discord.com", "discordapp.com", ClientBackend.active.webHost)
     private val settings = setOf(
         "account", "nitro", "voice", "createServer", "quickSwitcher", "friends", "mentions",
         "settings", "contactSync", "addFriends", "editProfile", "voiceChannel", "xboxLinkBeta",

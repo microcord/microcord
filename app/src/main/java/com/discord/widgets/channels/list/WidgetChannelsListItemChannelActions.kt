@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.os.Bundle
 import android.view.View
@@ -333,7 +334,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         copyLink.setOnClickAndDismissListener {
             AppToast.copyToClipboard(
                 requireContext(),
-                "https://discord.com/channels/${channel.guildId}/${channel.id}",
+                "${ClientBackend.active.web}/channels/${channel.guildId}/${channel.id}",
                 getString(R.string.link_copied),
             )
         }

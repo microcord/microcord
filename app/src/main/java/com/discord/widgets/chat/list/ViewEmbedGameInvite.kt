@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -142,7 +143,7 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
     }
 
     private fun applicationIcon(applicationId: Long, hash: String) =
-        "https://cdn.discordapp.com/app-icons/$applicationId/$hash.webp?size=256"
+        "${ClientBackend.active.cdn}/app-icons/$applicationId/$hash.webp?size=256"
 
     private fun assetUrl(applicationId: Long, asset: String, requestedSize: Int): String {
         val size = min(4096, maxOf(16, Integer.highestOneBit(maxOf(16, requestedSize - 1)) shl 1))
@@ -154,7 +155,7 @@ class ViewEmbedGameInvite @JvmOverloads constructor(
                 else -> id
             }
         }
-        return "https://cdn.discordapp.com/app-assets/$applicationId/$asset.jpg?size=$size"
+        return "${ClientBackend.active.cdn}/app-assets/$applicationId/$asset.jpg?size=$size"
     }
 
     companion object {

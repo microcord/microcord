@@ -1,5 +1,6 @@
 package com.discord.widgets.botuikit.views
 
+import com.discord.utilities.rest.ClientBackend
 import android.net.Uri
 import android.view.View
 import com.discord.api.botuikit.ComponentEmoji
@@ -36,7 +37,7 @@ object ComponentViewUtils {
         val id = componentEmoji.id?.toLongOrNull()
         if (id != null) {
             val extension = if (emojiAnimationsEnabled && componentEmoji.animated == true) "gif" else "png"
-            return Uri.parse("https://cdn.discordapp.com/emojis/$id.$extension?size=64")
+            return Uri.parse("${ClientBackend.active.cdn}/emojis/$id.$extension?size=64")
         }
         return Uri.parse(bundledUri(componentEmoji.name.toCodePoints()))
     }

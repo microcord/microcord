@@ -1,5 +1,6 @@
 package com.discord.widgets.user
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -97,7 +98,7 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_server_name).text = guild.name
             itemView.findViewById<VitoImageView>(R.id.user_profile_adapter_item_server_image).apply {
                 visibility = if (guild.icon == null) View.GONE else View.VISIBLE
-                setImageURI(guild.icon?.let { "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=128" })
+                setImageURI(guild.icon?.let { "${ClientBackend.active.cdn}/icons/${guild.id}/$it.webp?size=128" })
             }
             itemView.findViewById<TextView>(R.id.user_profile_adapter_item_server_text).apply {
                 visibility = if (guild.icon == null) View.VISIBLE else View.GONE; text = guild.shortName
@@ -113,7 +114,7 @@ class WidgetUserMutualGuilds : AppFragment(R.layout.widget_user_mutual_guilds) {
             itemView.findViewById<VitoImageView>(R.id.guild_member_avatar).apply {
                 val hash = item.member?.avatarHash
                 visibility = if (hasGuildMemberAvatar) View.VISIBLE else View.GONE
-                setImageURI(if (hash == null || item.user == null) null else "https://cdn.discordapp.com/guilds/${guild.id}/users/${item.user.id}/avatars/$hash.webp?size=32")
+                setImageURI(if (hash == null || item.user == null) null else "${ClientBackend.active.cdn}/guilds/${guild.id}/users/${item.user.id}/avatars/$hash.webp?size=32")
             }
         }
     }

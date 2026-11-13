@@ -1,5 +1,6 @@
 package com.discord.widgets.guild_role_subscriptions
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -94,7 +95,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
 
     private fun roleIconUri(role: GuildRole?): String? = when {
         !role?.icon.isNullOrBlank() ->
-            "https://cdn.discordapp.com/role-icons/${role!!.id}/${role.icon}.webp?size=${
+            "${ClientBackend.active.cdn}/role-icons/${role!!.id}/${role.icon}.webp?size=${
                 IconUtils.getMediaProxySize(resources.getDimensionPixelSize(R.dimen.avatar_size_huge))
             }"
         !role?.unicodeEmoji.isNullOrBlank() -> unicodeEmojiUri(role!!.unicodeEmoji!!)
@@ -117,7 +118,7 @@ class GuildSubscriptionRoleImageUploadView @JvmOverloads constructor(
 
         internal fun storeAssetImage(applicationId: Long?, imageAssetId: Long, size: Int): String? =
             applicationId?.let {
-                "https://cdn.discordapp.com/app-assets/$it/store/$imageAssetId.jpg?size=${IconUtils.getMediaProxySize(size)}"
+                "${ClientBackend.active.cdn}/app-assets/$it/store/$imageAssetId.jpg?size=${IconUtils.getMediaProxySize(size)}"
             }
     }
 }

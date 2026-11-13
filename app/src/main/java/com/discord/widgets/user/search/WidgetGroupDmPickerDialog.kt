@@ -1,5 +1,6 @@
 package com.discord.widgets.user.search
 
+import com.discord.utilities.rest.ClientBackend
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
@@ -251,7 +252,7 @@ private fun Presence.activityText() =
 
 private fun userAvatar(user: User): String = user.avatar?.let {
     val extension = if (it.startsWith("a_")) "gif" else "webp"
-    "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension?size=64"
+    "${ClientBackend.active.cdn}/avatars/${user.id}/$it.$extension?size=64"
 } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
 
 private fun View.findToolbar(): Toolbar? {

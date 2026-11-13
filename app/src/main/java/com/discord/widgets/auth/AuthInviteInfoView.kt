@@ -1,5 +1,6 @@
 package com.discord.widgets.auth
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.graphics.Typeface
 import android.text.SpannableString
@@ -67,7 +68,7 @@ class AuthInviteInfoView @JvmOverloads constructor(
                 guildAvatar.visibility = View.VISIBLE
                 templateIcon.visibility = View.GONE
                 guildAvatar.setImageURI(content.icon?.let {
-                    "https://cdn.discordapp.com/icons/${content.id}/$it.webp?size=128"
+                    "${ClientBackend.active.cdn}/icons/${content.id}/$it.webp?size=128"
                 } ?: DEFAULT_ICON)
                 invitedText.text = if (content.memberCount < 200 && !content.inviter.isNullOrBlank()) {
                     usernameText(R.string.auth_message_invited_by, content.inviter)
@@ -92,7 +93,7 @@ class AuthInviteInfoView @JvmOverloads constructor(
     private fun configureGuildInvite(invite: ModelInvite) {
         val guild = requireNotNull(invite.guild)
         guildAvatar.setImageURI(guild.icon?.let {
-            "https://cdn.discordapp.com/icons/${guild.id}/$it.webp?size=128"
+            "${ClientBackend.active.cdn}/icons/${guild.id}/$it.webp?size=128"
         } ?: DEFAULT_ICON)
         invitedText.text = if (invite.getApproximateMemberCount() < 200 && !invite.getInviter()?.username.isNullOrBlank()) {
             usernameText(R.string.auth_message_invited_by, invite.getInviter()!!.username)
@@ -122,14 +123,14 @@ class AuthInviteInfoView @JvmOverloads constructor(
         val hash = user?.avatar?.value
         guildAvatar.setImageURI(if (user != null && hash != null) {
             val extension = if (hash.startsWith("a_")) "gif" else "webp"
-            "https://cdn.discordapp.com/avatars/${user.id}/$hash.$extension?size=128"
+            "${ClientBackend.active.cdn}/avatars/${user.id}/$hash.$extension?size=128"
         } else DEFAULT_ICON)
     }
 
     private fun setInviterAvatar(id: Long?, hash: String?) {
         guildAvatar.setImageURI(if (id != null && hash != null) {
             val extension = if (hash.startsWith("a_")) "gif" else "webp"
-            "https://cdn.discordapp.com/avatars/$id/$hash.$extension?size=128"
+            "${ClientBackend.active.cdn}/avatars/$id/$hash.$extension?size=128"
         } else DEFAULT_ICON)
     }
 

@@ -1,5 +1,6 @@
 package com.discord.views.permissions
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.graphics.drawable.ColorDrawable
 import android.util.AttributeSet
@@ -59,7 +60,7 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         val user = owner.user
         val url = user.avatar?.let {
             val extension = if (it.startsWith("a_")) "gif" else "webp"
-            "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension?size=32"
+            "${ClientBackend.active.cdn}/avatars/${user.id}/$it.$extension?size=32"
         } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
         image.hierarchy.setPlaceholderImage(ColorDrawable(0))
         image.setImageURI(url)

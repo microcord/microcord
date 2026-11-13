@@ -1,5 +1,6 @@
 package com.discord.views.guildboost
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.util.AttributeSet
 import android.util.TypedValue
@@ -41,7 +42,7 @@ class GuildBoostConfirmationView @JvmOverloads constructor(
 
         avatar.setImageURI(guild.icon?.let { hash ->
             val extension = if (hash.startsWith("a_")) "gif" else "png"
-            "https://cdn.discordapp.com/icons/${guild.id}/$hash.$extension"
+            "${ClientBackend.active.cdn}/icons/${guild.id}/$hash.$extension"
         })
         guildName.text = guild.name
         previousTier.setChipIconResource(tierIcon(guild.premiumTier))

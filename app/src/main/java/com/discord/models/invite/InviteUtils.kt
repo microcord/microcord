@@ -1,5 +1,6 @@
 package com.discord.models.invite
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.models.domain.ModelInvite
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
@@ -11,7 +12,7 @@ object InviteUtils {
      * `BuildConfig.HOST_INVITE` in the reference build. The production flavour ships the short
      * invite host, which is also what [com.discord.utilities.intent.DeepLinkParser] recognises.
      */
-    const val HOST_INVITE = "https://discord.gg"
+    val HOST_INVITE: String get() = ClientBackend.inviteBase
 
     /** Reference `InviteQueue.enqueue` location: an invite link posted from the invite sheet. */
     const val INVITE_SEND_LOCATION = "Invite Action Sheet"

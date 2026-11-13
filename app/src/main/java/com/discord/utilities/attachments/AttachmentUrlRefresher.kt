@@ -1,5 +1,6 @@
 package com.discord.utilities.attachments
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.api.attachment.RefreshAttachmentUrlsBody
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.restSubscribeOn
@@ -47,7 +48,7 @@ object AttachmentUrlRefresher {
         SIGNED_PATH_PREFIXES.any { url.substringBefore('?').contains(it) }
 
     /** Only Discord's own hosts are asked to sign a bare link; anyone else's URL stays private. */
-    private val CDN_HOSTS = listOf("https://cdn.discordapp.com/", "https://media.discordapp.net/")
+    private val CDN_HOSTS = listOf("${ClientBackend.active.cdn}/", "${ClientBackend.active.media}/")
 
     /**
      * Whether [url] has to be re-signed before it leaves the app: a lapsed link, or a bare Discord

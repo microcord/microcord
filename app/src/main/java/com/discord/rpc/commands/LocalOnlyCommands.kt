@@ -1,5 +1,6 @@
 package com.discord.rpc.commands
 
+import com.discord.utilities.rest.ClientBackend
 import android.util.Base64
 import com.discord.rpc.RpcBoolean
 import com.discord.rpc.RpcCommand
@@ -41,8 +42,8 @@ val localOnlyCommands: Map<String, RpcCommand> = mapOf(
         val format = context.args.getString("format")
         val size = context.args.getInt("size")
         val url = user.avatar?.let {
-            "https://cdn.discordapp.com/avatars/${user.id}/$it.$format?size=$size"
-        } ?: "https://cdn.discordapp.com/embed/avatars/${(user.id shr 22) % 6}.png"
+            "${ClientBackend.active.cdn}/avatars/${user.id}/$it.$format?size=$size"
+        } ?: "${ClientBackend.active.cdn}/embed/avatars/${(user.id shr 22) % 6}.png"
 
         Observable.fromCallable {
             val response = imageClient.newCall(Request.Builder().url(URL(url)).build()).execute()

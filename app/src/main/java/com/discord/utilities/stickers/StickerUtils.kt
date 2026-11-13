@@ -1,5 +1,6 @@
 package com.discord.utilities.stickers
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import com.discord.api.sticker.BaseSticker
 import com.discord.api.sticker.StickerFormatType
@@ -44,7 +45,7 @@ object StickerUtils {
         passthrough: Boolean = true,
     ): String = when (sticker.formatType) {
         StickerFormatType.PNG, StickerFormatType.APNG, StickerFormatType.GIF -> buildString {
-            append("https://media.discordapp.net/stickers/")
+            append("${ClientBackend.active.media}/stickers/")
             append(sticker.getStickerId())
             append(sticker.getFileExtension())
             append("?passthrough=")
@@ -57,7 +58,7 @@ object StickerUtils {
             }
         }
         StickerFormatType.LOTTIE ->
-            "https://discord.com/stickers/${sticker.getStickerId()}${sticker.getFileExtension()}"
+            "${ClientBackend.active.web}/stickers/${sticker.getStickerId()}${sticker.getFileExtension()}"
         StickerFormatType.UNKNOWN -> ""
     }
 

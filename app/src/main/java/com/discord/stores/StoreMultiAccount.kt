@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.content.SharedPreferences
 import com.discord.models.user.MeUser
@@ -34,6 +35,8 @@ class StoreMultiAccount(
      *   in the list so the row can offer to sign in again rather than silently vanishing.
      * @param pushSyncToken Lets the server fan a notification out to this account while another one
      *   holds the device registration; see [StoreNotifications].
+     * @param backend The backend the account's token belongs to; `null` is Discord, which is also what
+     *   every account saved before alternative backends existed reads back as.
      */
     data class Account(
         val id: Long,
@@ -43,6 +46,7 @@ class StoreMultiAccount(
         val avatar: String?,
         val tokenStatus: TokenStatus = TokenStatus.VALID,
         val pushSyncToken: String? = null,
+        val backend: ClientBackend.Backend? = null,
     )
 
     enum class TokenStatus { VALID, VALIDATING, INVALID }
@@ -102,6 +106,7 @@ class StoreMultiAccount(
             avatar = user.avatar,
             tokenStatus = TokenStatus.VALID,
             pushSyncToken = existing?.pushSyncToken,
+            backend = ClientBackend.accountTag,
         )
         // Replaced where it already sits: the list order is the user's, and reconnecting is not a
         // reason to shuffle it. Overflow is dropped from the far end so a new account can still be

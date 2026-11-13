@@ -1,5 +1,6 @@
 package com.discord.utilities.textprocessing
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.content.res.Resources
 import android.os.Build
@@ -45,7 +46,7 @@ internal object EmojiImages {
 
     fun customEmojiUrl(emojiId: Long, animated: Boolean, sizePx: Int): String {
         val extension = if (animated) ANIMATED_EXTENSION else staticExtension
-        return "https://cdn.discordapp.com/emojis/$emojiId.$extension?size=$sizePx&quality=lossless"
+        return "${ClientBackend.active.cdn}/emojis/$emojiId.$extension?size=$sizePx&quality=lossless"
     }
 }
 

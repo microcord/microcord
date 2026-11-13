@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.os.Bundle
 import android.view.View
@@ -209,7 +210,7 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             val guildSegment = channel.guildId.takeIf { it != 0L }?.toString() ?: "@me"
             AppToast.copyToClipboard(
                 requireContext(),
-                "https://discord.com/channels/$guildSegment/${channel.id}",
+                "${ClientBackend.active.web}/channels/$guildSegment/${channel.id}",
                 getString(R.string.link_copied),
             )
         }

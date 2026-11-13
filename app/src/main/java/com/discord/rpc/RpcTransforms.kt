@@ -1,5 +1,6 @@
 package com.discord.rpc
 
+import com.discord.utilities.rest.ClientBackend
 import android.graphics.Color
 import androidx.annotation.ColorInt
 import com.discord.api.premium.PremiumTier
@@ -63,7 +64,7 @@ private fun premiumType(tier: PremiumTier): Int = when (tier) {
 }
 
 private fun guildIconUrl(guild: Guild): String? = guild.icon?.let {
-    "https://cdn.discordapp.com/icons/${guild.id}/$it.${if (it.startsWith("a_")) "gif" else "webp"}?size=128"
+    "${ClientBackend.active.cdn}/icons/${guild.id}/$it.${if (it.startsWith("a_")) "gif" else "webp"}?size=128"
 }
 
 fun jsonArrayOf(values: List<JSONObject>): JSONArray = JSONArray().apply { values.forEach(::put) }

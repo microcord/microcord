@@ -1,5 +1,6 @@
 package com.discord.widgets.friends
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -35,7 +36,7 @@ class SuggestedFriendView @JvmOverloads constructor(
             userId == -1L -> avatarHash
             avatarHash != null -> {
                 val extension = if (avatarHash.startsWith("a_")) "gif" else "webp"
-                val base = "https://cdn.discordapp.com/avatars/$userId/$avatarHash.$extension"
+                val base = "${ClientBackend.active.cdn}/avatars/$userId/$avatarHash.$extension"
                 if (avatar.height > 0) "$base?size=${IconUtils.getMediaProxySize(avatar.height)}" else base
             }
             else -> IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(userId, discriminator))

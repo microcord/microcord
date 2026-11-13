@@ -1,5 +1,6 @@
 package com.discord.utilities.uri
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
@@ -66,7 +67,7 @@ object UriHandler {
         "media.discordapp.net",
         "spotify.com",
         "open.spotify.com",
-    )
+    ) + with(ClientBackend.active) { setOf(cdnHost, mediaHost, webHost) }
 
     /**
      * Additional trust decisions contributed by the store graph (domains the user chose to trust,

@@ -1,5 +1,6 @@
 package com.discord.widgets.media
 
+import com.discord.utilities.rest.ClientBackend
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
@@ -1050,7 +1051,7 @@ internal fun launchArgs(attachment: MessageAttachment): MediaLaunchArgs {
 }
 
 internal fun mediaVideoPreviewUrl(url: String, width: Int? = null, height: Int? = null): String {
-    val proxied = url.replace("https://cdn.discordapp.com/", "https://media.discordapp.net/")
+    val proxied = url.replace("${ClientBackend.active.cdn}/", "${ClientBackend.active.media}/")
     val dimensions = if (width != null && height != null && width > 0 && height > 0) {
         fitWithin(width, height, 1280, 720)
     } else {
@@ -1070,8 +1071,8 @@ private val RESIZE_QUERY_PARAMS = setOf("width", "height", "format", "animated")
  * untouched and relies on the decoder's resize options instead.
  */
 internal fun mediaTilePreviewUrl(url: String, boxPx: Int): String {
-    if (!url.startsWith("https://cdn.discordapp.com/") && !url.startsWith("https://media.discordapp.net/")) return url
-    val base = url.substringBefore('?').replace("https://cdn.discordapp.com/", "https://media.discordapp.net/")
+    if (!url.startsWith("${ClientBackend.active.cdn}/") && !url.startsWith("${ClientBackend.active.media}/")) return url
+    val base = url.substringBefore('?').replace("${ClientBackend.active.cdn}/", "${ClientBackend.active.media}/")
     val kept = url.substringAfter('?', "").split('&')
         .filter { it.isNotEmpty() && it.substringBefore('=') !in RESIZE_QUERY_PARAMS }
     return "$base?" + (kept + listOf("format=webp", "width=$boxPx", "height=$boxPx")).joinToString("&")

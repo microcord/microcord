@@ -1,5 +1,6 @@
 package com.discord.widgets.servers
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -210,7 +211,7 @@ class WidgetServerSettingsVanityUrl : AppFragment(R.layout.widget_server_setting
         private const val INTENT_EXTRA_GUILD_ID = "INTENT_EXTRA_GUILD_ID"
         private const val INVALID_GUILD_ID = -1L
         private const val ANIMATION_DURATION = 250L
-        private const val VANITY_URL_PREFIX = "https://discord.gg/"
+        private val VANITY_URL_PREFIX: String get() = "${ClientBackend.inviteBase}/"
 
         /** API error for "that vanity code is already taken". */
         /** Every rejection is rendered inline; the API code decides which line to show. */

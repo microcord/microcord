@@ -1,5 +1,6 @@
 package com.discord.widgets.channels.list
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -160,5 +161,5 @@ object ChannelListNavigation {
 
     fun bottomNavHeight(): Observable<Int> = BottomNavViewObserver.INSTANCE.observeHeight()
 
-    private const val INVITE_BASE_URL = "https://discord.gg"
+    private val INVITE_BASE_URL: String get() = ClientBackend.inviteBase
 }

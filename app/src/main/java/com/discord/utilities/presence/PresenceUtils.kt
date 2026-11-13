@@ -1,5 +1,6 @@
 package com.discord.utilities.presence
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
@@ -367,7 +368,7 @@ object PresenceUtils {
         append('#')
         setVitoSpan(
             context = context,
-            url = "https://cdn.discordapp.com/emojis/$id.$extension?size=32",
+            url = "${ClientBackend.active.cdn}/emojis/$id.$extension?size=32",
             start = start,
             end = start,
             width = sizePx,

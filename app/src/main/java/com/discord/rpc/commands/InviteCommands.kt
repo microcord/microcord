@@ -1,5 +1,6 @@
 package com.discord.rpc.commands
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.rpc.OAuth2Scopes
 import com.discord.rpc.RpcArray
 import com.discord.rpc.RpcBoolean
@@ -162,6 +163,6 @@ val inviteCommands: Map<String, RpcCommand> = mapOf(
 val certifiedDevices = linkedMapOf<Long, JSONArray>()
 
 private fun inviteLink(channel: Channel): String =
-    "https://discord.com/channels/${channel.guildId.takeIf { it > 0L } ?: "@me"}/${channel.id}"
+    "${ClientBackend.active.web}/channels/${channel.guildId.takeIf { it > 0L } ?: "@me"}/${channel.id}"
 
 private const val DEFAULT_MAX_AGE = 86400

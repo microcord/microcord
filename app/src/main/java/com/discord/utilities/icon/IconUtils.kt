@@ -1,5 +1,6 @@
 package com.discord.utilities.icon
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.res.Resources
 import android.os.Build
 import android.widget.ImageView
@@ -45,7 +46,7 @@ object IconUtils  {
     const val DEFAULT_ICON_BLURPLE = "asset://asset/images/default_icon_selected.jpg"
 
     /** Host of the production Discord CDN (`BuildConfig.HOST_CDN` in the reference build). */
-    const val CDN_HOST = "https://cdn.discordapp.com"
+    val CDN_HOST: String get() = "${ClientBackend.active.cdn}"
 
     /** Sentinel dimension resource meaning "do not constrain the decoded image". */
     @DimenRes
@@ -522,7 +523,7 @@ object IconUtils  {
     }
 
     private fun getAssetPlatformUrl(platform: String, data: String): String? = when (platform) {
-        "mp" -> "https://media.discordapp.net/$data"
+        "mp" -> "${ClientBackend.active.media}/$data"
         "spotify" -> "https://i.scdn.co/image/$data"
         else -> null
     }

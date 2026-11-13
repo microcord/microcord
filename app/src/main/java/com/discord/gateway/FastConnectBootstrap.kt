@@ -1,5 +1,6 @@
 package com.discord.gateway
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.SharedPreferences
 import android.util.Log
 import com.discord.models.domain.ModelGateway
@@ -45,7 +46,7 @@ object FastConnectBootstrap {
             identifyProperties = { identifyProperties() },
             eventHandler = deferredHandler,
             scheduler = RealGatewayScheduler(),
-            discovery = GatewayDiscovery(preferences) { ModelGateway(DEFAULT_GATEWAY_URL) },
+            discovery = GatewayDiscovery(preferences) { ModelGateway(ClientBackend.active.gateway) },
             webSocketFactory = OkHttpGatewayWebSocketFactory(),
             gatewaySocketLogger = AppGatewaySocketLogger.INSTANCE,
             initialCompression = GatewayCompression.ZSTD,
@@ -68,7 +69,6 @@ object FastConnectBootstrap {
         socket?.completeFastConnect()
     }
 
-    internal const val DEFAULT_GATEWAY_URL = "wss://gateway.discord.gg"
 }
 
 internal class DeferredGatewayEventHandler : GatewayEventHandler {

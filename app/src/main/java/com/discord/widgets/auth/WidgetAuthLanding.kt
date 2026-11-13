@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.discord.R
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppViewFlipper
+import com.discord.widgets.settings.WidgetSettingsBackend
 import com.discord.widgets.settings.WidgetSettingsProxy
 import com.discord.stores.StoreInviteSettings
 import com.discord.stores.StoreStream
@@ -82,6 +83,9 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
         // A network that blocks Discord blocks signing in too, so the proxy has to be set from here.
         view.findViewById<MaterialButton>(R.id.auth_landing_proxy).setOnClickListener {
             AppScreenRouter.launch(it.context, WidgetSettingsProxy::class.java)
+        }
+        view.findViewById<MaterialButton>(R.id.auth_landing_backend).setOnClickListener {
+            AppScreenRouter.launch(it.context, WidgetSettingsBackend::class.java)
         }
         redeemOneTimeLogin()
     }

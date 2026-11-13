@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.utilities.feature.ClientPreferenceSnapshot
 import com.discord.utilities.feature.LocalSettingsSnapshot
 import com.discord.utilities.feature.ManticordSettingsBackupCodec
@@ -79,6 +80,7 @@ import com.discord.restapi.RestAPIInterface
 import com.discord.restapi.RestAPIParams
 import com.discord.restapi.cookie.CookieJars
 import com.discord.stores.authentication.AccountTokens
+import com.discord.stores.authentication.AuthStateCache
 import com.discord.stores.updates.ObservationDeck
 import com.discord.stores.updates.ObservationDeckProvider
 import com.discord.stores.utilities.Batched
@@ -1311,7 +1313,7 @@ class StoreStream private constructor(
         emoji.startPreload(context)
         val api = createRestApi(context)
         val networkMonitor = NetworkMonitor(context)
-        val rtcLatencyApi = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context)).build(
+        val rtcLatencyApi = RestAPIBuilder(ClientBackend.active.api, CookieJars.persistent(context)).build(
             RestAPIInterface.RtcLatency::class.java,
             addVersion = false,
             clientName = "rtc-latency",
@@ -2864,7 +2866,7 @@ class StoreStream private constructor(
         user.id,
         user.username,
         user.discriminator,
-        user.avatar?.let { "https://cdn.discordapp.com/avatars/${user.id}/$it.webp?size=96" },
+        user.avatar?.let { "${ClientBackend.active.cdn}/avatars/${user.id}/$it.webp?size=96" },
     )
 
     private fun blockUser(userId: Long) {
@@ -3267,6 +3269,9 @@ class StoreStream private constructor(
             if (authentication.isSwitchingAccount()) {
                 Persister.reset(includeDeviceScoped = false)
                 SharedPreferencesProvider.clearUserScoped()
+                if (ClientBackend.hasPendingSwitch() && ::applicationContext.isInitialized) {
+                    ClientBackend.restartProcess(applicationContext)
+                }
                 multiAccountSwitch.getPending()?.let { multiAccount.getNavigation(it.targetUserId) }?.let {
                     it.selectedGuildIds?.let(guildSelected::restore)
                     expandedGuildFolders.restore(it.openFolderIds)
@@ -3323,6 +3328,19 @@ class StoreStream private constructor(
         val token = accountTokens.get(userId)
         if (token == null) {
             multiAccount.handleTokenStatus(userId, StoreMultiAccount.TokenStatus.INVALID)
+            return@schedule
+        }
+        val backend = multiAccount.getAccount(userId)?.backend
+        if (backend != ClientBackend.accountTag) {
+            // The token belongs to another backend, whose clients only a new process can build. Sign
+            // out keeping the account; the auth handler restarts once the teardown has run, and the
+            // next start signs in from the pending switch.
+            ClientBackend.save(backend, switchToUserId = userId)
+            if (authentication.getAuthState() == null) {
+                ClientBackend.restartProcess(applicationContext)
+            } else {
+                authentication.logoutKeepingAccount()
+            }
             return@schedule
         }
         multiAccountSwitch.handleSwitchStart(userId, previousUserId, location)
@@ -4005,7 +4023,7 @@ class StoreStream private constructor(
             override fun getDebugOptions(): String? = debugOptions.getDebugOptionsHeaderValue()
             override fun getInstallationId(): String? = authentication.getInstallationForTracking()
         }
-        val builder = RestAPIBuilder(API_BASE_URL, CookieJars.persistent(context))
+        val builder = RestAPIBuilder(ClientBackend.active.api, CookieJars.persistent(context))
         // Ahead of the header interceptor so a 429 parks every later request on the same route
         // until it clears, instead of each caller discovering the limit for itself.
         val interceptors = listOf(
@@ -4030,7 +4048,6 @@ class StoreStream private constructor(
         /** Enough to ride out a burst; the interceptor caps each wait at a minute. */
     private const val RATE_LIMIT_MAX_RETRIES = 3
 
-    private const val API_BASE_URL = "https://discord.com/api/"
         /**
          * `v=2` is the port-aware probe list; v1 may answer without ips, which the media engine
          * cannot rank against.
@@ -4089,6 +4106,13 @@ class StoreStream private constructor(
             BootLog.record(BootLogEvent.PERSISTENCE_READY)
             val preferences = SharedPreferencesProvider.get()
             val sessionDurablePreferences = SharedPreferencesProvider.getPrefsSessionDurable()
+            // A cross-backend switch lands here: whatever token is cached belongs to the old backend,
+            // so it is replaced by the target account's before anything can connect with it.
+            ClientBackend.takePendingSwitch()?.let { userId ->
+                AuthStateCache(preferences).cacheAuthState(
+                    AccountTokens(sessionDurablePreferences).get(userId)?.let { AuthState(it, emptySet()) },
+                )
+            }
             FastConnectBootstrap.start(preferences, sessionDurablePreferences)
             return create(
                 StoreThreadScheduler.create(),

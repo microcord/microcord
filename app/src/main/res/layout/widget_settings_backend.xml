@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="@dimen/list_bottom_padding" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:id="@+id/settings_backend_signed_in" android:visibility="gone" android:textColor="?attr/colorHeaderSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" android:text="@string/backend_signed_in" style="@style/UiKit.TextView"/>
+            <com.discord.views.CheckedSetting android:id="@+id/settings_backend_discord" app:cs_text="@string/backend_discord" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/settings_backend_custom" app:cs_text="@string/backend_custom" app:cs_subtext="@string/backend_custom_description" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <LinearLayout android:id="@+id/settings_backend_fields" android:paddingLeft="16dp" android:paddingTop="8dp" android:paddingRight="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_backend_instance" android:hint="@string/backend_instance" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.button.MaterialButton android:id="@+id/settings_backend_discover" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/backend_discover" style="@style/UiKit.Material.Button.Secondary"/>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_backend_api" android:layout_marginTop="16dp" android:hint="@string/backend_api" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_backend_gateway" android:layout_marginTop="8dp" android:hint="@string/backend_gateway" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_backend_cdn" android:layout_marginTop="8dp" android:hint="@string/backend_cdn" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_backend_media" android:layout_marginTop="8dp" android:hint="@string/backend_media" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_backend_web" android:layout_marginTop="8dp" android:hint="@string/backend_web" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+            <TextView android:textColor="?attr/colorHeaderSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" android:text="@string/backend_description" style="@style/UiKit.TextView"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/settings_backend_save" android:contentDescription="@string/save" style="@style/Settings.FloatingActionButton.Save"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

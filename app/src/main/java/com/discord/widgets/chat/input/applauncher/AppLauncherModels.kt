@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.input.applauncher
 
+import com.discord.utilities.rest.ClientBackend
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.applicationdirectory.ApplicationDirectoryApplication
@@ -513,7 +514,7 @@ internal object AppLauncherRows {
                     imageUrl = shelf.assets[application.id]
                         ?.firstOrNull { (it.name ?: it.key) == "embedded_cover" }
                         ?.let { asset -> asset.id ?: asset.assetId?.toString() }
-                        ?.let { "https://cdn.discordapp.com/app-assets/${application.id}/$it.webp?size=512" },
+                        ?.let { "${ClientBackend.active.cdn}/app-assets/${application.id}/$it.webp?size=512" },
                     badge = config.badge(surface, now),
                 ) to config.shelfRank
             }

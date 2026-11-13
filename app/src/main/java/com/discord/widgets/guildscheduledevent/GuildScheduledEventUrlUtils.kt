@@ -1,6 +1,8 @@
 package com.discord.widgets.guildscheduledevent
 
+import com.discord.utilities.rest.ClientBackend
+
 object GuildScheduledEventUrlUtils {
     fun getEventDetailsUrl(guildId: Long, guildEventId: Long): CharSequence =
-        "https://discord.com/events/$guildId/$guildEventId"
+        "${ClientBackend.active.web}/events/$guildId/$guildEventId"
 }

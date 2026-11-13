@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.actions
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.api.message.MessageTypes
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -285,7 +286,7 @@ class WidgetChatListActions : AppBottomSheet() {
         bind(binding.dialogChatActionsCopyLink, !isLocal) {
             val guildSegment = model.channel?.guildId?.takeUnless { it == 0L } ?: "@me"
             copy(
-                "https://discord.com/channels/$guildSegment/${message.channelId}/${message.id}",
+                "${ClientBackend.active.web}/channels/$guildSegment/${message.channelId}/${message.id}",
                 R.string.copy_message_link,
             )
             dismiss()

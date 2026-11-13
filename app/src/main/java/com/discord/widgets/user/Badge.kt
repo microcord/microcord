@@ -1,5 +1,6 @@
 package com.discord.widgets.user
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.widget.Toast
 import androidx.annotation.DrawableRes
@@ -47,7 +48,7 @@ data class Badge(
         private const val OBJECT_TYPE_PREMIUM_EARLY_SUPPORTER = "PREMIUM_EARLY_SUPPORTER"
         private const val OBJECT_TYPE_PREMIUM = "PREMIUM"
         private const val OBJECT_TYPE_PREMIUM_GUILD = "PREMIUM_GUILD"
-        private const val PROFILE_BADGE_CDN = "https://cdn.discordapp.com/badge-icons"
+        private val PROFILE_BADGE_CDN: String get() = "${ClientBackend.active.cdn}/badge-icons"
 
         /**
          * Every badge [user] has earned, in the order Discord displays them: staff and programme

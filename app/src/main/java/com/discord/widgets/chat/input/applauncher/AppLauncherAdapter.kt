@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.input.applauncher
 
+import com.discord.utilities.rest.ClientBackend
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.View
@@ -392,7 +393,7 @@ class AppLauncherAdapter(
 
     companion object {
         internal fun iconUrl(id: Long, icon: String?): String? =
-            icon?.let { "https://cdn.discordapp.com/app-icons/$id/$it.webp?size=128" }
+            icon?.let { "${ClientBackend.active.cdn}/app-icons/$id/$it.webp?size=128" }
 
         /** A command app's icon, or its bot's avatar when the app has none (as the official client shows). */
         internal fun commandIconUrl(application: Application): String? =

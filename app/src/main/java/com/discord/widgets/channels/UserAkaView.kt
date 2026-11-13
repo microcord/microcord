@@ -1,5 +1,6 @@
 package com.discord.widgets.channels
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.text.SpannableString
 import android.text.Spanned
@@ -73,6 +74,6 @@ internal fun akaNicknames(guildMembers: List<GuildMember>): List<String> =
 internal fun guildMemberAvatarUrl(member: GuildMember, size: Int, extension: String): String? {
     val hash = member.avatarHash ?: return null
     if (hash.startsWith("data:")) return hash
-    return "https://cdn.discordapp.com/guilds/${member.guildId}/users/${member.userId}/avatars/" +
+    return "${ClientBackend.active.cdn}/guilds/${member.guildId}/users/${member.userId}/avatars/" +
         "$hash.$extension?size=${mediaProxySize(size)}"
 }

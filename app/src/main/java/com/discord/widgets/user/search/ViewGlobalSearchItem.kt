@@ -1,5 +1,6 @@
 package com.discord.widgets.user.search
 
+import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.graphics.Typeface
 import android.text.Spannable
@@ -181,7 +182,7 @@ class ViewGlobalSearchItem @JvmOverloads constructor(
 
         private fun userAvatar(user: User): String = user.avatar?.let {
             val extension = if (it.startsWith("a_")) "gif" else "webp"
-            "https://cdn.discordapp.com/avatars/${user.id}/$it.$extension"
+            "${ClientBackend.active.cdn}/avatars/${user.id}/$it.$extension"
         } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
     }
 }

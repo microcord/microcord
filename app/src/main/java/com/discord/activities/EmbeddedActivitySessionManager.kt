@@ -1,5 +1,6 @@
 package com.discord.activities
 
+import com.discord.utilities.rest.ClientBackend
 import com.discord.api.channel.Channel
 import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.commands.ApplicationCommandData
@@ -71,9 +72,9 @@ object EmbeddedActivitySessionManager {
     private const val INSTANCE_TIMEOUT_SECONDS = 20L
     private const val GATEWAY_SESSION_TIMEOUT_SECONDS = 20L
     internal val rpcConfig = EmbeddedActivityDiscordConfig(
-        apiEndpoint = "//discord.com/api",
+        apiEndpoint = "//" + ClientBackend.active.api.substringAfter("://").trimEnd('/'),
         environment = "production",
-        cdnHost = "cdn.discordapp.com",
+        cdnHost = ClientBackend.active.cdnHost,
     )
     private val nonceGenerator = NonceGenerator()
 

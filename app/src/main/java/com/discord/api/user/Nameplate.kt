@@ -1,5 +1,6 @@
 package com.discord.api.user
 
+import com.discord.utilities.rest.ClientBackend
 import java.io.Serializable
 
 data class Collectibles(
@@ -32,7 +33,7 @@ data class Nameplate(
         ?.let { "$CDN/media/v1/collectibles-shop/$it/$format" }
 
     companion object {
-        private const val CDN = "https://cdn.discordapp.com"
+        private val CDN: String get() = "${ClientBackend.active.cdn}"
 
         // Discord's nameplate palette fields are darkBackground and lightBackground respectively.
         private val PALETTES = mapOf(
