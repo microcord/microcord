@@ -77,6 +77,7 @@ import com.discord.widgets.forums.WidgetForumBrowser
 import com.discord.widgets.message_requests.WidgetMessageRequests
 import com.discord.widgets.nux.WidgetNavigationHelp
 import com.discord.widgets.nux.WidgetNewUserOnboarding
+import com.discord.widgets.voice.fullscreen.WidgetStartCallSheet
 import com.discord.widgets.guilds.onboarding.WidgetGuildOnboarding
 import com.discord.models.member.GuildMemberFlags
 import com.discord.widgets.accessibility.AccessibilityDetectionNavigator
@@ -660,10 +661,13 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         channelId: Long,
         status: WidgetChatListAdapterItemCallMessage.CallStatus,
     ) {
-        if (status == WidgetChatListAdapterItemCallMessage.CallStatus.ACTIVE_JOINED) {
-            StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId).subscribe({}, {})
-        } else {
-            privateCallLauncher().launchVoiceCall(channelId)
+        when (status) {
+            WidgetChatListAdapterItemCallMessage.CallStatus.ACTIVE_JOINED ->
+                StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId).subscribe({}, {})
+            WidgetChatListAdapterItemCallMessage.CallStatus.ACTIVE_UNJOINED ->
+                privateCallLauncher().launchVoiceCall(channelId)
+            // An ended call offers voice or video, as the reference does, rather than ringing straight away.
+            else -> WidgetStartCallSheet.show(channelId, childFragmentManager)
         }
     }
 
