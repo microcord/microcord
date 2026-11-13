@@ -95,7 +95,11 @@ class WidgetChatListAdapter @JvmOverloads constructor(
                 (value.list.newestMessage()?.id ?: 0L) > (field.list.newestMessage()?.id ?: 0L)
             val atBottom = StoreChat.InteractionState.getScrollState(layoutManager)
                 .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
-            pendingStickToBottom = stickToBottom && newestGrew && atBottom
+            // Several updates often land before the posted HandlerOfUpdates runs (a send's pending
+            // row then its ack, a new message then the typing/unread churn behind it). The later
+            // ones read a layout not yet redone for the earlier growth, so they see "not at bottom";
+            // overwriting would cancel the stick, so the decision only latches on until it runs.
+            if (stickToBottom && newestGrew && atBottom) pendingStickToBottom = true
             field = value
             setData(value.list)
             if (viewerChanged && itemCount > 0) {
