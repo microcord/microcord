@@ -15,6 +15,7 @@ import com.discord.models.user.User
 import com.discord.utilities.integrations.SpotifyHelper
 import com.discord.utilities.presence.PresenceUtils
 import com.discord.utilities.presence.isRichPresence
+import com.discord.utilities.presence.isTimedListening
 import com.discord.utilities.streams.StreamContext
 import com.discord.utilities.time.Clock
 import com.discord.utilities.time.ClockFactory
@@ -27,9 +28,9 @@ import com.discord.i18n.i18nRender
  * A listening activity, laid out like a now-playing bar: track, artists, album, and a scrub bar
  * showing how far through the track the user is.
  *
- * Only Spotify gets the scrub bar — it is the one source that reports both endpoints of the track —
- * so for any other music app the progress row is hidden and only the text remains. Tapping the card
- * hands off to the Spotify app; without it installed the button goes to the Play Store instead.
+ * The scrub bar shows whenever the activity declares both ends of the track. Spotify cards hand off
+ * to the Spotify app (or the Play Store without it); other music apps use their own declared
+ * buttons and links.
  */
 class ViewHolderMusicRichPresence(
     root: View,
@@ -107,12 +108,19 @@ class ViewHolderMusicRichPresence(
         richPresenceTextContainer.isSelected = true
         configureAssetUi(activity, streamContext)
 
-        richPresencePrimaryButton?.visibility = View.VISIBLE
-        val progressVisibility = if (isSpotify) View.VISIBLE else View.GONE
+        val progressVisibility = if (activity.isTimedListening()) View.VISIBLE else View.GONE
         richPresenceSeekbar.visibility = progressVisibility
         richPresenceMusicDuration.visibility = progressVisibility
         richPresenceMusicElapsed.visibility = progressVisibility
 
+        if (!isSpotify) {
+            // Other music apps link through their own URLs and declared buttons, not Spotify's.
+            richPresenceTitle.linkTo(activity.detailsUrl)
+            configureCustomButtonsUi(user, activity, applicationContext)
+            return
+        }
+
+        richPresencePrimaryButton?.visibility = View.VISIBLE
         if (isMe) {
             // You cannot listen along with yourself.
             richPresencePrimaryButton?.setText(R.string.user_activity_cannot_play_self)

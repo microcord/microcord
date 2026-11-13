@@ -30,6 +30,7 @@ import com.discord.utilities.presence.isCrunchyrollActivity
 import com.discord.utilities.presence.isGameActivity
 import com.discord.utilities.presence.isGamePlatform
 import com.discord.utilities.presence.isSpotifyActivity
+import com.discord.utilities.presence.isTimedListening
 import com.discord.utilities.presence.spotifyArtists
 import com.discord.utilities.uri.UriHandler
 import com.discord.utilities.presence.isStageChannelActivity
@@ -506,7 +507,7 @@ open class ViewHolderUserRichPresence(
             activity == null -> BASE_RICH_PRESENCE_TYPE
             activity.isGamePlatform() -> PLATFORM_RICH_PRESENCE_TYPE
             activity.isGameActivity() -> GAME_RICH_PRESENCE_TYPE
-            activity.isSpotifyActivity() -> MUSIC_RICH_PRESENCE_TYPE
+            activity.isSpotifyActivity() || activity.isTimedListening() -> MUSIC_RICH_PRESENCE_TYPE
             activity.isStageChannelActivity() -> STAGE_CHANNEL_RICH_PRESENCE_TYPE
             else -> BASE_RICH_PRESENCE_TYPE
         }

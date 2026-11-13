@@ -56,6 +56,16 @@ fun Activity.isSpotifyActivity(): Boolean = type == ActivityType.LISTENING &&
     name == SPOTIFY_ACTIVITY_NAME &&
     party?.id?.startsWith(SPOTIFY_PARTY_PREFIX) == true
 
+/**
+ * A listening activity from any app that declares both ends of the track, which is what the music
+ * card's progress bar needs. Divergence: the reference only gave Spotify the music card; the RN
+ * client shows the bar for every timed listening activity (YouTube Music, Apple Music, ...).
+ */
+fun Activity.isTimedListening(): Boolean {
+    val t = timestamps ?: return false
+    return type == ActivityType.LISTENING && t.startMs > 0L && t.endMs > t.startMs
+}
+
 fun Activity.isEmbeddedActivity(): Boolean = hasFlag(ActivityFlags.EMBEDDED)
 
 fun Activity.isCrunchyrollActivity(): Boolean = applicationId == CRUNCHYROLL_APPLICATION_ID
