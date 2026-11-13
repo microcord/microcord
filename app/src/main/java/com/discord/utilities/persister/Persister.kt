@@ -1,7 +1,9 @@
 package com.discord.utilities.persister
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.annotation.VisibleForTesting
+import com.discord.utilities.logging.StartupMetrics
 import com.discord.utilities.time.Clock
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.Input
@@ -42,13 +44,15 @@ class Persister<T : Any>(
         if (preload) preloader.preload(this)
     }
 
-    @Synchronized
     fun get(): T {
-        if (valueUnset) {
-            valueUnset = false
-            value = readValue()
-        }
-        return value
+        val waitStarted = StartupMetrics.cacheWaitStarted()
+        return synchronized(this) {
+            if (valueUnset) {
+                valueUnset = false
+                value = readValue()
+            }
+            value
+        }.also { StartupMetrics.cacheWaitFinished(waitStarted) }
     }
 
     @JvmOverloads
@@ -113,11 +117,13 @@ class Persister<T : Any>(
         restoreBackup(file, backup)
         if (!file.exists() || file.length() >= filesDir.usableSpace) return value
 
+        val decodeStarted = SystemClock.elapsedRealtimeNanos()
         return try {
             val decoded = Input(file.inputStream()).use { input ->
                 if (input.readInt() != CACHE_MAGIC) null
                 else requireNotNull(kryo.get()).readClassAndObject(input)
             }
+            StartupMetrics.recordDecode(key, decodeStarted, file.length())
             if (decoded != null) {
                 @Suppress("UNCHECKED_CAST")
                 decoded as T

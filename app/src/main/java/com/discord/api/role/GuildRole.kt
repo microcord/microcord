@@ -1,7 +1,9 @@
 package com.discord.api.role
 
+import com.discord.utilities.persister.CachedFormat
 import java.io.Serializable
 
+@CachedFormat
 data class GuildRole(
     val position: Int,
     val name: String,

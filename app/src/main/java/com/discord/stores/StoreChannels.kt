@@ -75,7 +75,7 @@ class StoreChannels(
     override fun snapshotData() {
         val channels = channelsByGuild.values.flatMap { it.values }
         val lurkingChannelIds = getLurkingGuildIds().flatMap { channelsByGuild[it].orEmpty().keys }.toSet()
-        channelsCache.set(channels.filterNot { it.id in lurkingChannelIds })
+        channelsCache.set(channels.filterNotTo(CachedChannelList(channels.size)) { it.id in lurkingChannelIds })
         channelsByIdSnapshot = channels.associateBy(Channel::id)
         channelsByGuildSnapshot = channelsByGuild.mapValues { it.value.toMap() }
         channelNamesSnapshot = channelNames.toMap()

@@ -1,5 +1,6 @@
 package com.discord.api.channel
 
+import com.discord.utilities.persister.CachedFormat
 import com.discord.api.guildhash.GuildHashes
 import com.discord.api.permission.PermissionOverwrite
 import com.discord.api.thread.ThreadMember
@@ -8,6 +9,7 @@ import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.primitives.ForumTagId
 
+@CachedFormat
 data class Channel(
     val topic: String?,
     val type: Int,

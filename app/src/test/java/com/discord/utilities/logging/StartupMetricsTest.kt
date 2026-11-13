@@ -22,6 +22,24 @@ class StartupMetricsTest {
     }
 
     @Test
+    fun summaryListsRestoreStepsAndSlowestDecodesFirst() {
+        val report = formatStartupSummary(
+            listOf(
+                StartupMetrics.Entry(StartupMetrics.Kind.BOOT, BootLogEvent.CACHE_RESTORE_STARTED.line, 100.0),
+                StartupMetrics.Entry(StartupMetrics.Kind.RESTORE, "guilds.restore", 110.0, waitMs = 30.0, durationMs = 40.0),
+                StartupMetrics.Entry(StartupMetrics.Kind.RESTORE, "channels.init", 150.0, waitMs = 0.0, durationMs = 5.0),
+                StartupMetrics.Entry(StartupMetrics.Kind.DECODE, "SMALL", 90.0, durationMs = 1.0, bytes = 1024),
+                StartupMetrics.Entry(StartupMetrics.Kind.DECODE, "BIG", 95.0, durationMs = 25.0, bytes = 2048),
+            ),
+            uptimeMs = 400.0,
+        )
+
+        assertTrue(report.contains("Queued before first step: 10.000 ms"))
+        assertTrue(report.contains("Total: 45.000 ms, waiting on cache reads: 30.000 ms"))
+        assertTrue(report.indexOf("  BIG") < report.indexOf("  SMALL"))
+    }
+
+    @Test
     fun gatewayFramesStopAfterReady() {
         StartupMetrics.beginProcess("test")
         StartupMetrics.recordGatewayFrame("READY", 0L, null, 0L, 0L)

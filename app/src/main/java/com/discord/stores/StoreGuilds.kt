@@ -134,11 +134,15 @@ class StoreGuilds(
             guildsJoinedAtCache.set(guildsJoinedAtSnapshot)
             guildsSnapshot = HashMap(guilds)
             // Lurked guilds are excluded from persistence only; the live map still holds them.
-            guildsCache.set(guilds - getLurkingGuildIds())
+            val lurking = getLurkingGuildIds()
+            val cachedGuilds = guilds.filterTo(CachedGuildMap(guilds.size * 2)) { it.key !in lurking }
+            guildsCache.set(cachedGuilds)
             guildsUnavailableSnapshot = HashSet(guildsUnavailable)
             geoRestrictedGuildsSnapshot = geoRestrictedGuilds.values.toList()
-            guildRolesSnapshot = guildRoles.mapValues { HashMap(it.value) }
-            guildRolesCache.set(guildRolesSnapshot)
+            val rolesSnapshot = CachedGuildRoles(guildRoles.size * 2)
+            guildRoles.forEach { (guildId, roles) -> rolesSnapshot[guildId] = HashMap(roles) }
+            guildRolesSnapshot = rolesSnapshot
+            guildRolesCache.set(rolesSnapshot)
         }
         if (ComputedMembersUpdate in updateSources) {
             val snapshot = HashMap<Long, Map<Long, GuildMember>>(guildMembersComputed.size)

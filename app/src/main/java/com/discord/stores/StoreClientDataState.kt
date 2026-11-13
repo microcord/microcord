@@ -76,13 +76,19 @@ class StoreClientDataState(
      * can still ask the gateway to skip guilds this client already has.
      */
     @StoreThread
-    fun init() {
+    fun init(
+        isGuildCached: (Long) -> Boolean = { true },
+        arePrivateChannelsCached: () -> Boolean = { true },
+    ) {
         val restored = cache.get()
-        guildVersions.putAll(restored.guildVersions)
+        // A version tells the gateway this client already holds that data, so it is left out of
+        // READY. If the guild or its channels did not survive on disk (an unreadable or replaced
+        // cache file), keeping the version would leave them missing until the guild next changes.
+        guildVersions.putAll(restored.guildVersions.filterKeys(isGuildCached))
         highestLastMessageId = restored.highestLastMessageId
         readStateVersion = restored.readStateVersion
         userGuildSettingsVersion = restored.userGuildSettingsVersion
-        privateChannelsVersion = restored.privateChannelsVersion
+        privateChannelsVersion = restored.privateChannelsVersion?.takeIf { arePrivateChannelsCached() }
         apiCodeVersion = restored.apiCodeVersion
         initialGuildId = restored.initialGuildId
         markChanged()
@@ -254,8 +260,10 @@ class StoreClientDataState(
     }
 
     companion object {
-        const val CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2"
-        private const val FAST_CONNECT_CACHE_KEY = "STORE_CLIENT_DATA_STATE_V2_FAST_CONNECT_TX2"
+        // V3/TX3: forces one full READY so read states pruned while the channels cache was being
+        // rejected (see ReadyPayloadHydrator's partial-channels guard) are resent in full.
+        const val CACHE_KEY = "STORE_CLIENT_DATA_STATE_V3"
+        private const val FAST_CONNECT_CACHE_KEY = "STORE_CLIENT_DATA_STATE_V3_FAST_CONNECT_TX3"
         private val REQUIRED_CACHE_KEYS = setOf(
             CACHE_KEY,
             StoreGuilds.GUILDS_CACHE_KEY,

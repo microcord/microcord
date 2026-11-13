@@ -25,6 +25,9 @@ abstract class FrecencyTracker<T : Any>(
         val score: Int = 0,
     )
 
+    // Every list stored here is an ArrayList: subclasses are persisted with Kryo, which cannot
+    // rebuild Kotlin's read-only results (`sortedWith` gives `Arrays.asList`, a one-element
+    // `takeLast` a singleton list) and drops the whole cache when it meets one.
     private val history = HashMap<T, List<Long>>()
     private val totalUses = HashMap<T, Int>()
     private var sortedKeys: List<T> = emptyList()
@@ -34,7 +37,7 @@ abstract class FrecencyTracker<T : Any>(
 
     @Synchronized
     fun track(key: T, now: Long = ClockFactory.get().currentTimeMillis()) {
-        history[key] = (history[key].orEmpty() + now).takeLast(maxSamples)
+        history[key] = ArrayList((history[key].orEmpty() + now).takeLast(maxSamples))
         totalUses[key] = (totalUses[key] ?: 0) + 1
         dirty = true
     }
@@ -52,7 +55,7 @@ abstract class FrecencyTracker<T : Any>(
         history.clear()
         totalUses.clear()
         entries.forEach { (key, entry) ->
-            history[key] = entry.recentUses.takeLast(maxSamples)
+            history[key] = ArrayList(entry.recentUses.takeLast(maxSamples))
             totalUses[key] = entry.totalUses
         }
         dirty = true
@@ -90,8 +93,8 @@ abstract class FrecencyTracker<T : Any>(
             val score = entry.value.computeScore(currentTime)
             if (score > minScoreThreshold) scores[entry.key] = score else iterator.remove()
         }
-        sortedKeys = scores.keys.sortedWith(
-            compareByDescending<T> { scores[it] }.thenByDescending { history[it]?.lastOrNull() },
+        sortedKeys = ArrayList(
+            scores.keys.sortedWith(compareByDescending<T> { scores[it] }.thenByDescending { history[it]?.lastOrNull() }),
         )
         dirty = false
     }

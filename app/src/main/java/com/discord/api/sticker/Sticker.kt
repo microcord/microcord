@@ -1,7 +1,9 @@
 package com.discord.api.sticker
 
+import com.discord.utilities.persister.CachedFormat
 import java.io.Serializable
 
+@CachedFormat
 data class Sticker(
     val id: Long,
     val packId: Long?,

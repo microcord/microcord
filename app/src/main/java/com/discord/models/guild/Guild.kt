@@ -1,5 +1,6 @@
 package com.discord.models.guild
 
+import com.discord.utilities.persister.CachedFormat
 import com.discord.api.emoji.GuildEmoji
 import com.discord.api.guild.GuildExplicitContentFilter
 import com.discord.api.guild.GuildFeature
@@ -14,6 +15,7 @@ import com.discord.api.role.GuildRole
 import com.discord.api.sticker.Sticker
 import com.discord.api.guild.Guild as ApiGuild
 
+@CachedFormat
 data class Guild(
     val roles: List<GuildRole> = emptyList(),
     val emojis: List<GuildEmoji> = emptyList(),

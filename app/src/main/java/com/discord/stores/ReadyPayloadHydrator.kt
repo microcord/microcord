@@ -104,6 +104,11 @@ internal class ReadyPayloadHydrator(
         // Every guild has @everyone, so a partial merge landing on none means the cached roles the
         // server assumed we still had are gone, and permissions would silently evaluate to nothing.
         if (partial && roles.isNullOrEmpty()) return null
+        // Same for channels: the fast-connect IDENTIFY names guild versions before the disk cache
+        // loads, so a lost channels file still gets partial guilds. Merging onto nothing empties
+        // them, their acks are then pruned as orphans, and a partial read state never resends them.
+        // ponytail: a guild with zero channels also lands here and costs one full reconnect per start.
+        if (partial && cached?.channels == null) return null
         val emojis = if (partial) merge(cached?.guild?.emojis, updates?.emojis, updates?.deletedEmojiIds, { it.id }) else sync.emojis
         val stickers = if (partial) merge(cached?.guild?.stickers, updates?.stickers, updates?.deletedStickerIds, { it.id }) else sync.stickers
         var channels = if (partial) {

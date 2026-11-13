@@ -93,6 +93,18 @@ class ReadyPayloadHydratorTest {
     }
 
     @Test
+    fun partialGuildWithoutCachedChannelsReturnsError() {
+        val (guilds, channels) = stores()
+        guilds.handleConnectionOpen(gson.fromJson(CACHED_READY, ModelPayload::class.java))
+
+        val result = ReadyPayloadHydrator(guilds, channels).hydrateReadyPayload(
+            gson.fromJson(V2_PARTIAL_READY, ModelPayload::class.java),
+        )
+
+        assertSame(ReadyPayloadHydrator.HydrateResult.Error, result)
+    }
+
+    @Test
     fun privateChannelsDoNotMergeCachedMembershipIntoReady() {
         val (guilds, channels) = stores()
         val cachedPayload = gson.fromJson(CACHED_READY, ModelPayload::class.java)

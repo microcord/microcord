@@ -96,6 +96,7 @@ import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.billing.BillingUtils
 import com.discord.utilities.logging.BootLog
 import com.discord.utilities.logging.BootLogEvent
+import com.discord.utilities.logging.StartupMetrics
 import com.discord.utilities.logging.AppGatewaySocketLogger
 import com.discord.utilities.persister.Persister
 import discord_protos.discord_users.v1.FrecencyUserSettingsOuterClass.FrecencyUserSettings
@@ -1713,29 +1714,36 @@ class StoreStream private constructor(
         }
         BootLog.record(BootLogEvent.CACHE_RESTORE_STARTED)
         dispatcher.schedule {
-            users.restore()
-            userRelationships.init()
-            guilds.restore()
-            channels.init()
-            permissions.init()
-            guildSelected.restore()
-            channelsSelected.restore()
-            expandedGuildFolders.restore()
-            collapsedChannelCategories.restore()
-            collapsedVoiceChannels.restore()
-            guildSettings.restore()
-            clientDataState.init()
-            userSettings.handleUserSettingsProto(userSettingsProto.init())
-            handleFrecencyProtoInternal(frecencyProto.init())
-            unreadSettingNotice.restore()
-            messagesMostRecent.restore()
-            messages.restore()
+            StartupMetrics.restoreStep("users.restore") { users.restore() }
+            StartupMetrics.restoreStep("userRelationships.init") { userRelationships.init() }
+            StartupMetrics.restoreStep("guilds.restore") { guilds.restore() }
+            StartupMetrics.restoreStep("channels.init") { channels.init() }
+            StartupMetrics.restoreStep("permissions.init") { permissions.init() }
+            StartupMetrics.restoreStep("guildSelected.restore") { guildSelected.restore() }
+            StartupMetrics.restoreStep("channelsSelected.restore") { channelsSelected.restore() }
+            StartupMetrics.restoreStep("expandedGuildFolders.restore") { expandedGuildFolders.restore() }
+            StartupMetrics.restoreStep("collapsedChannelCategories.restore") { collapsedChannelCategories.restore() }
+            StartupMetrics.restoreStep("collapsedVoiceChannels.restore") { collapsedVoiceChannels.restore() }
+            StartupMetrics.restoreStep("guildSettings.restore") { guildSettings.restore() }
+            StartupMetrics.restoreStep("clientDataState.init") {
+                clientDataState.init(
+                    isGuildCached = { guildId ->
+                        guildId in guilds.getGuildsInternal() && !channels.getChannelsForGuildInternal(guildId).isNullOrEmpty()
+                    },
+                    arePrivateChannelsCached = { !channels.getChannelsForGuildInternal(StoreChannels.PRIVATE_CHANNELS_ID).isNullOrEmpty() },
+                )
+            }
+            StartupMetrics.restoreStep("userSettingsProto.init") { userSettings.handleUserSettingsProto(userSettingsProto.init()) }
+            StartupMetrics.restoreStep("frecencyProto.init") { handleFrecencyProtoInternal(frecencyProto.init()) }
+            StartupMetrics.restoreStep("unreadSettingNotice.restore") { unreadSettingNotice.restore() }
+            StartupMetrics.restoreStep("messagesMostRecent.restore") { messagesMostRecent.restore() }
+            StartupMetrics.restoreStep("messages.restore") { messages.restore() }
             // Cached history renders before any load, so its authors must resolve too (profiles, mentions).
-            users.handleMessagesLoaded(messages.holder.getAll().values.flatten())
-            guildFolders = userSettings.getGuildFolders()
-            updateSortedGuilds()
-            navigation.updateAuthState(authentication.getAuthState())
-            initialized.onNext(true)
+            StartupMetrics.restoreStep("users.handleMessagesLoaded") { users.handleMessagesLoaded(messages.holder.getAll().values.flatten()) }
+            StartupMetrics.restoreStep("userSettings.getGuildFolders") { guildFolders = userSettings.getGuildFolders() }
+            StartupMetrics.restoreStep("updateSortedGuilds") { updateSortedGuilds() }
+            StartupMetrics.restoreStep("navigation.updateAuthState") { navigation.updateAuthState(authentication.getAuthState()) }
+            StartupMetrics.restoreStep("initialized.onNext") { initialized.onNext(true) }
             if (fastConnectSocket != null) FastConnectBootstrap.attach(gatewayConnection)
             BootLog.record(BootLogEvent.CACHE_RESTORE_FINISHED)
             BootLog.record(BootLogEvent.RUNTIME_READY)

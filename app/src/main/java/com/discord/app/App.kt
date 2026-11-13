@@ -26,6 +26,7 @@ import com.discord.utilities.theme.ThemeRuntime
 import com.discord.widgets.guilds.list.GuildsListStoreHooks
 import com.discord.widgets.notice.NoticePopupChannel
 import com.discord.utilities.systemlog.SystemLogUtils
+import com.discord.utilities.persister.Persister
 import com.discord.utilities.persister.PersisterConfig
 import com.discord.utilities.time.ClockFactory
 import com.discord.rtcconnection.mediaengine.KrispAssetPack
@@ -63,6 +64,10 @@ class App : Application() {
         ClockFactory.init()
         Backgrounded.init(this)
         PersisterConfig.init(this, ClockFactory.get())
+        // Without this a cache that fails to save or load is dropped without a trace.
+        Persister.setLogger { priority, message, error ->
+            if (priority >= android.util.Log.WARN) AppLog.w("Persister", message, error) else AppLog.i("Persister", message, error)
+        }
         MGImagesConfig.init(this)
         CollectibleAssets.init(this)
         if (isFcmProcess(currentProcessName(), packageName)) {

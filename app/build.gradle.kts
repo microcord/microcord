@@ -5,6 +5,7 @@ import java.security.MessageDigest
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.androidx.baselineprofile)
+    alias(libs.plugins.ksp)
     // Applied below only when a Firebase config is present, so a checkout without one builds.
     alias(libs.plugins.google.services) apply false
 }
@@ -270,6 +271,7 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.kronos.android)
     implementation(libs.kryo)
+    ksp(project(":cache-codegen"))
     implementation(libs.lottie)
     implementation(libs.material)
     implementation(libs.okhttp)

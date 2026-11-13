@@ -1,7 +1,9 @@
 package com.discord.api.permission
 
+import com.discord.utilities.persister.CachedFormat
 import com.google.gson.annotations.SerializedName
 
+@CachedFormat
 data class PermissionOverwrite(
     val id: Long,
     val type: Type,

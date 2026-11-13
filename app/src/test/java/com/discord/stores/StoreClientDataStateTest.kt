@@ -32,6 +32,22 @@ class StoreClientDataStateTest {
     }
 
     @Test
+    fun `cold start drops versions for data the caches lost`() {
+        Persister.init(Files.createTempDirectory("client-state-lost-cache").toFile())
+        val cached = StoreClientDataState.ClientDataState(
+            guildVersions = mapOf(1L to 9L, 2L to 8L), privateChannelsVersion = 200L,
+        )
+        Persister(StoreClientDataState.CACHE_KEY, StoreClientDataState.ClientDataState()).set(cached, persist = true)
+
+        val store = StoreClientDataState()
+        store.init(isGuildCached = { it == 1L }, arePrivateChannelsCached = { false })
+        store.snapshotData()
+
+        assertEquals(mapOf(1L to 9L), store.getClientDataState().guildVersions)
+        assertEquals(null, store.getClientDataState().privateChannelsVersion)
+    }
+
+    @Test
     fun `entity updates retain the highest guild version`() {
         val gson = GsonBuilder().excludeFieldsWithModifiers(Modifier.STATIC).create()
         Persister.init(Files.createTempDirectory("client-state-v2").toFile())

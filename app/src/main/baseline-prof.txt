@@ -18,3 +18,13 @@ HSPLcom/discord/widgets/chat/list/entries/ChatListEntry**->**(**)**
 HSPLcom/discord/widgets/chat/list/model/WidgetChatListModel**->**(**)**
 HSPLcom/discord/widgets/channels/list/WidgetChannelListModel**->**(**)**
 HSPLcom/discord/widgets/guilds/list/GuildListItemBuilder**->**(**)**
+# Cache formats (generated `*CacheFormat` codecs sit next to their models) and the models they rebuild: decoded before the first chat frame on every launch.
+HSPLcom/discord/stores/Cache**->**(**)**
+HSPLcom/discord/api/channel/**->**(**)**
+HSPLcom/discord/api/permission/PermissionOverwrite**->**(**)**
+HSPLcom/discord/api/utcdatetime/**->**(**)**
+HSPLcom/discord/api/role/**->**(**)**
+HSPLcom/discord/api/emoji/GuildEmoji**->**(**)**
+HSPLcom/discord/api/sticker/Sticker**->**(**)**
+HSPLcom/discord/models/guild/Guild**->**(**)**
+HSPLcom/discord/api/guild/GuildMaxVideoChannelUsers**->**(**)**
