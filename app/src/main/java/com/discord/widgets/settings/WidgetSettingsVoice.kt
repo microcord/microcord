@@ -20,6 +20,7 @@ import com.discord.app.AppBottomSheet
 import com.discord.app.AppFragment
 import com.discord.app.AppViewModel
 import com.discord.app.appViewModels
+import com.discord.rtcconnection.mediaengine.MediaEngine
 import com.discord.rtcconnection.mediaengine.MediaEngineConnection
 import com.discord.rtcconnection.mediaengine.KrispAvailability
 import com.discord.stores.StoreMediaSettings
@@ -32,6 +33,7 @@ import com.discord.utilities.voice.DiscordOverlayService
 import com.discord.views.CheckedSetting
 import rx.Observable
 import rx.functions.Action1
+import rx.subjects.BehaviorSubject
 import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -60,6 +62,7 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
     private lateinit var automaticVadToggle: CheckedSetting
     private lateinit var sensitivityWrap: RelativeLayout
     private lateinit var sensitivityTestingContainer: LinearLayout
+    private lateinit var sensitivityTestButton: View
     private lateinit var sensitivityManual: SeekBar
     private lateinit var sensitivityAutomatic: View
     private lateinit var sensitivityLabel: TextView
@@ -90,6 +93,7 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         sensitivityWrap = view.findViewById(R.id.settings_voice_sensitivity_wrap)
         sensitivityTestingContainer =
             view.findViewById(R.id.settings_voice_sensitivity_testing_container)
+        sensitivityTestButton = view.findViewById(R.id.settings_voice_sensitivity_test_button)
         sensitivityManual = view.findViewById(R.id.settings_voice_sensitivity_manual)
         sensitivityAutomatic = view.findViewById(R.id.settings_voice_sensitivity_automatic)
         sensitivityLabel = view.findViewById(R.id.settings_voice_sensitivity_label)
@@ -274,20 +278,30 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
         sensitivityWrap.visibility = if (viewState.isVoiceActivityMode) View.VISIBLE else View.GONE
         sensitivityLabel.visibility = if (config.automaticVad) View.VISIBLE else View.GONE
 
-        // The reference shows the meter and hides the "Test microphone" button once the native
-        // engine has produced a voice status. Without `StoreStream.getMediaEngine()` there is no
-        // status to observe, so neither the meter nor the test button can do anything: both stay
-        // hidden rather than sitting inert. See the class KDoc.
-        sensitivityTestingContainer.visibility =
-            if (config.automaticVad) View.GONE else View.VISIBLE
+        // The meter appears once the engine reports a level; until then "Test microphone" starts it.
+        val listening = viewState.localVoiceStatus != null
+        sensitivityTestingContainer.visibility = if (listening) View.VISIBLE else View.GONE
+        sensitivityTestButton.visibility = if (listening) View.GONE else View.VISIBLE
+        sensitivityTestButton.setOnClickListener {
+            requestMicrophone(null) { viewModel.listenForSensitivity() }
+        }
+        val status = viewState.localVoiceStatus ?: return
 
         if (config.automaticVad) {
-            // Automatic mode has nothing to drag; the reference shows a live speaking indicator here.
-            sensitivityAutomatic.visibility = View.GONE
-            sensitivityManual.visibility = View.GONE
+            // Automatic mode has nothing to drag, only a live speaking indicator.
+            sensitivityAutomatic.visibility = View.VISIBLE
+            sensitivityManual.visibility = View.INVISIBLE
+            sensitivityAutomatic.setBackgroundResource(
+                if (status.isSpeaking) {
+                    R.drawable.drawable_voice_indicator_speaking
+                } else {
+                    R.drawable.drawable_voice_indicator_not_speaking
+                },
+            )
         } else {
-            sensitivityAutomatic.visibility = View.GONE
+            sensitivityAutomatic.visibility = View.INVISIBLE
             sensitivityManual.visibility = View.VISIBLE
+            sensitivityManual.secondaryProgress = (status.amplitude + SENSITIVITY_DBFS_OFFSET).roundToInt()
             sensitivityManual.progress =
                 (config.sensitivity + SENSITIVITY_DBFS_OFFSET).roundToInt()
         }
@@ -450,9 +464,9 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
 /**
  * State for [WidgetSettingsVoice].
  *
- * Reference: `WidgetSettingsVoice.Model`, which also carries the engine's OpenSL ES config and its
- * live `LocalVoiceStatus`. Neither is reachable without `StoreStream.getMediaEngine()`, so this
- * state is the `StoreMediaSettings` half only — see [WidgetSettingsVoice]'s KDoc.
+ * Reference: `WidgetSettingsVoice.Model`. The microphone meter listens once the user taps "Test
+ * microphone" or the native engine is already up; until then [ViewState.localVoiceStatus] is `null`.
+ * The OpenSL ES config the reference also carries has no setting on this screen and is left out.
  *
  * There is no loading state: `StoreMediaSettings.getVoiceConfig()` is backed by a persisted
  * configuration and emits immediately, so the screen is never empty.
@@ -460,9 +474,20 @@ class WidgetSettingsVoice : AppFragment(R.layout.widget_settings_voice) {
 class SettingsVoiceViewModel(
     voiceConfig: Observable<StoreMediaSettings.VoiceConfiguration> =
         StoreStream.getMediaSettings().getVoiceConfig(),
+    isNativeEngineInitialized: Observable<Boolean> =
+        StoreStream.getMediaEngine().getIsNativeEngineInitialized(),
+    localVoiceStatus: Observable<MediaEngine.LocalVoiceStatus> =
+        StoreStream.getMediaEngine().localVoiceStatus,
 ) : AppViewModel<SettingsVoiceViewModel.ViewState>() {
 
-    data class ViewState(val voiceConfig: StoreMediaSettings.VoiceConfiguration) {
+    private val requestListenForSensitivity = BehaviorSubject.create(false)
+
+    fun listenForSensitivity() = requestListenForSensitivity.onNext(true)
+
+    data class ViewState(
+        val voiceConfig: StoreMediaSettings.VoiceConfiguration,
+        val localVoiceStatus: MediaEngine.LocalVoiceStatus? = null,
+    ) {
         val isPushToTalkMode: Boolean
             get() = voiceConfig.inputMode == MediaEngineConnection.InputMode.PUSH_TO_TALK
 
@@ -471,8 +496,12 @@ class SettingsVoiceViewModel(
     }
 
     init {
-        voiceConfig.computationLatest().distinctUntilChanged().ui(this).subscribe {
-            updateViewState(ViewState(it))
+        val status = Observable.combineLatest(requestListenForSensitivity, isNativeEngineInitialized) { requested, ready ->
+            requested || ready
+        }.distinctUntilChanged().switchMap { listening ->
+            if (listening) localVoiceStatus.map<MediaEngine.LocalVoiceStatus?> { it } else Observable.just(null)
         }
+        Observable.combineLatest(voiceConfig, status, ::ViewState)
+            .computationLatest().distinctUntilChanged().ui(this).subscribe(::updateViewState)
     }
 }

@@ -6,6 +6,7 @@ import co.discord.media_engine.VideoFrameCallback
 import co.discord.media_engine.VideoOutputSink
 import com.discord.models.domain.ModelPayload
 import com.discord.models.domain.ModelRtcLatencyRegion
+import com.discord.rtcconnection.mediaengine.MediaEngine
 import com.discord.rtcconnection.mediaengine.MediaEngineThreadExecutor
 import com.discord.utilities.persister.Persister
 import org.webrtc.VideoCapturer
@@ -52,6 +53,9 @@ class StoreMediaEngine(
         fun setVideoInputEnabled(enabled: Boolean)
 
         fun setAudioInputEnabled(enabled: Boolean)
+
+        /** Runs the microphone level meter outside a call; see [MediaEngine.setLocalVoiceTesting]. */
+        fun setLocalVoiceTesting(enabled: Boolean) = Unit
 
         fun setPttActive(active: Boolean)
 
@@ -178,6 +182,17 @@ class StoreMediaEngine(
         SerializedSubject<Boolean, Boolean>(BehaviorSubject.create(false))
     private val pttActiveSubject = SerializedSubject<Boolean, Boolean>(BehaviorSubject.create(false))
 
+    private val localVoiceStatusSubject = SerializedSubject<MediaEngine.LocalVoiceStatus, MediaEngine.LocalVoiceStatus>(
+        BehaviorSubject.create(LOCAL_VOICE_STATUS_DEFAULT),
+    )
+
+    /** The live microphone level; subscribing starts the meter and the last unsubscribe stops it. */
+    val localVoiceStatus: Observable<MediaEngine.LocalVoiceStatus> = localVoiceStatusSubject
+        .distinctUntilChanged()
+        .doOnSubscribe { mediaEngineController.setLocalVoiceTesting(true) }
+        .doOnUnsubscribe { mediaEngineController.setLocalVoiceTesting(false) }
+        .share()
+
     private var videoInputDevices: List<VideoInputDeviceDescription> = emptyList()
     private val videoInputDevicesSubject =
         BehaviorSubject.create<List<VideoInputDeviceDescription>>(emptyList())
@@ -236,6 +251,8 @@ class StoreMediaEngine(
     fun hasNativeEngineEverInitialized(): Boolean = hasNativeEngineEverInitialized
 
     fun getIsNativeEngineInitialized(): Observable<Boolean> = isNativeEngineInitializedSubject
+
+    fun handleLocalVoiceStatus(status: MediaEngine.LocalVoiceStatus) = localVoiceStatusSubject.onNext(status)
 
     fun observePttActive(): Observable<Boolean> = pttActiveSubject
 
@@ -345,5 +362,6 @@ class StoreMediaEngine(
         private const val NO_VIDEO_DEVICE = -1
         private const val NO_VOICE_CHANNEL = 0L
         private const val NO_USER = -1L
+        private val LOCAL_VOICE_STATUS_DEFAULT = MediaEngine.LocalVoiceStatus(-100f, false)
     }
 }

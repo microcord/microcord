@@ -192,6 +192,22 @@ class MediaEngineLegacy(
         nativeEngine?.setAudioInputEnabled(enabled)
     }
 
+    @Volatile
+    private var localVoiceTesting = false
+
+    @Synchronized
+    override fun setLocalVoiceTesting(enabled: Boolean) {
+        localVoiceTesting = enabled
+        if (enabled) ensureNativeEngine()
+        val engine = nativeEngine ?: return
+        engine.setAudioInputEnabled(enabled || audioInputEnabled)
+        if (enabled) {
+            engine.applyLocalVoiceStatusListener()
+        } else if (connections.isEmpty()) {
+            engine.setLocalVoiceLevelChangedCallback(null)
+        }
+    }
+
     override fun setLocalVoiceStatusListener(voiceStatusListener: ((MediaEngine.LocalVoiceStatus) -> Unit)?) {
         localVoiceStatusListener = voiceStatusListener
         nativeEngine?.applyLocalVoiceStatusListener()
@@ -242,7 +258,7 @@ class MediaEngineLegacy(
     private fun onConnectionDestroyed(connection: MediaEngineConnection) {
         // The local voice level callback is engine-wide, not per connection; leaving it installed
         // after the last connection dies keeps the microphone meter running with nothing to feed.
-        nativeEngine?.setLocalVoiceLevelChangedCallback(null)
+        if (!localVoiceTesting) nativeEngine?.setLocalVoiceLevelChangedCallback(null)
         connections -= connection
     }
 

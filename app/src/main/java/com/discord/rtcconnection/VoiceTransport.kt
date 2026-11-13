@@ -159,6 +159,7 @@ class VoiceTransport(
         )
         mediaEngine.setLocalVoiceStatusListener { status ->
             voiceController.onLocalVoiceStatus(status.amplitude, status.isSpeaking)
+            storeMediaEngine.handleLocalVoiceStatus(status)
         }
     }
 
@@ -238,6 +239,8 @@ class VoiceTransport(
         }
 
         override fun setAudioInputEnabled(enabled: Boolean) = mediaEngine.setAudioInputEnabled(enabled)
+
+        override fun setLocalVoiceTesting(enabled: Boolean) = mediaEngine.setLocalVoiceTesting(enabled)
 
         override fun setPttActive(active: Boolean) =
             mediaEngine.getConnections().forEach { it.setPttActive(active) }

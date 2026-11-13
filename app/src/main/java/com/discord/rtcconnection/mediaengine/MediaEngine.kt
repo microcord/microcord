@@ -54,6 +54,12 @@ interface MediaEngine {
     /** Subscribes to local mic level updates, or `null` to stop them. */
     fun setLocalVoiceStatusListener(voiceStatusListener: ((LocalVoiceStatus) -> Unit)?)
 
+    /**
+     * The settings microphone test: loads the engine if needed, opens the microphone and keeps the
+     * level callback installed, so the meter runs outside a call.
+     */
+    fun setLocalVoiceTesting(enabled: Boolean)
+
     /** Chooses how the OpenSL ES device list is interpreted; must be set before the engine starts. */
 
     /**
@@ -84,7 +90,7 @@ interface MediaEngine {
 
     data class AudioInfo(val audioSubsystem: String, val audioLayer: String)
 
-    /** Local microphone level, `0f..1f`, and whether the gate is currently open. */
+    /** Local microphone level in dBFS (`-100f..0f`), and whether the gate is currently open. */
     data class LocalVoiceStatus(val amplitude: Float, val isSpeaking: Boolean)
 
     /**
