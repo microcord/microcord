@@ -4,8 +4,14 @@ import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.os.Bundle
 import android.view.View
-import android.widget.TextView
+import android.view.ViewGroup
 import androidx.annotation.DrawableRes
+import androidx.core.view.children
+import androidx.core.view.isVisible
+import com.discord.databinding.WidgetChannelsListItemActionsBinding
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.utilities.resources.getI18nPluralString
+import com.discord.widgets.chat.list.actions.MessageMenuGroup
 import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -49,7 +55,6 @@ import com.discord.widgets.settings.WidgetMuteSettingsSheet
 import com.discord.widgets.stage.StageChannelJoinHelper
 import com.discord.widgets.stage.sheet.WidgetEndStageBottomSheet
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import com.discord.views.VitoImageView
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
 import com.discord.plugins.PluginContextMenuHost
@@ -65,53 +70,23 @@ import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
  */
 class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
-    override fun getContentViewResId(): Int = R.layout.widget_channels_list_item_actions
+    /** The modern sheet is the default; the legacy one shares the long-press menu flag. Both share view ids. */
+    private val modern by lazy { !FeatureFlags.legacyMessageMenuEnabled() }
 
-    private lateinit var icon: VitoImageView
-    private lateinit var title: TextView
-    private lateinit var profile: TextView
-    private lateinit var markAsRead: TextView
-    private lateinit var optIn: TextView
-    private lateinit var pinChannel: TextView
-    private lateinit var mute: TextView
-    private lateinit var threadBrowser: TextView
-    private lateinit var channelSettings: TextView
-    private lateinit var notifications: TextView
-    private lateinit var invite: TextView
-    private lateinit var openChat: TextView
-    private lateinit var rehideSpoiler: TextView
-    private lateinit var copyLink: TextView
-    private lateinit var cloneChannel: TextView
-    private lateinit var joinStage: TextView
-    private lateinit var hideNames: TextView
-    private lateinit var endStage: TextView
-    private lateinit var closeChannel: TextView
-    private lateinit var developerDivider: View
-    private lateinit var copyId: TextView
+    override fun getContentViewResId(): Int =
+        if (modern) R.layout.widget_channels_list_item_actions_modern else R.layout.widget_channels_list_item_actions
+
+    private var _binding: WidgetChannelsListItemActionsBinding? = null
+    private val binding get() = checkNotNull(_binding)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        icon = view.findViewById(R.id.channels_list_item_text_actions_icon)
-        title = view.findViewById(R.id.channels_list_item_text_actions_title)
-        profile = view.findViewById(R.id.dm_action_profile)
-        openChat = view.findViewById(R.id.action_open_chat)
-        markAsRead = view.findViewById(R.id.text_action_mark_as_read)
-        optIn = view.findViewById(R.id.text_action_opt_in)
-        pinChannel = view.findViewById(R.id.text_action_pin_channel)
-        mute = view.findViewById(R.id.text_action_mute)
-        threadBrowser = view.findViewById(R.id.text_action_thread_browser)
-        channelSettings = view.findViewById(R.id.action_channel_settings)
-        notifications = view.findViewById(R.id.action_channel_notifications)
-        invite = view.findViewById(R.id.action_invite)
-        rehideSpoiler = view.findViewById(R.id.action_rehide_spoiler)
-        copyLink = view.findViewById(R.id.action_copy_link)
-        cloneChannel = view.findViewById(R.id.action_clone_channel)
-        joinStage = view.findViewById(R.id.action_join_stage)
-        hideNames = view.findViewById(R.id.action_hide_names)
-        endStage = view.findViewById(R.id.action_end_stage)
-        closeChannel = view.findViewById(R.id.action_close_dm)
-        developerDivider = view.findViewById(R.id.developer_divider)
-        copyId = view.findViewById(R.id.action_copy_id)
+        _binding = WidgetChannelsListItemActionsBinding.bind(view)
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
@@ -135,8 +110,8 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         val pinned = settings?.getChannelOverride(channel.id)?.isFavorite == true
         val supported = !channel.isThread() && !channel.isCategory()
 
-        pinChannel.visibility = if (supported) View.VISIBLE else View.GONE
-        pinChannel.setText(
+        binding.textActionPinChannel.visibility = if (supported) View.VISIBLE else View.GONE
+        binding.textActionPinChannel.setText(
             // A DM is pinned within the DM list, so the reference drops "Channel to Top" there.
             when {
                 channel.isPrivate() && pinned -> R.string.unpin
@@ -145,7 +120,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
                 else -> R.string.pin_channel_to_top
             },
         )
-        pinChannel.setOnClickAndDismissListener {
+        binding.textActionPinChannel.setOnClickAndDismissListener {
             StoreStream.getUserGuildSettings().setChannelFavorite(requireContext(), channel, !pinned)
         }
     }
@@ -163,15 +138,15 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
             settings?.getChannelOverride(channel.parentId)?.isOptedIn == true
         val optedIn = settings?.getChannelOverride(channel.id)?.isOptedIn == true
 
-        optIn.visibility = if (enabled && !channel.isThread()) View.VISIBLE else View.GONE
-        optIn.setText(
+        binding.textActionOptIn.visibility = if (enabled && !channel.isThread()) View.VISIBLE else View.GONE
+        binding.textActionOptIn.setText(
             when {
                 parentOptedIn -> R.string.channel_opt_out_parent_category
                 optedIn -> R.string.channel_opt_out
                 else -> R.string.channel_opt_in
             },
         )
-        optIn.setOnClickAndDismissListener {
+        binding.textActionOptIn.setOnClickAndDismissListener {
             val target = if (parentOptedIn) {
                 StoreStream.getChannels().getChannel(channel.parentId) ?: channel
             } else {
@@ -189,7 +164,7 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         }
         val channel = model.channel
         PluginContextMenuHost.bind(
-            requireView().findViewById(R.id.plugin_context_menu_items),
+            binding.pluginContextMenuItems,
             pluginContextMenuContext(
                 PluginContextMenuSurface.CHANNEL,
                 channel.guildId.takeIf { it > 0L },
@@ -198,26 +173,40 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
                 targetId = channel.id,
             ),
             ::dismiss,
+            modern,
         )
+        // An empty container would otherwise keep its card on screen with nothing in it.
+        binding.pluginContextMenuItems.isVisible = binding.pluginContextMenuItems.childCount > 0
 
         if (model.guild != null) {
-            IconUtils.setIcon(icon, model.guild)
+            IconUtils.setIcon(binding.channelsListItemTextActionsIcon, model.guild)
         } else {
-            IconUtils.setIcon(icon, channel)
+            IconUtils.setIcon(binding.channelsListItemTextActionsIcon, channel)
         }
-        title.text = channel.getDisplayNameOrDefault(requireContext())
+        binding.channelsListItemTextActionsTitle.text = channel.getDisplayNameOrDefault(requireContext())
+        // Like the modern client, a group names its size under the title; the legacy header has no subtitle.
+        val members = channel.recipients?.size?.plus(1)
+        val subtitle = binding.channelsListItemTextActionsSubtitle
+        subtitle.isVisible = modern && channel.isMultiUserDM() && members != null
+        if (members != null) {
+            subtitle.text = requireContext().getI18nPluralString(
+                R.plurals.private_channel_access_info_members_count,
+                members,
+                "count" to members,
+            )
+        }
 
         val dmRecipient = channel.getDMRecipient()
-        profile.visibility = if (dmRecipient != null) View.VISIBLE else View.GONE
-        profile.setOnClickListener {
+        binding.dmActionProfile.visibility = if (dmRecipient != null) View.VISIBLE else View.GONE
+        binding.dmActionProfile.setOnClickListener {
             dmRecipient?.let { WidgetUserSheet.show(it.id, parentFragmentManager) }
         }
 
         // A group DM's owner manages its links instead; everyone else there has no invite row.
         val gdmInviteLinks = channel.isMultiUserDM() && model.isOwner
-        invite.visibility = if (model.canCreateInstantInvite || gdmInviteLinks) View.VISIBLE else View.GONE
-        invite.setText(if (gdmInviteLinks) R.string.invite_links else R.string.instant_invite)
-        invite.setOnClickAndDismissListener {
+        binding.actionInvite.visibility = if (model.canCreateInstantInvite || gdmInviteLinks) View.VISIBLE else View.GONE
+        binding.actionInvite.setText(if (gdmInviteLinks) R.string.invite_links else R.string.instant_invite)
+        binding.actionInvite.setOnClickAndDismissListener {
             if (gdmInviteLinks) {
                 WidgetServerSettingsInstantInvites.launchForChannel(requireContext(), 0L, channel.id)
             } else {
@@ -226,9 +215,9 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         }
 
         // Only things that hold messages, and categories (which mute their children), can be muted.
-        mute.visibility =
+        binding.textActionMute.visibility =
             if (channel.isTextChannel() || channel.isCategory()) View.VISIBLE else View.GONE
-        mute.setOnClickAndDismissListener {
+        binding.textActionMute.setOnClickAndDismissListener {
             if (model.isMuted) {
                 StoreStream.getUserGuildSettings()
                     .setChannelMuted(requireContext(), channel.id, muted = false)
@@ -237,23 +226,29 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
                 WidgetMuteSettingsSheet.showForChannel(channel.id, parentFragmentManager)
             }
         }
-        mute.setCompoundDrawablesWithIntrinsicBounds(model.muteIconResId(requireContext()), 0, 0, 0)
-        mute.text = model.muteChannelText(requireContext(), channel)
+        // The themed icons carry a 60% alpha that tinting keeps, so the modern rows use opaque copies.
+        val muteIcon = when {
+            !modern -> model.muteIconResId(requireContext())
+            model.isMuted -> R.drawable.ic_menu_muted
+            else -> R.drawable.ic_menu_mute
+        }
+        binding.textActionMute.setCompoundDrawablesWithIntrinsicBounds(muteIcon, 0, 0, 0)
+        binding.textActionMute.text = model.muteChannelText(requireContext(), channel)
 
         // Forums have their own browser surface, and an NSFW channel's threads are not previewed.
-        threadBrowser.visibility = if (
+        binding.textActionThreadBrowser.visibility = if (
             channel.isThreaded() && !channel.isThreadOnlyChannel() && !channel.nsfw && model.hasThreads
         ) {
             View.VISIBLE
         } else {
             View.GONE
         }
-        threadBrowser.setOnClickAndDismissListener {
+        binding.textActionThreadBrowser.setOnClickAndDismissListener {
             ChannelListNavigation.showThreadBrowser(this, channel.guildId, channel.id)
         }
 
-        channelSettings.visibility = if (model.canManageChannel) View.VISIBLE else View.GONE
-        channelSettings.setOnClickAndDismissListener {
+        binding.actionChannelSettings.visibility = if (model.canManageChannel) View.VISIBLE else View.GONE
+        binding.actionChannelSettings.setOnClickAndDismissListener {
             when {
                 channel.isMultiUserDM() ->
                     ChannelListNavigation.showGroupDmSettings(this, channel.id)
@@ -262,13 +257,13 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
                 else -> ChannelListNavigation.showTextChannelSettings(this, channel.id)
             }
         }
-        channelSettings.text = settingsText(channel, model.canManageChannel)
+        binding.actionChannelSettings.text = settingsText(channel, model.canManageChannel)
 
         // Per-channel notification overrides exist for guild text channels and categories, and for
         // stage channels only in a community guild.
         // Per-channel notification overrides exist for guild text channels and categories, and for
         // stage channels only in a community guild. A plain voice channel has no override.
-        notifications.visibility = if (
+        binding.actionChannelNotifications.visibility = if (
             channel.isGuildTextChannel() ||
             channel.isCategory() ||
             (channel.isStageVoiceChannel() && model.guild?.hasFeature(GuildFeature.COMMUNITY) == true)
@@ -277,23 +272,23 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         } else {
             View.GONE
         }
-        notifications.setOnClickListener {
+        binding.actionChannelNotifications.setOnClickListener {
             ChannelListNavigation.showChannelNotificationSettings(this, channel.id)
         }
 
         // A vocal channel's chat is reachable without joining the call, which is the only way in
         // for someone who wants to read it without connecting.
-        openChat.visibility = if (channel.isGuildVocalChannel()) View.VISIBLE else View.GONE
-        openChat.setOnClickAndDismissListener {
+        binding.actionOpenChat.visibility = if (channel.isGuildVocalChannel()) View.VISIBLE else View.GONE
+        binding.actionOpenChat.setOnClickAndDismissListener {
             ChannelSelector.getInstance().openVocalChannelChat(
                 channel,
                 SelectedChannelAnalyticsLocation.TEXT_IN_VOICE,
             )
         }
 
-        markAsRead.visibility =
+        binding.textActionMarkAsRead.visibility =
             if (channel.hasMessages() || channel.isCategory()) View.VISIBLE else View.GONE
-        markAsRead.setOnClickAndDismissListener {
+        binding.textActionMarkAsRead.setOnClickAndDismissListener {
             StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
         }
 
@@ -305,15 +300,19 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         configureCloseChannel(channel)
 
         val spoilerAgree = StoreStream.getChannelSpoilerAgree()
-        rehideSpoiler.visibility =
+        binding.actionRehideSpoiler.visibility =
             if (channel.isSpoilerChannel() && spoilerAgree.didAgree(channel.id)) View.VISIBLE else View.GONE
-        rehideSpoiler.setOnClickAndDismissListener { spoilerAgree.clearAgreement(channel.id) }
+        binding.actionRehideSpoiler.setOnClickAndDismissListener { spoilerAgree.clearAgreement(channel.id) }
 
-        developerDivider.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
-        copyId.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
-        copyId.setOnClickAndDismissListener {
+        binding.developerDivider.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
+        binding.actionCopyId.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
+        binding.actionCopyId.setOnClickAndDismissListener {
             ChannelListNavigation.copyToClipboard(requireContext(), channel.id.toString())
         }
+        // Each modern card hides itself once none of its rows apply.
+        (binding.root.getChildAt(0) as ViewGroup).children
+            .filterIsInstance<MessageMenuGroup>()
+            .forEach(MessageMenuGroup::refresh)
     }
 
     private fun settingsText(channel: Channel, canManageChannel: Boolean): String = getString(
@@ -326,12 +325,12 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
     )
 
     private fun configureCopyLink(channel: Channel) {
-        copyLink.visibility = if (channel.isGuildTextyChannel() || channel.isGuildVocalChannel()) {
+        binding.actionCopyLink.visibility = if (channel.isGuildTextyChannel() || channel.isGuildVocalChannel()) {
             View.VISIBLE
         } else {
             View.GONE
         }
-        copyLink.setOnClickAndDismissListener {
+        binding.actionCopyLink.setOnClickAndDismissListener {
             AppToast.copyToClipboard(
                 requireContext(),
                 "${ClientBackend.active.web}/channels/${channel.guildId}/${channel.id}",
@@ -346,9 +345,9 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         val supported = channel.isCategory() || channel.type == Channel.GUILD_TEXT ||
             channel.isAnnouncementChannel() || channel.isGuildForumChannel() ||
             channel.type == Channel.GUILD_VOICE
-        cloneChannel.visibility = if (model.canManageChannel && supported) View.VISIBLE else View.GONE
-        cloneChannel.setText(if (channel.isCategory()) R.string.create_channel else R.string.clone_channel)
-        cloneChannel.setOnClickAndDismissListener {
+        binding.actionCloneChannel.visibility = if (model.canManageChannel && supported) View.VISIBLE else View.GONE
+        binding.actionCloneChannel.setText(if (channel.isCategory()) R.string.create_channel else R.string.clone_channel)
+        binding.actionCloneChannel.setOnClickAndDismissListener {
             WidgetCreateChannel.show(
                 requireContext(),
                 channel.guildId,
@@ -362,25 +361,25 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         val channel = model.channel
         val isStage = channel.isStageVoiceChannel()
 
-        joinStage.visibility = if (isStage) View.VISIBLE else View.GONE
-        joinStage.setOnClickAndDismissListener {
+        binding.actionJoinStage.visibility = if (isStage) View.VISIBLE else View.GONE
+        binding.actionJoinStage.setOnClickAndDismissListener {
             StageChannelJoinHelper.connectToStage(requireContext(), parentFragmentManager, channel.id)
         }
 
-        hideNames.visibility = if (channel.type == Channel.GUILD_VOICE) View.VISIBLE else View.GONE
-        hideNames.setText(
+        binding.actionHideNames.visibility = if (channel.type == Channel.GUILD_VOICE) View.VISIBLE else View.GONE
+        binding.actionHideNames.setText(
             if (model.isVoiceCollapsed) R.string.voice_channel_show_names else R.string.voice_channel_hide_names,
         )
-        hideNames.setOnClickAndDismissListener {
+        binding.actionHideNames.setOnClickAndDismissListener {
             StoreStream.getCollapsedVoiceChannels().toggle(channel.id)
         }
 
-        endStage.visibility = if (isStage && model.isStageLive && model.canModerateStage) {
+        binding.actionEndStage.visibility = if (isStage && model.isStageLive && model.canModerateStage) {
             View.VISIBLE
         } else {
             View.GONE
         }
-        endStage.setOnClickAndDismissListener {
+        binding.actionEndStage.setOnClickAndDismissListener {
             WidgetEndStageBottomSheet.show(parentFragmentManager, END_STAGE_REQUEST_KEY, channel.id)
         }
     }
@@ -391,9 +390,9 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
      */
     private fun configureCloseChannel(channel: Channel) {
         val isGroup = channel.isMultiUserDM()
-        closeChannel.visibility = if (channel.isPrivate()) View.VISIBLE else View.GONE
-        closeChannel.setText(if (isGroup) R.string.leave_group_dm else R.string.close_dm)
-        closeChannel.setOnClickAndDismissListener {
+        binding.actionCloseDm.visibility = if (channel.isPrivate()) View.VISIBLE else View.GONE
+        binding.actionCloseDm.setText(if (isGroup) R.string.leave_group_dm else R.string.close_dm)
+        binding.actionCloseDm.setOnClickAndDismissListener {
             if (!isGroup) {
                 closePrivateChannel(channel.id, silent = false)
                 return@setOnClickAndDismissListener

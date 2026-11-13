@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern channel long-press sheet: same ids as widget_channels_list_item_actions (the legacy one), so one view binding serves both. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/colorBackgroundPrimary" android:overScrollMode="never" style="@style/UiKit.ViewGroup.NestedScrollView">
+    <LinearLayout android:paddingBottom="24dp" style="@style/UiKit.ViewGroup.LinearLayout">
+        <View android:layout_gravity="center_horizontal" android:layout_width="36dp" android:layout_height="4dp" android:layout_marginTop="8dp" android:background="@drawable/drawable_app_launcher_handle" android:importantForAccessibility="no"/>
+        <LinearLayout android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp">
+            <com.discord.views.VitoImageView android:id="@+id/channels_list_item_text_actions_icon" android:layout_width="64dp" android:layout_height="64dp" style="@style/Avatar.Large"/>
+            <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="16dp">
+                <TextView android:id="@+id/channels_list_item_text_actions_title" android:textSize="20sp" android:ellipsize="end" android:singleLine="true" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.TextView.H1.Bold"/>
+                <TextView android:id="@+id/channels_list_item_text_actions_subtitle" android:visibility="gone" android:textSize="15sp" android:textColor="?attr/colorHeaderSecondary" android:ellipsize="end" android:singleLine="true" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.TextView"/>
+            </LinearLayout>
+        </LinearLayout>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/dm_action_profile" android:text="@string/profile" app:drawableStartCompat="@drawable/ic_menu_profile" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_open_chat" android:text="@string/open_chat" app:drawableStartCompat="@drawable/ic_menu_chat" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_join_stage" android:text="@string/stage_channel_join_button" app:drawableStartCompat="@drawable/ic_menu_stage" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/text_action_pin_channel" android:text="@string/pin_channel_to_top" app:drawableStartCompat="@drawable/ic_menu_pin" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/text_action_mark_as_read" android:text="@string/mark_as_read" app:drawableStartCompat="@drawable/ic_menu_mark_read" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/text_action_opt_in" android:text="@string/channel_opt_in" app:drawableStartCompat="@drawable/ic_menu_opt_in" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/text_action_mute" app:drawableStartCompat="@drawable/ic_menu_mute" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_channel_notifications" android:text="@string/notification_settings" app:drawableStartCompat="@drawable/ic_menu_notification_settings" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_hide_names" android:text="@string/voice_channel_hide_names" app:drawableStartCompat="@drawable/ic_menu_profile" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/text_action_thread_browser" android:text="@string/threads" app:drawableStartCompat="@drawable/ic_menu_thread" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/action_invite" android:text="@string/instant_invite" app:drawableStartCompat="@drawable/ic_menu_invite" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_copy_link" android:text="@string/copy_link" app:drawableStartCompat="@drawable/ic_menu_link" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_clone_channel" app:drawableStartCompat="@drawable/ic_menu_copy" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/action_rehide_spoiler" android:text="@string/spoiler_channel_clear_agree" android:visibility="gone" app:drawableStartCompat="@drawable/ic_menu_visibility_off" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:id="@+id/developer_divider" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/action_copy_id" android:text="@string/copy_id" app:drawableStartCompat="@drawable/ic_menu_id" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/action_channel_settings" app:drawableStartCompat="@drawable/ic_menu_edit" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <LinearLayout android:id="@+id/plugin_context_menu_items" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/action_end_stage" android:text="@string/end_stage" app:drawableStartCompat="@drawable/ic_close_white_24dp" app:drawableTint="@color/status_red" style="@style/MessageMenu.Row.Danger"/>
+            <TextView android:id="@+id/action_close_dm" app:drawableStartCompat="@drawable/ic_remove_friend_red_24dp" app:drawableTint="@color/status_red" style="@style/MessageMenu.Row.Danger"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

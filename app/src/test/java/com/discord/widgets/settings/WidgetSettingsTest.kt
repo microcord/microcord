@@ -47,6 +47,8 @@ class WidgetSettingsTest {
             com.discord.R.id.accessibility,
             com.discord.R.id.behavior,
             com.discord.R.id.activity_status,
+            com.discord.R.id.backend,
+            com.discord.R.id.proxy,
             com.discord.R.id.feature_flags,
             com.discord.R.id.plugins,
             com.discord.R.id.updates,

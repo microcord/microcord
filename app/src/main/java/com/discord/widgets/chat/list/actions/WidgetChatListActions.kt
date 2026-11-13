@@ -33,7 +33,6 @@ import com.discord.utilities.feature.FeatureFlags
 import androidx.core.view.children
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.databinding.WidgetChatListActionsBinding
@@ -181,20 +180,22 @@ class WidgetChatListActions : AppBottomSheet() {
     }
 
     /**
-     * A tall menu can be dragged all the way up, where the sheet runs under the status bar and
-     * would hide the top of its first row, so the content sits a status bar's height lower (less the
-     * gap it already has).
-     *
-     * Fixed padding, set once. Toggling it as the sheet reaches the top resized the content in the
-     * middle of a drag or fling, which made the menu jump and cut the fling short.
+     * A tall menu can be dragged all the way up, where the sheet would run under the status bar and
+     * hide the top of its first row. Capping the sheet's height stops it at the status bar instead.
+     * Padding the content by the inset did the same but left that gap above the reactions at every
+     * other height too; toggling the padding at the top made the menu jump mid-fling.
      */
     private fun reserveStatusBar(container: View) = container.doOnAttach {
         // Posted: the window's insets are not dispatched yet at the moment of attaching.
         it.post {
+            val sheet = it.rootView.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                ?: return@post
+            val parent = sheet.parent as? View ?: return@post
             val inset = ViewCompat.getRootWindowInsets(it)
                 ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-            val gap = (STATUS_BAR_GAP_DP * resources.displayMetrics.density).toInt()
-            it.updatePadding(top = (inset - gap).coerceAtLeast(0))
+            val parentTop = IntArray(2).also(parent::getLocationOnScreen)[1]
+            val overlap = inset - parentTop
+            if (overlap > 0) BottomSheetBehavior.from(sheet).maxHeight = parent.height - overlap
         }
     }
 
@@ -612,7 +613,6 @@ class WidgetChatListActions : AppBottomSheet() {
 
         /** Messages whose sheet is being prepared, so a double long-press opens one sheet, not two. */
         private val opening = HashSet<Pair<Long, Long>>()
-        private const val STATUS_BAR_GAP_DP = 8
         private const val CLOSE_PULL_FRACTION = 0.2f
 
         /** The model the next sheet to open starts from; consumed once, by the matching message. */
