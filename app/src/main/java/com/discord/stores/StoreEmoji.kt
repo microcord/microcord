@@ -33,7 +33,7 @@ import rx.Observable
  * moment. Miss it and named/unicode emoji render as literal text everywhere.
  *
  * Not a [StoreV2]: it owns no dispatcher-mutated state. The unicode half is immutable once
- * [initBlocking] has read it off disk, and the custom half is derived on demand from
+ * [startPreload] has read it off disk, and the custom half is derived on demand from
  * [StoreEmojiCustom], so there is nothing to snapshot.
  */
 class StoreEmoji(
@@ -55,10 +55,29 @@ class StoreEmoji(
 
     private val fallbackFrecency = ExpressionFrecencyTracker()
 
-    private var unicodeEmojisByCategory: Map<EmojiCategory, List<Emoji>> = emptyMap()
-    private var namesMap: Map<String, ModelEmojiUnicode> = emptyMap()
-    private var surrogateMap: Map<String, ModelEmojiUnicode> = emptyMap()
-    private var surrogatesPattern: Pattern = NEVER_MATCHES
+    /** The unicode catalog, published whole once [startPreload]'s read finishes. */
+    private class Catalog(
+        val byCategory: Map<EmojiCategory, List<Emoji>> = emptyMap(),
+        val names: Map<String, ModelEmojiUnicode> = emptyMap(),
+        val surrogates: Map<String, ModelEmojiUnicode> = emptyMap(),
+        val pattern: Pattern = NEVER_MATCHES,
+    )
+
+    @Volatile private var loadedCatalog = Catalog()
+
+    /** Waits for the preload on first use, so nothing ever reads a partial or missing catalog. */
+    private val catalog: Catalog
+        get() {
+            preload?.let { task ->
+                try {
+                    task.get()
+                } catch (e: ExecutionException) {
+                    throw e.cause ?: e
+                }
+                preload = null
+            }
+            return loadedCatalog
+        }
 
     /**
      * Where the picker is being opened from. This decides two things at once: which guild's emoji
@@ -79,39 +98,23 @@ class StoreEmoji(
 
     // region Rules.EmojiDataProvider
 
-    override val unicodeEmojisNamesMap: Map<String, ModelEmojiUnicode> get() = namesMap
-    override val unicodeEmojiSurrogateMap: Map<String, ModelEmojiUnicode> get() = surrogateMap
-    override val unicodeEmojisPattern: Pattern get() = surrogatesPattern
+    override val unicodeEmojisNamesMap: Map<String, ModelEmojiUnicode> get() = catalog.names
+    override val unicodeEmojiSurrogateMap: Map<String, ModelEmojiUnicode> get() = catalog.surrogates
+    override val unicodeEmojisPattern: Pattern get() = catalog.pattern
 
     // endregion
 
-    private var preload: FutureTask<Unit>? = null
+    @Volatile private var preload: FutureTask<Unit>? = null
 
     /**
-     * Starts reading and indexing the catalog on a background thread so it overlaps the rest of
-     * store-graph startup. [initBlocking] still waits for it, so nothing observes a partial catalog.
+     * Starts reading and indexing the catalog on a background thread. The first read of it waits
+     * for the read to finish (as the reference's blocking load did, so emoji never silently fail to
+     * render), but startup no longer stops for it: the first chat parse is long after it is done.
      */
     fun startPreload(context: Context) {
         val task = FutureTask(Callable { handleLoadedUnicodeEmojis(loadUnicodeEmojisFromDisk(context)) })
         preload = task
         thread(isDaemon = true, name = "StoreEmojiPreload") { task.run() }
-    }
-
-    /**
-     * Reads `assets/data/emojis.json`, or waits for [startPreload] to finish doing so.
-     *
-     * Blocking is deliberate and matches the reference: message parsing cannot start until the
-     * catalog exists, so returning before it is loaded would only create a window in which emoji
-     * silently fail to render. `Future.get` publishes the preload thread's writes to this thread.
-     */
-    fun initBlocking(context: Context) {
-        val task = preload ?: return handleLoadedUnicodeEmojis(loadUnicodeEmojisFromDisk(context))
-        preload = null
-        try {
-            task.get()
-        } catch (e: ExecutionException) {
-            throw e.cause ?: e
-        }
     }
 
     /** Resolves a custom-status/reaction emoji id without knowing which guild owns it. */
@@ -247,23 +250,24 @@ class StoreEmoji(
             }
         }
         var unicodeEmojiCount = 0
-        for (categoryEmojis in unicodeEmojisByCategory.values) unicodeEmojiCount += categoryEmojis.size
+        val catalog = this.catalog
+        for (categoryEmojis in catalog.byCategory.values) unicodeEmojiCount += categoryEmojis.size
 
         // Sized up front because the picker rebuilds this on every keystroke of its search box.
         val emojiNameCounts: MutableMap<String, Int> =
-            ShallowPartitionMap.create<String, Int>(usableCustomEmojiCount + namesMap.size)
+            ShallowPartitionMap.create<String, Int>(usableCustomEmojiCount + catalog.names.size)
         val usableCustomEmojis = LinkedHashMap<Long, List<Emoji>>(sortedGuildIds.size + unsortedGuildIds.size)
         val emojiIdsMap: MutableMap<String, Emoji> =
             ShallowPartitionMap.create<String, Emoji>(usableCustomEmojiCount + unicodeEmojiCount)
 
         if (emojiContext !is EmojiContext.GuildProfile) {
-            for (categoryEmojis in unicodeEmojisByCategory.values) {
+            for (categoryEmojis in catalog.byCategory.values) {
                 for (emoji in categoryEmojis) emojiIdsMap[emoji.getUniqueId()] = emoji
             }
         }
         // Seed the name counter with every unicode name, so a guild upload called "smile" is
         // disambiguated to "smile-1" instead of shadowing the unicode emoji in autocomplete.
-        for (name in namesMap.keys) emojiNameCounts.increment(name)
+        for (name in catalog.names.keys) emojiNameCounts.increment(name)
 
         val processGuildEmojis: (Long) -> Unit = processGuildEmojis@{ guildId ->
             val emojis = allCustomEmojis[guildId]
@@ -311,7 +315,7 @@ class StoreEmoji(
         val favoriteEmoji = favoriteEmojiIds.mapNotNull(emojiIdsMap::get).toSet()
 
         return EmojiSet(
-            unicodeEmojis = unicodeEmojisByCategory,
+            unicodeEmojis = catalog.byCategory,
             customEmojis = usableCustomEmojis,
             emojiIndex = emojiIdsMap,
             recentEmojis = getFrequentlyUsedEmojis(emojiIdsMap, frequentEmojiIds, forReaction),
@@ -333,7 +337,7 @@ class StoreEmoji(
             .take(MAX_FREQUENTLY_USED_EMOJIS)
         if (tracked.size >= MAX_FREQUENTLY_USED_EMOJIS) return tracked
         val defaultNames = if (forReaction) DEFAULT_REACTION_EMOJIS else DEFAULT_FREQUENT_EMOJIS
-        val defaults = defaultNames.mapNotNull(namesMap::get)
+        val defaults = defaultNames.mapNotNull(catalog.names::get)
         return (tracked + defaults.take(MAX_FREQUENTLY_USED_EMOJIS - tracked.size)).distinct()
     }
 
@@ -365,17 +369,14 @@ class StoreEmoji(
             }
         }
 
-        unicodeEmojisByCategory = byCategory
-        namesMap = names
-        surrogateMap = surrogates
-        surrogatesPattern = compileSurrogatesPattern()
+        loadedCatalog = Catalog(byCategory, names, surrogates, compileSurrogatesPattern(surrogates))
     }
 
     /**
      * One alternation over every known surrogate sequence, **longest first** — otherwise a
      * skin-toned emoji would match its base form and leave the modifier behind as stray text.
      */
-    private fun compileSurrogatesPattern(): Pattern {
+    private fun compileSurrogatesPattern(surrogateMap: Map<String, ModelEmojiUnicode>): Pattern {
         // An empty alternation compiles to a pattern that matches the empty string everywhere,
         // which would make every message look like it started with an emoji. The reference never
         // loads an empty catalog and so never hits this; failing closed is the safe reading.

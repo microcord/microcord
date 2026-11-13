@@ -386,6 +386,18 @@
         <meta-data
             android:name="com.google.android.actions"
             android:resource="@xml/actions" />
+        <!-- WorkManager starts from App's deferred startup block instead (App implements
+             Configuration.Provider), keeping its setup off the path to the first chat frame. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 
 </manifest>

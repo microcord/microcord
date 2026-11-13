@@ -32,11 +32,15 @@ import com.discord.utilities.time.ClockFactory
 import com.discord.rtcconnection.mediaengine.KrispAssetPack
 import com.discord.plugins.PluginRuntime
 import com.discord.utilities.voice.VoiceEngineServiceController
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import com.google.firebase.FirebaseApp
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 
-class App : Application() {
+class App : Application(), Configuration.Provider {
+    override val workManagerConfiguration: Configuration get() = Configuration.Builder().build()
+
     override fun onCreate() {
         super.onCreate()
         if (currentProcessName() == "$packageName:settings_restore") return
@@ -108,7 +112,11 @@ class App : Application() {
         GuildsListStoreHooks.install()
         GooglePlayBillingManager.init(this)
         Handler(Looper.getMainLooper()).postDelayed(
-            { VoiceEngineServiceController.INSTANCE.init(this) },
+            {
+                VoiceEngineServiceController.INSTANCE.init(this)
+                // Initializes WorkManager, which also reschedules work a force-stop cancelled.
+                WorkManager.getInstance(this)
+            },
             STARTUP_DEFER_MS,
         )
     }

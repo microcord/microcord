@@ -4,7 +4,10 @@ import android.content.Context
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.util.AttributeSet
+import android.view.View
 import androidx.appcompat.widget.AppCompatTextView
+import com.discord.utilities.views.CachedIdsBarrier
+import com.discord.utilities.views.CachedIdsGroup
 import com.discord.widgets.settings.SettingsStrings
 import com.google.android.material.theme.MaterialComponentsViewInflater
 
@@ -36,6 +39,13 @@ class DiscordViewInflater : MaterialComponentsViewInflater() {
             text = rendered
             if (rendered.hasLinks()) movementMethod = LinkMovementMethod.getInstance()
         }
+
+    /** Name-listed ConstraintLayout helpers resolve their ids once; see [CachedIdsBarrier]. */
+    override fun createView(context: Context, name: String, attrs: AttributeSet): View? = when (name) {
+        "androidx.constraintlayout.widget.Barrier" -> CachedIdsBarrier(context, attrs)
+        "androidx.constraintlayout.widget.Group" -> CachedIdsGroup(context, attrs)
+        else -> super.createView(context, name, attrs)
+    }
 
     private companion object {
         fun hasMarkup(text: CharSequence) = text.contains("**") || text.contains("](")

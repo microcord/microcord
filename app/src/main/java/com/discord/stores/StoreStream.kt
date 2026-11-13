@@ -1306,7 +1306,7 @@ class StoreStream private constructor(
 
     private fun init(context: Context) {
         applicationContext = context.applicationContext
-        // Overlaps the catalog read with the work below; `emoji.initBlocking` still waits for it.
+        // Read in the background; the first emoji lookup waits for it (long after startup).
         emoji.startPreload(context)
         val api = createRestApi(context)
         val networkMonitor = NetworkMonitor(context)
@@ -1494,7 +1494,6 @@ class StoreStream private constructor(
         notices.init(context)
         nux.init(context)
         changeLog.init(context.applicationContext as Application)
-        emoji.initBlocking(context)
         mediaFavorites.installEmojiResolvers(
             fromServer = { key -> emoji.unicodeEmojisNamesMap[key]?.getUniqueId() ?: key },
             toServer = { key ->
