@@ -286,8 +286,8 @@ class WidgetChannelsListAdapter(
             if (typing) start() else stop()
         }
 
-        protected fun View.setChannelBackground(selected: Boolean, channel: Channel) {
-            val attribute = if (selected && !channel.isGuildVocalChannel()) {
+        protected fun View.setChannelBackground(selected: Boolean) {
+            val attribute = if (selected) {
                 R.attr.drawable_overlay_channels_selected
             } else {
                 R.attr.drawable_overlay_channels
@@ -436,7 +436,7 @@ class WidgetChannelsListAdapter(
             boundItem = item
             val isAnnouncement = item.channel.type == Channel.GUILD_ANNOUNCEMENT
 
-            root.setChannelBackground(item.selected, item.channel)
+            root.setChannelBackground(item.selected)
             root.contentDescription = contentDescription(item, isAnnouncement)
 
             name.text = item.channel.getDisplayName()
@@ -606,7 +606,7 @@ class WidgetChannelsListAdapter(
             boundItem = item
 
             // The background sits on the inner content view so the spine gutter stays untinted.
-            content.setChannelBackground(item.selected, item.channel)
+            content.setChannelBackground(item.selected)
             content.contentDescription = contentDescription(item)
 
             name.text = item.channel.name
@@ -747,7 +747,8 @@ class WidgetChannelsListAdapter(
 
             val selected = item.voiceSelected || item.textSelected
             root.isSelected = selected
-            root.setChannelBackground(selected, item.channel)
+            // Only an open text chat earns the selected fill; being connected recolours the text.
+            root.setChannelBackground(item.textSelected)
 
             name.text = item.channel.getDisplayName()
             var iconColor = voiceChannelColor(selected)
@@ -956,7 +957,8 @@ class WidgetChannelsListAdapter(
             val canConnect = PermissionUtils.can(Permission.CONNECT, item.permission)
 
             root.isSelected = item.selected
-            root.setChannelBackground(item.selected, item.channel)
+            // Stage channels have no text chat, so being connected never fills the row.
+            root.setChannelBackground(false)
 
             val color = ThemedColor.resolve(
                 root.context,
@@ -1253,7 +1255,7 @@ class WidgetChannelsListAdapter(
             pin.visibility = if (item.pinned) View.VISIBLE else View.GONE
 
             root.isSelected = item.selected
-            root.setChannelBackground(item.selected, channel)
+            root.setChannelBackground(item.selected)
         }
 
         /** The reference appends its hints to the label, pinned ahead of anything else. */
