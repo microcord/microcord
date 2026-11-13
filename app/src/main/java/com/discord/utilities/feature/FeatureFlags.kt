@@ -27,6 +27,8 @@ object FeatureFlags {
     fun setWhoReactedEnabled(enabled: Boolean) = setEnabled(ClientSettings.whoReacted, enabled)
     fun hideSuggestedChannelsEnabled() = enabled(ClientSettings.hideSuggestedChannels)
     fun setHideSuggestedChannelsEnabled(enabled: Boolean) = setEnabled(ClientSettings.hideSuggestedChannels, enabled)
+    fun hideBlockedMessagesEnabled() = enabled(ClientSettings.hideBlockedMessages)
+    fun setHideBlockedMessagesEnabled(enabled: Boolean) = setEnabled(ClientSettings.hideBlockedMessages, enabled)
     fun chatHeaderStatusIndicatorsEnabled() = enabled(ClientSettings.chatHeaderStatusIndicators)
     fun setChatHeaderStatusIndicatorsEnabled(enabled: Boolean) = setEnabled(ClientSettings.chatHeaderStatusIndicators, enabled)
     fun moreGifProvidersEnabled() = enabled(ClientSettings.moreGifProviders)

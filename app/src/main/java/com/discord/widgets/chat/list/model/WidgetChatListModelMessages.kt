@@ -222,27 +222,32 @@ data class WidgetChatListModelMessages(
             var groupStart: Message? = null
             var groupStartBlocked = false
             var separatorAdded = false
+            val hideBlocked = FeatureFlags.hideBlockedMessagesEnabled()
 
             metadata.messages.forEachIndexed { index, message ->
-                val timestamp = message.timestamp?.dateTimeMillis ?: 0L
-                if (willAddTimestamp(timestamp, nextDayTimestamp)) {
-                    blockedCount =
-                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored)
-                }
-                nextDayTimestamp = tryAddTimestamp(items, message.id, timestamp, nextDayTimestamp)
-                val isMostRecent = index == metadata.messages.lastIndex
                 val blockedAuthor = if (message.type == 21) {
                     getThreadStarterMessageAndChannel(parentChannel, channel, message, metadata).first.author?.id
                 } else message.author?.id
                 // Blocking wins over ignoring, matching the reference: a blocked author is never
                 // reported as ignored, so the two runs can never overlap.
                 val authorBlocked = blockedAuthor != null && blockedAuthor in blockedAuthorIds
+                val timestamp = message.timestamp?.dateTimeMillis ?: 0L
+                // A hidden blocked message must not open a day either, or a day of only blocked
+                // messages leaves a bare date divider behind.
+                if (!(hideBlocked && authorBlocked)) {
+                    if (willAddTimestamp(timestamp, nextDayTimestamp)) {
+                        blockedCount =
+                            addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored, hideBlocked)
+                    }
+                    nextDayTimestamp = tryAddTimestamp(items, message.id, timestamp, nextDayTimestamp)
+                }
+                val isMostRecent = index == metadata.messages.lastIndex
                 val authorIgnored = !authorBlocked && blockedAuthor != null && blockedAuthor in ignoredAuthorIds
                 val isBlocked = authorBlocked || authorIgnored
                 // A run only ever holds one kind, so a change of kind closes the previous run.
                 if (isBlocked && blockedCount > 0 && authorIgnored != blockedRunIsIgnored) {
                     blockedCount =
-                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored)
+                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored, hideBlocked)
                 }
                 if (isBlocked) {
                     blockedCount++
@@ -253,9 +258,10 @@ data class WidgetChatListModelMessages(
                     }
                 }
                 if (!isBlocked || isMostRecent) {
-                    val collapsedRowAdded = blockedCount > 0 && !blockedChunkExpanded
+                    val collapsedRowAdded = blockedCount > 0 && !blockedChunkExpanded &&
+                        !(hideBlocked && !blockedRunIsIgnored)
                     blockedCount =
-                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored)
+                        addBlockedMessage(items, blockedMessage, blockedCount, blockedChunkExpanded, blockedRunIsIgnored, hideBlocked)
                     // A collapsed run renders as its own row, so the messages either side of it are
                     // no longer adjacent and must not be grouped together.
                     if (collapsedRowAdded) groupStart = null
@@ -524,8 +530,10 @@ data class WidgetChatListModelMessages(
             count: Int,
             expanded: Boolean,
             isIgnored: Boolean,
+            hideBlocked: Boolean,
         ): Int {
-            if (count > 0) items.addItem(BlockedMessagesEntry(requireNotNull(message), count, expanded, isIgnored))
+            // The "hide blocked messages" flag drops a blocked run without a trace; ignored runs stay.
+            if (count > 0 && !(hideBlocked && !isIgnored)) items.addItem(BlockedMessagesEntry(requireNotNull(message), count, expanded, isIgnored))
             return 0
         }
 

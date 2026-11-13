@@ -20,6 +20,7 @@ import com.discord.stores.StoreMessageReplies
 import com.discord.stores.StoreStream
 import com.discord.stores.storeTestScheduler
 import com.discord.utilities.feature.ClientPreferenceSnapshotTest.MemoryPreferences
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.widgets.chat.list.entries.BlockedMessagesEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
@@ -103,6 +104,23 @@ class WidgetChatListModelMessagesTest {
         )
         assertEquals(3, expanded.items.filterIsInstance<MessageEntry>().size)
         assertTrue(expanded.items.filterIsInstance<MessageEntry>().all { it.isInExpandedBlockedMessageChunk() })
+    }
+
+    @Test fun theHideBlockedFlagDropsTheBlockedRowButKeepsIgnoredOnes() {
+        FeatureFlags.setHideBlockedMessagesEnabled(true)
+        val metadata = metadata((1L..3L).map { message(it, it * 1_000) })
+
+        val blocked = WidgetChatListModelMessages.build(
+            channel(), metadata, blockedAuthorIds = setOf(7L),
+            inviteResolver = InviteEmbedResolver.UNRESOLVED,
+        )
+        assertTrue(blocked.items.none { it is BlockedMessagesEntry || it is MessageEntry || it is TimestampEntry })
+
+        val ignored = WidgetChatListModelMessages.build(
+            channel(), metadata, ignoredAuthorIds = setOf(7L),
+            inviteResolver = InviteEmbedResolver.UNRESOLVED,
+        )
+        assertEquals(3, ignored.items.filterIsInstance<BlockedMessagesEntry>().single().blockedCount)
     }
 
     @Test fun appliesReferenceConcatUnreadAndTimestampRules() {
