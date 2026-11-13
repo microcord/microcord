@@ -243,8 +243,6 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.privacy to ::WidgetSettingsPrivacy,
             R.id.authorized_apps to ::WidgetSettingsAuthorizedApps,
             R.id.sessions to ::WidgetSettingsSessions,
-            // Voice persists every setting `StoreMediaSettings` backs; the OpenSL ES section and the
-            // microphone test are hidden inside it because `StoreStream` publishes no media engine yet.
             R.id.voice to ::WidgetSettingsVoice,
             R.id.notifications to ::WidgetSettingsNotifications,
             R.id.text_images_settings to ::WidgetSettingsMedia,
@@ -253,6 +251,7 @@ class WidgetSettings : AppFragment(R.layout.widget_settings) {
             R.id.behavior to ::WidgetSettingsBehavior,
             R.id.language to ::WidgetSettingsLanguage,
             R.id.activity_status to ::WidgetSettingsActivityStatus,
+            R.id.proxy to ::WidgetSettingsProxy,
             R.id.feature_flags to ::WidgetSettingsFeatureFlags,
             R.id.plugins to ::WidgetSettingsPlugins,
             R.id.developer_options to ::WidgetSettingsDeveloper,

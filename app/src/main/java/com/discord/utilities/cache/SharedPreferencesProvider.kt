@@ -75,6 +75,10 @@ object SharedPreferencesProvider {
         "CACHE_KEY_SYNC_TEXT_AND_IMAGES",
         "CACHE_KEY_HIDE_VOICE_PARTICIPANTS",
         "screenshot_detection_enabled",
+        // Wiping the proxy on a switch would send the next connections out directly.
+        "client_proxy_type",
+        "client_proxy_host",
+        "client_proxy_port",
     )
 
     @VisibleForTesting

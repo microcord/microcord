@@ -93,6 +93,10 @@ object ClientSettings {
     val whoReacted = register(BooleanSetting("feature_who_reacted"))
     val hideSuggestedChannels = register(BooleanSetting("feature_hide_suggested_channels"))
     val hideBlockedMessages = register(BooleanSetting("feature_hide_blocked_messages"))
+    // Backed up with the account, so each account's restore brings its own proxy.
+    val proxyType = register(StringSetting("client_proxy_type"))
+    val proxyHost = register(StringSetting("client_proxy_host"))
+    val proxyPort = register(IntSetting("client_proxy_port", 0))
     val readableRoleColors = register(BooleanSetting("feature_readable_role_colors"))
     /** Off by default: the modern message menu is the default and this brings the old one back. */
     val legacyMessageMenu = register(BooleanSetting("feature_legacy_message_menu"))

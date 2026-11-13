@@ -155,6 +155,7 @@ import com.discord.utilities.attachments.toUploadAttachment
 import com.discord.api.message.MessageReference
 import com.discord.utilities.rest.MessageUploadPayloadBuilder
 import com.discord.utilities.rest.AckToken
+import com.discord.utilities.rest.ClientProxy
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rest.contextPropertiesOf
 import com.discord.widgets.guild_role_subscriptions.GuildRoleSubscriptionsFeatureFlag
@@ -3273,7 +3274,10 @@ class StoreStream private constructor(
                 }
             } else {
                 Persister.reset()
+                // The login screen still needs the proxy, so signing out keeps it.
+                val proxy = ClientProxy.current()
                 preferences.edit().clear().apply()
+                ClientProxy.save(proxy)
             }
         }
     }

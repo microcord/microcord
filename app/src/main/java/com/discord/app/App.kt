@@ -59,6 +59,8 @@ class App : Application(), Configuration.Provider {
             AppLog.e(tag, "unhandled REST failure", throwable, metadata)
         }
         SharedPreferencesProvider.init(this)
+        // Before anything builds a network client; OkHttp captures the selector at build time.
+        com.discord.utilities.rest.ClientProxy.install()
         ApplicationProvider.init(this)
         KrispAssetPack.install(this)
         ActivityProvider.init(this)

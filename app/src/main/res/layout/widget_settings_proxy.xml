@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingBottom="@dimen/list_bottom_padding" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:text="@string/proxy_type" style="@style/UiKit.Settings.Item.Header"/>
+            <com.discord.views.CheckedSetting android:id="@+id/settings_proxy_off" app:cs_text="@string/proxy_off" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/settings_proxy_http" app:cs_text="@string/proxy_http" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/settings_proxy_socks" app:cs_text="@string/proxy_socks" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <LinearLayout android:id="@+id/settings_proxy_address" android:paddingLeft="16dp" android:paddingTop="8dp" android:paddingRight="16dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_proxy_host" android:hint="@string/proxy_host" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="textUri" android:imeOptions="actionNext" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/settings_proxy_port" android:layout_marginTop="8dp" android:hint="@string/proxy_port" style="@style/UiKit.TextInputLayout.Primary">
+                    <com.google.android.material.textfield.TextInputEditText android:inputType="number" android:maxLength="5" android:imeOptions="actionDone" style="@style/UiKit.TextInputLayout.EditText.SingleLine"/>
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+            <TextView android:textColor="?attr/colorHeaderSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" android:text="@string/proxy_description" style="@style/UiKit.TextView"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/settings_proxy_save" android:contentDescription="@string/save" style="@style/Settings.FloatingActionButton.Save"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
