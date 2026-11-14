@@ -86,16 +86,21 @@ class ForumPostModelsTest {
 
     @Test
     fun readStateProjectionKeepsNeverSeenSeparateFromUnread() {
-        val first = channel(1)
-        val second = channel(2)
+        val posts = listOf(channel(1), channel(2), channel(3)).associateBy { it.id }
         val states = ForumPostReadStateManager.create(
-            mapOf(first.id to first, second.id to second),
-            persistedChannelIds = setOf(first.id),
-            unreadChannelIds = setOf(first.id, second.id),
+            posts,
+            persistedChannelIds = setOf(1L),
+            unreadChannelIds = setOf(1L, 2L, 3L),
+            forumAckMessageId = 2,
         )
 
         assertEquals(ForumPostReadState(1, hasSeenBefore = true, hasUnread = true), states[1])
-        assertEquals(ForumPostReadState(2, hasSeenBefore = false, hasUnread = true), states[2])
+        // Never opened, but created before the last visit to the forum: not new.
+        assertEquals(ForumPostReadState(2, hasSeenBefore = true, hasUnread = true), states[2])
+        assertEquals(ForumPostReadState(3, hasSeenBefore = false, hasUnread = true), states[3])
+        // Without an earlier forum ack nothing is new.
+        val noAck = ForumPostReadStateManager.create(posts, emptySet(), emptySet(), forumAckMessageId = null)
+        assertEquals(true, noAck.values.all { it.hasSeenBefore })
     }
 
     /** Unknown ids are dropped, applied order is kept, and anything past the cap becomes overflow. */

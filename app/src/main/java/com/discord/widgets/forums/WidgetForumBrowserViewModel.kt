@@ -38,6 +38,7 @@ class WidgetForumBrowserViewModel(
     init {
         storeStateObservable.distinctUntilChanged().computationLatest().ui(this)
             .appSubscribe(javaClass, onNext = ::handleStoreState)
+        ForumPostReadStateManager.initialize()
     }
 
     fun observeEvents(): Observable<Event> = events
