@@ -67,6 +67,24 @@ class SavedMessagesTransportTest {
     }
 
     @Test
+    fun saveUsesDefaultMetadataAndAnEmptyBody() {
+        server.enqueue(MockResponse().setBody(SAVED_MESSAGE))
+        RestAPI.install(RestAPIBuilder(server.url("/api/").toString(), EmptyCookieJar), emptyList())
+
+        val saved = RestAPI.api.saveMessage(10, 20).toBlocking().single()
+        assertEquals(20L, saved.saveData.messageId)
+
+        val request = checkNotNull(server.takeRequest(5, TimeUnit.SECONDS))
+        assertEquals(AnalyticSuperProperties.USER_AGENT, request.getHeader("User-Agent"))
+        assertEquals(AnalyticSuperProperties.superPropertiesStringBase64, request.getHeader("X-Super-Properties"))
+        assertEquals(TimeZone.getDefault().id, request.getHeader("X-Discord-Timezone"))
+        assertEquals("PUT", request.method)
+        assertEquals("/api/v9/users/@me/saved-messages/10/20", request.path)
+        // No due_at: a bookmark, not a reminder.
+        assertEquals("{}", request.body.readUtf8())
+    }
+
+    @Test
     fun gatewayCreateUsesSavedMessageEnvelopeAndDeleteUsesTypedIds() {
         val parser = IncomingParser(gson)
         val created = parser.parse("{\"op\":0,\"t\":\"SAVED_MESSAGE_CREATE\",\"s\":1,\"d\":$SAVED_MESSAGE}").data

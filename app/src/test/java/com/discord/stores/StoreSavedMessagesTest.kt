@@ -53,6 +53,22 @@ class StoreSavedMessagesTest {
     }
 
     @Test
+    fun savingShowsTheBookmarkWithoutWaitingForTheGateway() {
+        val f = Fixture()
+        f.loaded()
+
+        val saving = TestSubscriber<SavedMessage>()
+        f.store.save(10, 1).subscribe(saving)
+        assertFalse(f.store.isBookmarked(10, 1))
+        f.saves.single().onNext(saved(1))
+        f.saves.single().onCompleted()
+        f.scheduler.triggerActions()
+
+        saving.assertCompleted()
+        assertTrue(f.store.isBookmarked(10, 1))
+    }
+
+    @Test
     fun failedRemovalRetainsEntries() {
         val f = Fixture()
         f.loaded(saved(1))
@@ -389,6 +405,7 @@ class StoreSavedMessagesTest {
         private val deck = ObservationDeck()
         val fetches = mutableListOf<PublishSubject<SavedMessagesResponse>>()
         val removals = mutableListOf<PublishSubject<Void>>()
+        val saves = mutableListOf<PublishSubject<SavedMessage>>()
         private val api = Proxy.newProxyInstance(
             RestAPIInterface::class.java.classLoader,
             arrayOf(RestAPIInterface::class.java),
@@ -396,6 +413,7 @@ class StoreSavedMessagesTest {
             when (method.name) {
                 "getSavedMessages" -> PublishSubject.create<SavedMessagesResponse>().also(fetches::add)
                 "deleteSavedMessage" -> PublishSubject.create<Void>().also(removals::add)
+                "saveMessage" -> PublishSubject.create<SavedMessage>().also(saves::add)
                 else -> error("Unexpected REST call: ${method.name}")
             }
         } as RestAPIInterface

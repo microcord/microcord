@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="bookmark_actions_title">Bookmarks</string>
+    <string name="bookmark_action_add">Bookmark</string>
+    <string name="bookmark_action_added">Message bookmarked.</string>
     <string name="bookmark_action_remove">Remove Bookmark</string>
     <string name="bookmark_action_removed">Bookmark removed.</string>
     <string name="bookmarks_empty_title">Womp womp, you have no bookmarks.</string>

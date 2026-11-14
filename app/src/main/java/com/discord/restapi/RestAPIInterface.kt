@@ -66,6 +66,7 @@ import com.discord.api.hubs.EmailVerification
 import com.discord.api.hubs.EmailVerificationCode
 import com.discord.api.hubs.WaitlistSignup
 import com.discord.api.message.Message
+import com.discord.api.savedmessage.SavedMessage
 import com.discord.api.savedmessage.SavedMessagesResponse
 import com.discord.api.message.PollVoters
 import com.discord.api.notification.DeviceSyncResponse
@@ -982,6 +983,14 @@ interface RestAPIInterface {
 
     @GET("users/@me/saved-messages")
     fun getSavedMessages(): Observable<SavedMessagesResponse>
+
+    /** Bookmarks a message; a `due_at` would make it a reminder instead. Capped at 200 bookmarks. */
+    @PUT("users/@me/saved-messages/{channelId}/{messageId}")
+    fun saveMessage(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
+        @Body body: RestAPIParams.EmptyBody = RestAPIParams.EmptyBody(),
+    ): Observable<SavedMessage>
 
     @DELETE("users/@me/saved-messages/{channelId}/{messageId}")
     fun deleteSavedMessage(

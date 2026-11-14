@@ -70,6 +70,24 @@ class StoreSavedMessages(
         dispatcher.schedule { if (isCurrent(expectedGeneration)) fetchInternal() }
     }
 
+    /** Bookmarks a message. The gateway echoes it too; applying the response just shows it sooner. */
+    fun save(channelId: Long, messageId: Long): Observable<SavedMessage> {
+        require(channelId > 0 && messageId > 0)
+        val expectedGeneration = generation
+        return Observable.defer {
+            if (!isCurrent(expectedGeneration)) throw CancellationException("Saved-message account changed")
+            val api = checkNotNull(restApi()) { "REST API is not initialized" }
+            api.saveMessage(channelId, messageId)
+                .filter { isCurrent(expectedGeneration) }
+                .onErrorResumeNext { failure: Throwable ->
+                    if (isCurrent(expectedGeneration)) Observable.error(failure) else Observable.empty()
+                }
+                .doOnNext { saved ->
+                    dispatcher.schedule { if (isCurrent(expectedGeneration)) handleSavedMessageCreate(saved) }
+                }
+        }
+    }
+
     fun remove(channelId: Long, messageId: Long): Observable<Void> {
         require(channelId > 0 && messageId > 0)
         val expectedGeneration = generation

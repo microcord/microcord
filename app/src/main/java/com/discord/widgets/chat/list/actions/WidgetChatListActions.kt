@@ -292,6 +292,14 @@ class WidgetChatListActions : AppBottomSheet() {
             )
             dismiss()
         }
+        val bookmarked = StoreStream.getSavedMessages().isBookmarked(message.channelId, message.id)
+        bind(binding.dialogChatActionsBookmark, !isLocal) { toggleBookmark(message, bookmarked) }
+        binding.dialogChatActionsBookmark.apply {
+            setText(if (bookmarked) R.string.bookmark_action_remove else R.string.bookmark_action_add)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                if (bookmarked) R.drawable.ic_bookmark_filled_24dp else R.drawable.ic_bookmark_24dp, 0, 0, 0,
+            )
+        }
         bind(binding.dialogChatActionsCopyId, model.isDeveloper && !isLocal) {
             copy(message.id.toString(), R.string.copy_id)
             dismiss()
@@ -471,6 +479,30 @@ class WidgetChatListActions : AppBottomSheet() {
                     .appSubscribe(WidgetChatListActions::class.java, view.context) { dismiss() }
             }),
         )
+    }
+
+    /** Waits for the server so a refusal, such as the 200-bookmark cap, is shown instead of lost. */
+    private fun toggleBookmark(message: Message, bookmarked: Boolean) {
+        binding.dialogChatActionsBookmark.isEnabled = false
+        val store = StoreStream.getSavedMessages()
+        val request = if (bookmarked) {
+            store.remove(message.channelId, message.id).toCompletable().andThen(Observable.just(Unit))
+        } else {
+            store.save(message.channelId, message.id).map { }
+        }
+        request.restSubscribeOn(retry = false).ui(this)
+            .appSubscribe(
+                WidgetChatListActions::class.java,
+                context = requireContext(),
+                onTerminated = { _binding?.dialogChatActionsBookmark?.isEnabled = true },
+                onNext = {
+                    AppToast.show(
+                        requireContext(),
+                        if (bookmarked) R.string.bookmark_action_removed else R.string.bookmark_action_added,
+                    )
+                    dismiss()
+                },
+            )
     }
 
     private fun forward(message: Message) {
