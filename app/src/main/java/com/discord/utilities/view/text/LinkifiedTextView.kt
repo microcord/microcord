@@ -29,8 +29,10 @@ class LinkifiedTextView @JvmOverloads constructor(
     override fun setText(text: CharSequence?, type: BufferType?) {
         // Setting a movement method on the immutable text below makes TextView set that same text
         // again; letting it through detaches the drawee spans and leaves custom emoji as blank gaps.
-        // Links go through the touch listener, so nothing is lost by skipping it.
-        if (text != null && text === getText()) return
+        // Links go through the touch listener, so nothing is lost by skipping it. Empty text is
+        // let through: the TextView constructor sets the same interned "" it starts with, and
+        // before Android 9 skipping that leaves its transformed text null and measuring crashes.
+        if (!text.isNullOrEmpty() && text === getText()) return
         // A Spannable makes TextView lay text out with DynamicLayout, which on bind costs ~20 ms
         // for a long message. Links are found by the touch listener and spoilers flip state on the
         // span objects themselves, so an immutable copy holding the same spans behaves identically
