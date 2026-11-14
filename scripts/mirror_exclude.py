@@ -37,8 +37,8 @@ FIXED = [
     ("Compiled Discord drawables used as test fixtures", [
         "app/src/test/resources/fixtures/theme/",
     ]),
-    ("This repository's own CI and mirror setup; GHES workflows cannot run on github.com", [
-        ".github/",
+    ("This repository's own CI and mirror setup, except the build workflow github.com runs; GHES workflows cannot run there", [
+        r"regex:^\.github/(?!workflows/build\.yml$)",
     ]),
     ("Build output, local logs and scratch files committed at some point", [
         ".buildlock/",

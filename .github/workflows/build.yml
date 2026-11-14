@@ -1,0 +1,151 @@
+name: Build
+
+# Runs on the public github.com mirror (microcord/microcord), never on hoodnet: the mirror is the
+# only place Blacksmith's 4 vCPU runners can pick a job up, and this runner's CPU is too limited
+# for the build. The mirror lacks Discord's files, so the job clones the real source from
+# git.hoodnet.work (public, no credentials needed), builds it, and publishes the APKs to hoodnet.
+# Nothing is cached or uploaded as an artifact on github.com.
+#
+# Started by "Continuous release" on hoodnet with a repository_dispatch, using the mirror's own
+# MIRROR_TOKEN. This is the only file of .github/ the mirror keeps (see scripts/mirror_exclude.py),
+# so MIRROR_TOKEN also needs the Workflows permission to push it.
+#
+# Needs, in the github.com repository's settings:
+# - secret HOODNET_TOKEN: a git.hoodnet.work token that can create releases and write commit
+#   statuses on microcord/microcord. Only this repository's own dispatch can read it.
+# Set the repository's Actions log retention to 1 day.
+
+on:
+  repository_dispatch:
+    types: [build]
+
+permissions: {}
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 120
+    env:
+      SOURCE_REPOSITORY: microcord/microcord
+      SOURCE_SHA: ${{ github.event.client_payload.sha }}
+      BUILD_ID: ${{ github.event.client_payload.build_id }}
+      RELEASE: ${{ github.event.client_payload.release }}
+      MANTICORD_BUILD_ID: ${{ github.event.client_payload.build_id }}
+      MANTICORD_COMMIT_SHA: ${{ github.event.client_payload.sha }}
+      # gh talks to hoodnet for everything in this job; it never needs github.com.
+      GH_HOST: git.hoodnet.work
+      GH_ENTERPRISE_TOKEN: ${{ secrets.HOODNET_TOKEN }}
+    steps:
+      - name: Check the dispatch payload
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha is not a full commit SHA"; exit 1; }
+          [[ "$BUILD_ID" =~ ^[0-9]+$ ]] || { echo "::error::build_id is not a number"; exit 1; }
+
+      - name: Report the build as started
+        run: |
+          gh api "repos/$SOURCE_REPOSITORY/statuses/$SOURCE_SHA" \
+            -f state=pending -f context=build -f description="Building on a Blacksmith runner"
+
+      # Plain git rather than actions/checkout, which would send this repository's GITHUB_TOKEN to
+      # the server it clones from.
+      - name: Clone the source from hoodnet
+        run: |
+          git init -q .
+          git fetch -q --depth 1 "https://git.hoodnet.work/$SOURCE_REPOSITORY.git" "$SOURCE_SHA"
+          git checkout -q FETCH_HEAD
+          chmod +x gradlew
+
+      # No `cache:` here on purpose: a cache would leave build data on github.com.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # The Kotlin daemon needed more than the repository's 4 GB to compile the release variant;
+      # this runner has 16 GB, so the user-level file (which beats the project's) raises it.
+      - name: Size the Gradle and Kotlin daemons for a 16 GB runner
+        run: |
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8 -Didea.max.intellisense.filesize=8192
+          kotlin.daemon.jvmargs=-Xmx6g
+          EOF
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      # Compiled first so the Kotlin daemon, which grows to its full heap on a cold compile, can be
+      # stopped before lint needs the Gradle daemon's.
+      - name: Compile
+        run: |
+          bash scripts/build.sh :app:compileDebugKotlin :plugin-api:compileDebugKotlin
+          pkill -f KotlinCompileDaemon || true
+
+      - name: Check for APIs newer than minSdk
+        run: bash scripts/build.sh :app:lintDebug :plugin-api:lintDebug
+
+      - name: Build debug APK
+        if: env.RELEASE != 'true'
+        run: bash scripts/build.sh :app:assembleDebug
+
+      - name: Publish debug APK
+        if: env.RELEASE != 'true'
+        run: |
+          gh release create "dev-$BUILD_ID" app/build/outputs/apk/debug/app-debug.apk \
+            --repo "$SOURCE_REPOSITORY" --target "$SOURCE_SHA" --prerelease \
+            --title "Dev build $BUILD_ID" --notes "Debug build of ${SOURCE_SHA:0:8}."
+          # Keep the newest ten; the update feed only reads published build-N releases.
+          gh release list --repo "$SOURCE_REPOSITORY" --limit 100 --json tagName -q '.[].tagName' \
+            | grep '^dev-' | tail -n +11 \
+            | xargs -r -I{} gh release delete {} --repo "$SOURCE_REPOSITORY" --cleanup-tag --yes
+
+      - name: Build release APKs and update manifest
+        if: env.RELEASE == 'true'
+        run: |
+          bash scripts/build.sh :app:assembleRelease :app:generateReleaseUpdateManifest
+          release=app/build/outputs/apk/release
+          # The universal APK keeps the asset name existing clients and old download links expect.
+          cp $release/app-universal-release.apk $release/app-release.apk
+          # Each APK's baseline profiles, named for the API range they serve. The update Worker's
+          # DEX_METADATA lists the same ranges, so a change in AGP's fails here instead of mislabelling.
+          jq -e '[.baselineProfiles[] | [.minApi, .maxApi]] | sort == [[28, 30], [31, 2147483647]]' $release/output-metadata.json
+          jq -r '.baselineProfiles[] | .minApi as $api | .baselineProfiles[] | "\($api) \(.)"' $release/output-metadata.json |
+            while read -r api path; do
+              name=$(basename "$path" .dm)
+              cp "$release/$path" "$release/${name/universal-/}-api$api.dm"
+            done
+
+      - name: Create release
+        if: env.RELEASE == 'true'
+        env:
+          NOTES: ${{ github.event.client_payload.notes }}
+        run: |
+          shopt -s nullglob
+          release=app/build/outputs/apk/release
+          files=(
+            $release/app-release.apk
+            $release/app-arm64-v8a-release.apk
+            $release/app-armeabi-v7a-release.apk
+            $release/app-x86_64-release.apk
+            $release/app-x86-release.apk
+            $release/*.dm
+            app/build/outputs/update/release/update-manifest.json
+          )
+          for f in "${files[@]}"; do [ -f "$f" ] || { echo "::error::missing $f"; exit 1; }; done
+          [ "${#files[@]}" -ge 8 ] || { echo "::error::expected the five APKs, their .dm files and the manifest"; exit 1; }
+          gh release create "build-$BUILD_ID" "${files[@]}" \
+            --repo "$SOURCE_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "Build $BUILD_ID" --notes "$NOTES"
+
+      - name: Report the result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          state=failure; [ "$JOB_STATUS" = success ] && state=success
+          gh api "repos/$SOURCE_REPOSITORY/statuses/$SOURCE_SHA" \
+            -f state=$state -f context=build -f description="Build $JOB_STATUS"
