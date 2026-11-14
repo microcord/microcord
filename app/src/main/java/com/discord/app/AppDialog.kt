@@ -51,6 +51,10 @@ abstract class AppDialog : DialogFragment, AppComponent {
             // The dialog theme redefines surface colors, so the custom theme goes on top of it too.
             ThemeRuntime.applyOverlay(context.theme)
             requestWindowFeature(Window.FEATURE_NO_TITLE)
+            // The dialog's own background is drawn by its content layout. Set before the first
+            // frame: the theme's background carries side insets, and swapping it once the dialog
+            // is showing slid the content sideways as it appeared.
+            window?.setBackgroundDrawableResource(R.color.transparent)
             applyReducedMotionAnimations()
         }
 
@@ -60,8 +64,6 @@ abstract class AppDialog : DialogFragment, AppComponent {
         } catch (e: Exception) {
             AppLog.e("Failed to start AppDialog: ${javaClass.name}", e)
         }
-        // The dialog's own background is drawn by its content layout.
-        dialog?.window?.setBackgroundDrawableResource(R.color.transparent)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

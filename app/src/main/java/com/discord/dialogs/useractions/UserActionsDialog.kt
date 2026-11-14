@@ -2,12 +2,17 @@ package com.discord.dialogs.useractions
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.core.content.getSystemService
+import androidx.core.view.WindowCompat
+import androidx.core.view.doOnAttach
 import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentManager
 import com.discord.i18n.i18nFormat
@@ -45,7 +50,7 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        anchorWindow()
+        anchorWindow(view)
         _binding = UserActionsDialogBinding.bind(view)
         PluginContextMenuHost.bind(
             binding.pluginContextMenuItems,
@@ -135,16 +140,38 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         dismiss()
     }
 
-    /** [Gravity.END] measures x from the right edge, so the anchor inset lines the two up. */
-    private fun anchorWindow() {
+    /**
+     * Places the menu under its button: the window fills the screen edge to edge and never moves,
+     * and the menu sits in it at the button's screen position. A small window positioned at the
+     * button got slid across by the system after appearing. A tap outside the menu closes it.
+     */
+    private fun anchorWindow(content: View) {
         val window = dialog?.window ?: return
         val top = argumentsOrDefault.getInt(ARG_ANCHOR_TOP, ANCHOR_UNSET)
         if (top == ANCHOR_UNSET) return
-        window.setGravity(Gravity.TOP or Gravity.END)
+        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        // A dialog window stops at the system bars without these, leaving its content below the
+        // status bar and a black navigation bar.
+        window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
         window.setWindowAnimations(R.style.FadeInOut)
-        window.attributes = window.attributes.apply {
-            y = top
-            x = argumentsOrDefault.getInt(ARG_ANCHOR_END_INSET, 0)
+        // AppDialog pads content for the system bars, which would push the menu off its button.
+        content.fitsSystemWindows = false
+        content.isClickable = true
+        val endInset = argumentsOrDefault.getInt(ARG_ANCHOR_END_INSET, 0)
+        // On attach, because setContentView swaps in full-screen params.
+        content.doOnAttach { view ->
+            view.layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.END,
+            ).apply {
+                topMargin = top
+                marginEnd = endInset
+            }
+            (view.parent as? View)?.setOnClickListener { dismiss() }
         }
     }
 
