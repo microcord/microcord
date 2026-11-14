@@ -12,12 +12,13 @@ import com.discord.utilities.rx.ui
 class ConfirmRemovePermissionDialogViewModel(
     private val permissionOwner: PermissionOwner,
     private val channelId: Long,
+    private val permission: Long = Permission.MODERATE_STAGE_CHANNEL,
 ) : AppViewModel<ConfirmRemovePermissionDialogViewModel.ViewState>(ViewState.Default(false)) {
     internal fun updatedOverwrite(): PermissionOverwrite? {
         val type = if (permissionOwner is PermissionOwner.Role) PermissionOverwrite.Type.ROLE else PermissionOverwrite.Type.MEMBER
         val overwrite = StoreStream.getChannels().getChannel(channelId)?.permissionOverwrites.orEmpty()
             .firstOrNull { it.id == permissionOwner.entityId && it.type == type } ?: return null
-        return removeModerator(overwrite)
+        return removePermission(overwrite, permission)
     }
 
     fun submit() {
@@ -39,8 +40,9 @@ class ConfirmRemovePermissionDialogViewModel(
     }
 
     companion object {
-        internal fun removeModerator(overwrite: PermissionOverwrite): PermissionOverwrite? = overwrite.copy(
-            allow = overwrite.allow and Permission.MODERATE_STAGE_CHANNEL.inv(),
+        /** Drops [permission] from the overwrite's allow bits, and the overwrite itself once empty. */
+        internal fun removePermission(overwrite: PermissionOverwrite, permission: Long): PermissionOverwrite? = overwrite.copy(
+            allow = overwrite.allow and permission.inv(),
         ).takeUnless { it.allow == 0L && it.deny == 0L }
     }
 }

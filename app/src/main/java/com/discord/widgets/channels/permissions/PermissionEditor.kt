@@ -1,6 +1,7 @@
 package com.discord.widgets.channels.permissions
 
 import com.discord.R
+import com.discord.api.channel.Channel
 import com.discord.api.permission.Permission
 import com.discord.api.permission.PermissionBit
 import com.discord.api.permission.PermissionOverwrite
@@ -72,6 +73,18 @@ internal object PermissionEditor {
             -1 -> bits.first.and(permission.inv()) to bits.second.or(permission)
             else -> bits.first.and(permission.inv()) to bits.second.and(permission.inv())
         }
+    }
+
+    /**
+     * React Native's `areChannelsLocked`: the same overwrites as [category], where a missing
+     * @everyone overwrite counts as an empty one.
+     */
+    fun isSyncedWith(channel: Channel, category: Channel): Boolean {
+        fun overwrites(of: Channel): Map<Long, Pair<Long, Long>> {
+            val byId = of.permissionOverwrites.orEmpty().associate { it.id to (it.allow to it.deny) }
+            return if (channel.guildId in byId) byId else byId + (channel.guildId to (0L to 0L))
+        }
+        return overwrites(channel) == overwrites(category)
     }
 
     fun canManage(guild: Guild, me: MeUser, permissions: Long?): Boolean =

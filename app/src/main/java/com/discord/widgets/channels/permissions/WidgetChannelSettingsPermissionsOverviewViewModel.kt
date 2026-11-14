@@ -2,9 +2,14 @@ package com.discord.widgets.channels.permissions
 
 import com.discord.app.AppViewModel
 
-class WidgetChannelSettingsPermissionsOverviewViewModel(isStageChannel: Boolean) :
-    AppViewModel<WidgetChannelSettingsPermissionsOverviewViewModel.ViewState>(generateInitialViewState(isStageChannel)) {
-    enum class Tab { ADVANCED, MODERATOR }
+class WidgetChannelSettingsPermissionsOverviewViewModel(
+    isStageChannel: Boolean,
+    modern: Boolean = false,
+    startAdvanced: Boolean = false,
+) : AppViewModel<WidgetChannelSettingsPermissionsOverviewViewModel.ViewState>(
+    generateInitialViewState(isStageChannel, modern, startAdvanced),
+) {
+    enum class Tab { ADVANCED, MODERATOR, BASIC }
     data class ViewState(val selectedTab: Tab, val availableTabs: List<Tab>)
 
     fun selectTab(tab: Tab) {

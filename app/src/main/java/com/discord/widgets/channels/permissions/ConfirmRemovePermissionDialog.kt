@@ -6,6 +6,7 @@ import android.widget.TextView
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
 import com.discord.R
+import com.discord.api.permission.Permission
 import com.discord.app.AppDialog
 import com.discord.utilities.rx.ui
 import com.discord.views.LoadingButton
@@ -14,10 +15,11 @@ import com.discord.widgets.settings.SettingsStrings
 class ConfirmRemovePermissionDialog : AppDialog(R.layout.confirm_remove_permission_dialog) {
     private val owner get() = requireArguments().getSerializable(ARG_OWNER) as PermissionOwner
     private val channelId get() = requireArguments().getLong(ARG_CHANNEL_ID)
+    private val permission get() = requireArguments().getLong(ARG_PERMISSION, Permission.MODERATE_STAGE_CHANNEL)
     private val viewModel by viewModels<ConfirmRemovePermissionDialogViewModel> {
         object : androidx.lifecycle.ViewModelProvider.Factory {
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                ConfirmRemovePermissionDialogViewModel(owner, channelId) as T
+                ConfirmRemovePermissionDialogViewModel(owner, channelId, permission) as T
         }
     }
 
@@ -49,11 +51,18 @@ class ConfirmRemovePermissionDialog : AppDialog(R.layout.confirm_remove_permissi
     companion object {
         private const val ARG_OWNER = "ARG_PERMISSION_OWNER"
         private const val ARG_CHANNEL_ID = "com.discord.intent.extra.EXTRA_CHANNEL_ID"
-        fun show(owner: PermissionOwner, channelId: Long, fragmentManager: FragmentManager) =
+        private const val ARG_PERMISSION = "ARG_PERMISSION"
+        fun show(
+            owner: PermissionOwner,
+            channelId: Long,
+            fragmentManager: FragmentManager,
+            permission: Long = Permission.MODERATE_STAGE_CHANNEL,
+        ) =
             ConfirmRemovePermissionDialog().apply {
                 arguments = Bundle().apply {
                     putSerializable(ARG_OWNER, owner)
                     putLong(ARG_CHANNEL_ID, channelId)
+                    putLong(ARG_PERMISSION, permission)
                 }
             }.show(fragmentManager, ConfirmRemovePermissionDialog::class.java.simpleName)
     }

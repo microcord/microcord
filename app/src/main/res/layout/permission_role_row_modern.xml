@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A role in the modern Advanced permissions card, in the role's colour, opening its overwrite editor. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:singleLine="true" android:ellipsize="end" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>

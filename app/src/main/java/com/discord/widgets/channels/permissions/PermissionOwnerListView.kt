@@ -96,22 +96,23 @@ class PermissionOwnerListView : RecyclerView {
                 when (val status = item.removeStatus) {
                     RemoveStatus.CanRemove -> onRemoveClicked()
                     RemoveStatus.IsRemoving -> Unit
-                    is RemoveStatus.CannotRemove -> when (status.reason) {
-                        RemoveStatus.CannotRemove.Reason.IS_NOT_OVERRIDE ->
-                            showToast(R.string.channel_permissions_remove_not_overwrite)
-                        RemoveStatus.CannotRemove.Reason.HAS_NO_PERMISSION ->
-                            showToast(R.string.channel_permissions_cannot_edit_moderators)
-                        RemoveStatus.CannotRemove.Reason.IS_GUILD_OWNER ->
-                            showToast(R.string.channel_permissions_add_members_tooltip_owner)
-                        RemoveStatus.CannotRemove.Reason.IS_ADMINISTRATOR ->
-                            showToast(R.string.channel_permissions_add_members_tooltip_administrator)
-                    }
+                    is RemoveStatus.CannotRemove -> showCannotRemove(itemView.context, status.reason)
                 }
             }
         }
+    }
 
-        private fun showToast(message: Int) {
-            Toast.makeText(itemView.context, message, Toast.LENGTH_SHORT).show()
+    companion object {
+        /** Explains why a row has no working remove button. */
+        fun showCannotRemove(context: Context, reason: RemoveStatus.CannotRemove.Reason) {
+            val message = when (reason) {
+                RemoveStatus.CannotRemove.Reason.IS_NOT_OVERRIDE -> R.string.channel_permissions_remove_not_overwrite
+                RemoveStatus.CannotRemove.Reason.HAS_NO_PERMISSION -> R.string.channel_permissions_cannot_edit_moderators
+                RemoveStatus.CannotRemove.Reason.IS_GUILD_OWNER -> R.string.channel_permissions_add_members_tooltip_owner
+                RemoveStatus.CannotRemove.Reason.IS_ADMINISTRATOR ->
+                    R.string.channel_permissions_add_members_tooltip_administrator
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 }

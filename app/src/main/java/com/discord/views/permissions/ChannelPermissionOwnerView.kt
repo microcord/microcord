@@ -35,6 +35,9 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         name = requireNotNull(findViewById(R.id.name))
     }
 
+    /** What a member's avatar scales with; a role's shield swaps it out, so a recycled row restores it. */
+    private val avatarScaleType = image.scaleType
+
     fun configure(permissionOwner: PermissionOwner) {
         when (permissionOwner) {
             is PermissionOwner.Role -> configureRole(permissionOwner)
@@ -45,9 +48,20 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
     private fun configureRole(owner: PermissionOwner.Role) {
         val role = owner.role
         val shield = requireNotNull(ContextCompat.getDrawable(context, R.drawable.ic_person_shield_24dp)).mutate()
-        DrawableCompat.setTint(shield, role.color.takeIf { it != 0 } ?: ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal))
+        // Role colours carry no alpha byte; tinting with one as-is would be fully transparent.
+        DrawableCompat.setTint(
+            shield,
+            role.color.takeIf { it != 0 }?.let { it or 0xFF000000.toInt() }
+                ?: ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal),
+        )
+        // A placeholder only draws while an image loads, and a role has none to load, so the shield
+        // is the image itself.
         image.release()
-        image.hierarchy.setPlaceholderImage(shield)
+        // Inset in the avatar's box, as React Native draws it, rather than stretched to its edges.
+        val inset = (SHIELD_INSET_DP * resources.displayMetrics.density).toInt()
+        image.setPadding(inset, inset, inset, inset)
+        image.scaleType = ImageView.ScaleType.FIT_CENTER
+        image.setImageDrawable(shield)
         name.text = role.name
         description.setText(
             if (role.permissions and 8L != 0L) R.string.private_channel_add_members_modal_row_administrator
@@ -62,6 +76,8 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
             val extension = if (it.startsWith("a_")) "gif" else "webp"
             "${ClientBackend.active.cdn}/avatars/${user.id}/$it.$extension?size=32"
         } ?: IconUtils.getDefaultAvatar(IconUtils.getDefaultAvatarIndex(user.id, user.discriminator, user.isWebhook))
+        image.scaleType = avatarScaleType
+        image.setPadding(0, 0, 0, 0)
         image.hierarchy.setPlaceholderImage(ColorDrawable(0))
         image.setImageURI(url)
         name.text = user.getDisplayName(owner.nickname.takeUnless { FeatureFlags.disableServerProfilesEnabled() })
@@ -69,4 +85,9 @@ class ChannelPermissionOwnerView(context: Context, attrs: AttributeSet) :
         crown.visibility = if (owner.isOwner) View.VISIBLE else View.GONE
     }
 
+
+    private companion object {
+        /** A 40dp box less 4dp each side leaves the 32dp shield React Native shows. */
+        const val SHIELD_INSET_DP = 4
+    }
 }

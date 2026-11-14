@@ -28,14 +28,16 @@ class PermissionEditorTest {
 
     @Test fun removingStageModeratorKeepsUnrelatedBitsAndDeletesEmptyOverwrite() {
         val unrelated = Permission.VIEW_CHANNEL
-        val updated = ConfirmRemovePermissionDialogViewModel.removeModerator(
+        val updated = ConfirmRemovePermissionDialogViewModel.removePermission(
             PermissionOverwrite(1, PermissionOverwrite.Type.MEMBER, Permission.MODERATE_STAGE_CHANNEL or unrelated, Permission.SEND_MESSAGES),
+            Permission.MODERATE_STAGE_CHANNEL,
         )
         assertEquals(unrelated, updated?.allow)
         assertEquals(Permission.SEND_MESSAGES, updated?.deny)
         assertNull(
-            ConfirmRemovePermissionDialogViewModel.removeModerator(
+            ConfirmRemovePermissionDialogViewModel.removePermission(
                 PermissionOverwrite(1, PermissionOverwrite.Type.MEMBER, Permission.MODERATE_STAGE_CHANNEL, 0),
+                Permission.MODERATE_STAGE_CHANNEL,
             ),
         )
     }

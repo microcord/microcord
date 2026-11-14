@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern Basic permissions view: a private toggle and who can access the channel. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <androidx.core.widget.NestedScrollView android:fitsSystemWindows="true" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_behavior="com.discord.app.AppScrollingNestedViewBehavior">
+        <LinearLayout android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="64dp" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:id="@+id/basic_description" android:layout_marginTop="8dp" android:text="@string/channel_permissions_private_channel_description" style="@style/ChannelSettings.Caption"/>
+            <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_marginTop="8dp" style="@style/ChannelSettings.Card">
+                <com.discord.views.CheckedSetting android:id="@+id/basic_private" app:cs_text="@string/private_channel" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+            <LinearLayout android:id="@+id/basic_private_section" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <TextView android:id="@+id/basic_add" android:text="@string/channel_permissions_add_members_title" app:drawableStartCompat="@drawable/ic_menu_circle_plus" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:text="@string/private_channel_access_info_title" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:id="@+id/basic_access_list" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

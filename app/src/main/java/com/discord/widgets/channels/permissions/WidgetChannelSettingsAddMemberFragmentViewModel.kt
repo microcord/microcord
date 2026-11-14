@@ -13,9 +13,14 @@ import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.ui
 import rx.Observable
 
+/**
+ * Lists roles and members that can be granted [permission] on a channel: stage moderation in the
+ * reference, and viewing a private channel for the modern Basic permissions view.
+ */
 class WidgetChannelSettingsAddMemberFragmentViewModel(
     private val channelId: Long,
     private val showRolesWithGuildPermission: Boolean,
+    private val permission: Long = Permission.MODERATE_STAGE_CHANNEL,
 ) : AppViewModel<WidgetChannelSettingsAddMemberFragmentViewModel.ViewState>() {
     private var query = ""
     private val selected = LinkedHashMap<Long, PermissionOverwrite.Type>()
@@ -64,10 +69,10 @@ class WidgetChannelSettingsAddMemberFragmentViewModel(
             .filter { it.permissions and Permission.ADMINISTRATOR == 0L }
             .filter { it.id != state.guild?.id }
             .filter { it.name.contains(query.trim(), true) }
-            .filter { showRolesWithGuildPermission || !PermissionUtils.canRole(Permission.MODERATE_STAGE_CHANNEL, it, existing[it.id]) }
-            .filter { existing[it.id]?.allow?.and(Permission.MODERATE_STAGE_CHANNEL) != Permission.MODERATE_STAGE_CHANNEL }
+            .filter { showRolesWithGuildPermission || !grantedByRole(it, existing[it.id]) }
+            .filter { existing[it.id]?.allow?.and(permission) != permission }
             .map { role ->
-                val hasGuildPermission = PermissionUtils.canRole(Permission.MODERATE_STAGE_CHANNEL, role, existing[role.id])
+                val hasGuildPermission = grantedByRole(role, existing[role.id])
                 AddMemberAdapter.Item.PermissionOwnerItem(
                     PermissionOwner.Role(role),
                     hasGuildPermission || selected[role.id] == PermissionOverwrite.Type.ROLE,
@@ -79,7 +84,7 @@ class WidgetChannelSettingsAddMemberFragmentViewModel(
         val members = state.users.values.asSequence()
             .filter { state.members.containsKey(it.id) }
             .filter { it.id != state.guild?.ownerId }
-            .filter { existing[it.id]?.allow?.and(Permission.MODERATE_STAGE_CHANNEL) != Permission.MODERATE_STAGE_CHANNEL }
+            .filter { existing[it.id]?.allow?.and(permission) != permission }
             .filter { user ->
                 val member = state.members[user.id]
                 user.username.contains(query.trim(), true) || member?.nick?.contains(query.trim(), true) == true
@@ -99,6 +104,13 @@ class WidgetChannelSettingsAddMemberFragmentViewModel(
             addAll(members)
         }
     }
+
+    /**
+     * Whether the role already holds [permission] without an overwrite. Never for viewing: a
+     * private channel denies @everyone, which a role's own base permission does not get past.
+     */
+    private fun grantedByRole(role: GuildRole, overwrite: PermissionOverwrite?): Boolean =
+        permission and Permission.VIEW_CHANNEL == 0L && PermissionUtils.canRole(permission, role, overwrite)
 
     data class StoreState(
         val guild: Guild?,

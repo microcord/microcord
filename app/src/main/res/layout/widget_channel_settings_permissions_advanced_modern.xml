@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern Advanced permissions view: same ids as widget_channel_settings_permissions_advanced, so one binding serves both. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.CoordinatorLayout.Page">
+    <androidx.core.widget.NestedScrollView android:fitsSystemWindows="true" android:layout_width="match_parent" android:layout_height="wrap_content" app:layout_behavior="com.discord.app.AppScrollingNestedViewBehavior">
+        <LinearLayout android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="64dp" style="@style/UiKit.ViewGroup.LinearLayout">
+            <LinearLayout android:id="@+id/sync_container" android:visibility="gone" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:id="@+id/sync_label" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <TextView android:id="@+id/sync_now" android:text="@string/sync_now" app:drawableStartCompat="@drawable/ic_menu_sync" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+            </LinearLayout>
+            <TextView android:text="@string/new_permission" style="@style/ChannelSettings.Label"/>
+            <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content">
+                <TextView android:id="@+id/add_role" android:text="@string/form_label_role_add" app:drawableStartCompat="@drawable/ic_add_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                <TextView android:id="@+id/add_member" android:text="@string/form_label_member_add" app:drawableStartCompat="@drawable/ic_add_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+            <LinearLayout android:id="@+id/roles_container" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="@string/roles" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:id="@+id/roles_list" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/roles_recycler" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            </LinearLayout>
+            <LinearLayout android:id="@+id/members_container" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="@string/members" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:id="@+id/members_list" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+                <androidx.recyclerview.widget.RecyclerView android:id="@+id/members_recycler" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

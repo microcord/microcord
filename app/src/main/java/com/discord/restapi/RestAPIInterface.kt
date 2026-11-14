@@ -881,6 +881,13 @@ interface RestAPIInterface {
         @Body body: RestAPIParams.SendSoundboardSound,
     ): Observable<Unit>
 
+    /** Replaces the channel's overwrites with [body]'s; how a channel syncs with its category. */
+    @PATCH("channels/{channelId}")
+    fun syncChannelPermissions(
+        @Path("channelId") channelId: Long,
+        @Body body: RestAPIParams.ChannelPermissionSync,
+    ): Observable<Channel>
+
     @PATCH("channels/{channelId}")
     fun editTextChannel(
         @Path("channelId") channelId: Long,

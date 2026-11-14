@@ -185,6 +185,9 @@ object RestAPIParams {
         }
     }
 
+    /** Replaces a channel's overwrites; how it syncs with its category. */
+    class ChannelPermissionSync(val permissionOverwrites: List<ChannelPermissionOverwrites>)
+
     /**
      * One entry of the `PATCH guilds/{guildId}/channels` reorder payload.
      *
