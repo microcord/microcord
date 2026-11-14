@@ -98,8 +98,8 @@ object ClientSettings {
     val proxyHost = register(StringSetting("client_proxy_host"))
     val proxyPort = register(IntSetting("client_proxy_port", 0))
     val readableRoleColors = register(BooleanSetting("feature_readable_role_colors"))
-    /** Off by default: the modern message menu is the default and this brings the old one back. */
-    val legacyMessageMenu = register(BooleanSetting("feature_legacy_message_menu"))
+    /** Off by default: the modern menus and channel settings are the default and this brings the old ones back. */
+    val legacyUi = register(BooleanSetting("feature_legacy_message_menu"))
     val chatHeaderStatusIndicators = register(BooleanSetting("feature_chat_header_status_indicators"))
     val moreGifProviders = register(BooleanSetting("feature_more_gif_providers"))
     val gifUrlToInput = register(BooleanSetting("feature_gif_url_to_input"))

@@ -107,8 +107,8 @@ class WidgetSettingsFeatureFlags : AppFragment(R.layout.widget_settings_feature_
             setOnCheckedListener(FeatureFlags::setHideBlockedMessagesEnabled)
         }
         binding.settingsFeatureLegacyMessageMenu.apply {
-            isChecked = FeatureFlags.legacyMessageMenuEnabled()
-            setOnCheckedListener(FeatureFlags::setLegacyMessageMenuEnabled)
+            isChecked = FeatureFlags.legacyUiEnabled()
+            setOnCheckedListener(FeatureFlags::setLegacyUiEnabled)
         }
         binding.settingsFeatureReadableRoleColors.apply {
             isChecked = FeatureFlags.readableRoleColorsEnabled()

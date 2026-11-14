@@ -93,7 +93,7 @@ class WidgetChatListActions : AppBottomSheet() {
     private var messageId = 0L
 
     /** The modern menu is the default; the legacy one stays behind a feature flag. Both share view ids. */
-    private val modern by lazy { !FeatureFlags.legacyMessageMenuEnabled() }
+    private val modern by lazy { !FeatureFlags.legacyUiEnabled() }
 
     override fun getContentViewResId() =
         if (modern) R.layout.widget_chat_list_actions_modern else R.layout.widget_chat_list_actions

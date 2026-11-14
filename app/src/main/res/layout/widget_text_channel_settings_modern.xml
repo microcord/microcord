@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern channel settings: same ids as widget_text_channel_settings (the legacy one), so one view binding serves both. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView android:id="@+id/scroll_view" style="@style/UiKit.ViewGroup.NestedScrollView.AppBarScrollingViewBehavior">
+        <LinearLayout android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="@dimen/padding_bottom_fab_screen" style="@style/UiKit.ViewGroup.LinearLayout">
+            <LinearLayout android:id="@+id/channel_settings_edit_wrap" android:focusable="true" android:focusableInTouchMode="true" android:descendantFocusability="beforeDescendants" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="@string/form_label_channel_name" style="@style/ChannelSettings.Label"/>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/channel_settings_edit_name" style="@style/ChannelSettings.Input">
+                    <com.google.android.material.textfield.TextInputEditText android:layout_width="match_parent" android:layout_height="wrap_content" android:inputType="text" android:maxLines="1" style="@style/ChannelSettings.Input.EditText"/>
+                </com.google.android.material.textfield.TextInputLayout>
+                <TextView android:id="@+id/channel_settings_edit_topic_label" android:text="@string/form_label_channel_topic" style="@style/ChannelSettings.Label"/>
+                <com.google.android.material.textfield.TextInputLayout android:id="@+id/channel_settings_edit_topic" style="@style/ChannelSettings.Input">
+                    <com.google.android.material.textfield.TextInputEditText android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="top|start" android:inputType="textMultiLine|textCapSentences" android:minLines="4" android:maxLines="10" style="@style/ChannelSettings.Input.EditText"/>
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_category" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <LinearLayout android:id="@+id/channel_settings_category" android:orientation="horizontal" android:gravity="center_vertical" android:background="?attr/selectableItemBackground" android:layout_width="match_parent" android:layout_height="wrap_content">
+                        <TextView android:layout_width="0dp" android:layout_weight="1" android:text="@string/category" app:drawableStartCompat="@drawable/ic_menu_category" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                        <TextView android:id="@+id/channel_settings_category_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxWidth="180dp" android:singleLine="true" android:ellipsize="end" android:paddingEnd="16dp" android:drawablePadding="8dp" android:textSize="15sp" android:textColor="?attr/colorHeaderSecondary" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/UiKit.TextView"/>
+                    </LinearLayout>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_user_management" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <TextView android:id="@+id/channel_settings_permissions" android:text="@string/channel_permissions" app:drawableStartCompat="@drawable/ic_shieldstar_24dp" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:text="@string/form_help_channel_permissions" style="@style/ChannelSettings.Caption"/>
+            </LinearLayout>
+
+            <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                <TextView android:id="@+id/channel_settings_notifications" android:text="@string/notification_settings" app:drawableStartCompat="@drawable/ic_menu_notification_settings" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                <LinearLayout android:id="@+id/channel_settings_pinned_messages_container" style="@style/UiKit.ViewGroup.LinearLayout">
+                    <FrameLayout style="@style/UiKit.ViewGroup">
+                        <TextView android:id="@+id/channel_settings_pinned_messages" android:text="@string/pinned_messages" app:drawableStartCompat="@drawable/ic_menu_pin" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                        <View android:id="@+id/channel_settings_pinned_messages_disabled_overlay" android:layout_width="match_parent" android:layout_height="match_parent"/>
+                    </FrameLayout>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/channel_settings_section_invites" style="@style/UiKit.ViewGroup.LinearLayout">
+                    <TextView android:id="@+id/channel_settings_invites" android:text="@string/invites" app:drawableStartCompat="@drawable/ic_menu_link" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                </LinearLayout>
+            </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+
+            <TextView android:id="@+id/channel_settings_announcement_help" android:layout_marginTop="16dp" android:textColorLink="?attr/colorTextLink" style="@style/ChannelSettings.Caption"/>
+            <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_marginTop="8dp" style="@style/ChannelSettings.Card">
+                <com.discord.views.CheckedSetting android:id="@+id/channel_settings_announcement" app:cs_text="@string/form_label_news_channel" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+            </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+
+            <LinearLayout android:id="@+id/channel_settings_section_privacy_safety" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="@string/channel_content_visibility" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_visibility_default" app:cs_text="@string/channel_content_visibility_default" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_spoiler" app:cs_text="@string/spoiler_channel" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_nsfw" app:cs_text="@string/form_label_nsfw_channel" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:id="@+id/channel_settings_visibility_description" style="@style/ChannelSettings.Caption"/>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_slow_mode" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <LinearLayout android:paddingTop="16dp" android:paddingBottom="12dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                        <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup">
+                            <TextView android:id="@+id/channel_settings_slowmode_label" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:text="@string/form_label_slowmode_cooldown" android:textSize="17sp" android:textColor="?attr/colorHeaderPrimary" android:layout_alignParentStart="true" android:labelFor="@+id/channel_settings_slow_mode_cooldown_slider" style="@style/UiKit.TextView"/>
+                            <TextView android:id="@+id/channel_settings_slow_mode_cooldown_label" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_alignBaseline="@+id/channel_settings_slowmode_label" android:layout_alignParentEnd="true" android:textSize="15sp" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+                        </RelativeLayout>
+                        <SeekBar android:id="@+id/channel_settings_slow_mode_cooldown_slider" android:layout_marginTop="8dp" android:progress="0" style="@style/UiKit.SeekBar"/>
+                    </LinearLayout>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:id="@+id/channel_settings_slow_mode_help" android:text="@string/form_help_slowmode" style="@style/ChannelSettings.Caption"/>
+                <LinearLayout android:id="@+id/channel_settings_section_message_slow_mode" android:visibility="gone" style="@style/UiKit.ViewGroup.LinearLayout">
+                    <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                        <LinearLayout android:paddingTop="16dp" android:paddingBottom="12dp" style="@style/UiKit.ViewGroup.LinearLayout">
+                            <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.ViewGroup">
+                                <TextView android:id="@+id/channel_settings_message_slow_mode_label" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:text="@string/forum_setting_slow_mode_messages" android:textSize="17sp" android:textColor="?attr/colorHeaderPrimary" android:layout_alignParentStart="true" android:labelFor="@+id/channel_settings_message_slow_mode_slider" style="@style/UiKit.TextView"/>
+                                <TextView android:id="@+id/channel_settings_message_slow_mode_value" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_alignBaseline="@+id/channel_settings_message_slow_mode_label" android:layout_alignParentEnd="true" android:textSize="15sp" android:textColor="?attr/colorHeaderSecondary" style="@style/UiKit.TextView"/>
+                            </RelativeLayout>
+                            <SeekBar android:id="@+id/channel_settings_message_slow_mode_slider" android:layout_marginTop="8dp" android:progress="0" style="@style/UiKit.SeekBar"/>
+                        </LinearLayout>
+                    </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                    <TextView android:text="@string/forum_setting_slow_mode_message_text" style="@style/ChannelSettings.Caption"/>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_forum_tags" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:text="@string/forum_tags" style="@style/ChannelSettings.Label"/>
+                <TextView android:id="@+id/channel_settings_forum_tags_description" android:layout_marginTop="0dp" android:text="@string/forum_tag_create_description" style="@style/ChannelSettings.Caption"/>
+                <com.google.android.flexbox.FlexboxLayout android:id="@+id/channel_settings_forum_tags" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:flexWrap="wrap"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <TextView android:id="@+id/channel_settings_forum_tag_create" android:text="@string/forum_mobile_tag_create" android:textColor="?attr/colorTextLink" style="@style/MessageMenu.Row"/>
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_require_tag" app:cs_text="@string/forum_require_tag_note_mobile" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_forum_defaults" style="@style/UiKit.ViewGroup.LinearLayout">
+                <TextView android:id="@+id/channel_settings_forum_layout_header" android:text="@string/forum_channel_settings_default_layout" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_layout_list" app:cs_text="@string/forum_channel_settings_list_view" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_layout_gallery" app:cs_text="@string/forum_channel_settings_grid_view" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:id="@+id/channel_settings_forum_layout_description" android:text="@string/forum_channel_settings_default_layout_description" style="@style/ChannelSettings.Caption"/>
+                <TextView android:text="@string/forum_default_sort_order" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_sort_activity" app:cs_text="@string/forum_sort_activity" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_sort_creation" app:cs_text="@string/forum_sort_creation" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:text="@string/forum_default_sort_order_description" style="@style/ChannelSettings.Caption"/>
+                <TextView android:text="@string/forum_channel_tag_filtering" style="@style/ChannelSettings.Label"/>
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_tag_match_some" app:cs_text="@string/forum_channel_tag_match_some" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_forum_tag_match_all" app:cs_text="@string/forum_channel_tag_match_all" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:text="@string/forum_default_tag_match_description" style="@style/ChannelSettings.Caption"/>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_media_download" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <com.discord.views.CheckedSetting android:id="@+id/channel_settings_media_download" app:cs_text="@string/media_channel_hide_media_download_options_toggle_label" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+                <TextView android:text="@string/media_channel_hide_media_download_options_toggle_description" style="@style/ChannelSettings.Caption"/>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_default_auto_archive_duration" style="@style/UiKit.ViewGroup.LinearLayout">
+                <View android:id="@+id/channel_settings_auto_archive_divider" android:layout_width="match_parent" android:layout_height="0dp"/>
+                <TextView android:text="@string/form_thread_auto_archive_section_label" style="@style/ChannelSettings.Label"/>
+                <TextView android:layout_marginTop="0dp" android:layout_marginBottom="8dp" android:text="@string/form_help_default_auto_archive_duration" style="@style/ChannelSettings.Caption"/>
+                <include android:id="@+id/duration_selector" layout="@layout/widget_channel_settings_archive_modern"/>
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/channel_settings_section_integrations" style="@style/UiKit.ViewGroup.LinearLayout">
+                <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                    <TextView android:id="@+id/channel_settings_integrations" android:text="@string/integrations" app:drawableStartCompat="@drawable/ic_controller_24dp" app:drawableEndCompat="@drawable/ic_menu_chevron" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+                </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+            </LinearLayout>
+
+            <com.discord.widgets.chat.list.actions.MessageMenuGroup style="@style/ChannelSettings.Card">
+                <TextView android:id="@+id/channel_settings_delete" android:text="@string/delete_channel" app:drawableStartCompat="@drawable/ic_menu_delete" app:drawableTint="@color/status_red" style="@style/MessageMenu.Row.Danger"/>
+            </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.floatingactionbutton.FloatingActionButton android:id="@+id/channel_settings_save" android:visibility="gone" android:src="@drawable/icon_save" android:contentDescription="@string/save_changes" style="@style/Settings.FloatingActionButton"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

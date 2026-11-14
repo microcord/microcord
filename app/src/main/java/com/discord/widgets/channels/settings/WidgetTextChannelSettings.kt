@@ -2,14 +2,18 @@ package com.discord.widgets.channels.settings
 
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.text.Editable
 import android.text.InputFilter
 import android.text.SpannableStringBuilder
 import android.text.TextWatcher
+import android.text.method.LinkMovementMethod
+import android.view.LayoutInflater
 import android.view.View
-import android.widget.LinearLayout
+import android.view.ViewGroup
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.core.view.descendants
 import androidx.core.view.isVisible
 import com.discord.R
 import com.discord.api.channel.Channel
@@ -29,12 +33,14 @@ import com.discord.api.permission.Permission
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.databinding.WidgetTextChannelSettingsBinding
 import com.discord.dialogs.SelectorDialog
 import com.discord.models.guild.Guild
 import com.discord.restapi.RestAPIParams
 import com.discord.stores.StoreStream
-import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.channel.ChannelGating
+import com.discord.utilities.dimen.dpToPixels
+import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.resources.DurationUnit
 import com.discord.utilities.resources.formatDuration
@@ -43,36 +49,30 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
-import com.discord.views.CheckedSetting
-import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.channels.permissions.WidgetChannelSettingsPermissionsOverview
-import com.discord.widgets.integrations.WidgetChannelSettingsIntegrations
+import com.discord.widgets.chat.list.actions.MessageMenuGroup
+import com.discord.widgets.chat.pins.WidgetChannelPinnedMessages
 import com.discord.widgets.forums.ForumLayout
 import com.discord.widgets.forums.ForumPostTagView
 import com.discord.widgets.forums.ForumSortOrder
 import com.discord.widgets.forums.ForumTagSetting
 import com.discord.widgets.forums.PostTagData
 import com.discord.widgets.forums.WidgetForumTagEdit
+import com.discord.widgets.integrations.WidgetChannelSettingsIntegrations
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.servers.community.WidgetServerSettingsCommunityOverview
 import com.discord.widgets.servers.settings.invites.WidgetServerSettingsInstantInvites
 import com.discord.widgets.settings.SettingsStrings
 import com.google.android.flexbox.FlexboxLayout
-import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.android.material.radiobutton.MaterialRadioButton
-import com.google.android.material.textfield.TextInputLayout
 import rx.Observable
 
 /** Edits guild text, announcement, forum, and category channels. */
-class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_settings) {
+class WidgetTextChannelSettings : AppFragment() {
 
-    private lateinit var name: TextInputLayout
-    private lateinit var topic: TextInputLayout
-    private lateinit var slowMode: SeekBar
-    private lateinit var slowModeLabel: TextView
-    private lateinit var messageSlowMode: SeekBar
-    private lateinit var messageSlowModeLabel: TextView
-    private lateinit var save: FloatingActionButton
+    /** The modern layout shares every id with the legacy one, so one binding drives both. */
+    private val modern by lazy { !FeatureFlags.legacyUiEnabled() }
+    private var _binding: WidgetTextChannelSettingsBinding? = null
+    private val binding get() = checkNotNull(_binding)
     private var model: Model? = null
     private var savedName = ""
     private var savedTopic = ""
@@ -98,26 +98,32 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     private var draftHideMediaDownloads = false
     private var bindingState = false
 
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        inflater.inflate(
+            if (modern) R.layout.widget_text_channel_settings_modern else R.layout.widget_text_channel_settings,
+            container,
+            false,
+        )
+
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        name = view.findViewById(R.id.channel_settings_edit_name)
-        topic = view.findViewById(R.id.channel_settings_edit_topic)
-        slowMode = view.findViewById(R.id.channel_settings_slow_mode_cooldown_slider)
-        slowModeLabel = view.findViewById(R.id.channel_settings_slow_mode_cooldown_label)
-        messageSlowMode = view.findViewById(R.id.channel_settings_message_slow_mode_slider)
-        messageSlowModeLabel = view.findViewById(R.id.channel_settings_message_slow_mode_value)
-        save = view.findViewById(R.id.channel_settings_save)
+        _binding = WidgetTextChannelSettingsBinding.bind(view)
 
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
             override fun afterTextChanged(s: Editable?) = updateSaveVisibility()
         }
-        name.editText?.addTextChangedListener(watcher)
-        topic.editText?.addTextChangedListener(watcher)
-        bindSlider(slowMode, slowModeLabel)
-        bindSlider(messageSlowMode, messageSlowModeLabel)
-        save.setOnClickListener { saveChanges() }
+        binding.channelSettingsEditName.editText?.addTextChangedListener(watcher)
+        binding.channelSettingsEditTopic.editText?.addTextChangedListener(watcher)
+        bindSlider(binding.channelSettingsSlowModeCooldownSlider, binding.channelSettingsSlowModeCooldownLabel)
+        bindSlider(binding.channelSettingsMessageSlowModeSlider, binding.channelSettingsMessageSlowModeValue)
+        binding.channelSettingsSave.setOnClickListener { saveChanges() }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     private fun bindSlider(slider: SeekBar, valueLabel: TextView) {
@@ -143,7 +149,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     }
 
     private fun render(next: Model) {
-        val root = view ?: return
+        if (_binding == null) return
         model = next
         val channel = next.channel
         val category = channel.isCategory()
@@ -160,25 +166,26 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 }
             },
             onConfigured = { menu ->
-                menu.findItem(R.id.menu_channel_settings_delete)?.isVisible = next.canManageChannel
+                // The modern screen has its own Delete row.
+                menu.findItem(R.id.menu_channel_settings_delete)?.isVisible = next.canManageChannel && !modern
             },
         )
 
         bindingState = true
-        if (savedName.isEmpty() || name.editText?.text?.toString() == savedName) {
+        if (savedName.isEmpty() || binding.channelSettingsEditName.editText?.text?.toString() == savedName) {
             savedName = channel.name.orEmpty()
-            name.editText?.setText(savedName)
+            binding.channelSettingsEditName.editText?.setText(savedName)
         }
-        if (savedTopic.isEmpty() || topic.editText?.text?.toString() == savedTopic) {
+        if (savedTopic.isEmpty() || binding.channelSettingsEditTopic.editText?.text?.toString() == savedTopic) {
             savedTopic = channel.topic.orEmpty()
-            topic.editText?.setText(savedTopic)
+            binding.channelSettingsEditTopic.editText?.setText(savedTopic)
         }
         savedSlowMode = channel.rateLimitPerUser
-        slowMode.progress = slowModeProgress(savedSlowMode)
-        setSliderValueLabel(slowMode, slowModeLabel, savedSlowMode)
+        binding.channelSettingsSlowModeCooldownSlider.progress = slowModeProgress(savedSlowMode)
+        setSliderValueLabel(binding.channelSettingsSlowModeCooldownSlider, binding.channelSettingsSlowModeCooldownLabel, savedSlowMode)
         savedMessageSlowMode = channel.defaultThreadRateLimitPerUser ?: 0
-        messageSlowMode.progress = slowModeProgress(savedMessageSlowMode)
-        setSliderValueLabel(messageSlowMode, messageSlowModeLabel, savedMessageSlowMode)
+        binding.channelSettingsMessageSlowModeSlider.progress = slowModeProgress(savedMessageSlowMode)
+        setSliderValueLabel(binding.channelSettingsMessageSlowModeSlider, binding.channelSettingsMessageSlowModeValue, savedMessageSlowMode)
         savedArchiveDuration = channel.defaultAutoArchiveDuration ?: DEFAULT_ARCHIVE_DURATION
         draftArchiveDuration = savedArchiveDuration
         savedVisibility = ContentVisibility.of(channel)
@@ -202,51 +209,57 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         bindingState = false
 
         val isThreadOnly = channel.isThreadOnlyChannel()
-        root.findViewById<LinearLayout>(R.id.channel_settings_edit_wrap).isVisible = next.canManageChannel
-        topic.isVisible = !category
-        topic.hint = getString(
+        binding.channelSettingsEditWrap.isVisible = next.canManageChannel
+        binding.channelSettingsEditTopic.isVisible = !category
+        binding.channelSettingsEditTopic.hint = getString(
             if (isThreadOnly) R.string.form_label_channel_guidelines else R.string.form_label_channel_topic,
         )
-        topic.editText?.filters = arrayOf(
+        binding.channelSettingsEditTopic.editText?.filters = arrayOf(
             InputFilter.LengthFilter(if (isThreadOnly) MAX_FORUM_TOPIC_LENGTH else MAX_TOPIC_LENGTH),
         )
-        root.findViewById<LinearLayout>(R.id.channel_settings_pinned_messages_container).isVisible =
+        binding.channelSettingsPinnedMessagesContainer.isVisible =
             channel.type == Channel.GUILD_TEXT || channel.isAnnouncementChannel()
-        root.findViewById<TextView>(R.id.channel_settings_pinned_messages).apply {
+        binding.channelSettingsPinnedMessages.apply {
             isEnabled = next.isPinsEnabled
             setOnClickListener { WidgetChannelPinnedMessages.show(context, channel.id) }
         }
-        root.findViewById<View>(R.id.channel_settings_pinned_messages_disabled_overlay).apply {
+        binding.channelSettingsPinnedMessagesDisabledOverlay.apply {
             isVisible = !next.isPinsEnabled
             setOnClickListener { AppToast.show(context, R.string.pins_disabled_nsfw) }
         }
-        root.findViewById<TextView>(R.id.channel_settings_permissions).apply {
+        binding.channelSettingsPermissions.apply {
             isVisible = next.canManagePermissions
             setOnClickListener { WidgetChannelSettingsPermissionsOverview.launch(context, channel.id) }
         }
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_user_management).isVisible =
-            next.canManageChannel || next.canManagePermissions
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_integrations).isVisible =
+        // The modern section is only the Permissions card and its caption.
+        binding.channelSettingsSectionUserManagement.isVisible =
+            next.canManagePermissions || (!modern && next.canManageChannel)
+        binding.channelSettingsSectionIntegrations.isVisible =
             next.canManageWebhooks && !category
-        root.findViewById<TextView>(R.id.channel_settings_integrations).setOnClickListener {
+        binding.channelSettingsIntegrations.setOnClickListener {
             WidgetChannelSettingsIntegrations.launch(requireContext(), channel.id)
         }
 
-        root.findViewById<CheckedSetting>(R.id.channel_settings_announcement).apply {
-            isVisible = next.canToggleAnnouncement
-            if (isVisible) {
-                val help = SettingsStrings.render(
-                    context,
+        val announcementHelp = if (next.canToggleAnnouncement) {
+            SpannableStringBuilder(
+                SettingsStrings.render(
+                    requireContext(),
                     R.string.form_help_news,
                     "documentationLink" to ANNOUNCEMENT_ARTICLE_URL,
-                ).trim()
-                setSubtext(
-                    SpannableStringBuilder(help)
-                        .append("\n\n")
-                        .append(getString(R.string.guild_profile_announcement_channel_disclaimer)),
-                    true,
-                )
-            }
+                ).trim(),
+            )
+                .append("\n\n")
+                .append(getString(R.string.guild_profile_announcement_channel_disclaimer))
+        } else null
+        // The modern screen puts the help above the switch's card, as React Native does.
+        binding.channelSettingsAnnouncementHelp.apply {
+            isVisible = modern && announcementHelp != null
+            text = announcementHelp
+            movementMethod = LinkMovementMethod.getInstance()
+        }
+        binding.channelSettingsAnnouncement.apply {
+            isVisible = next.canToggleAnnouncement
+            if (isVisible && !modern) setSubtext(announcementHelp, true)
             setOnCheckedListener(null)
             isChecked = draftIsAnnouncement
             setOnCheckedListener { checked ->
@@ -254,32 +267,32 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
                 updateSaveVisibility()
             }
         }
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_privacy_safety).isVisible =
+        binding.channelSettingsSectionPrivacySafety.isVisible =
             next.canManageChannel && !category
-        configureContentVisibility(root)
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_slow_mode).isVisible =
+        configureContentVisibility()
+        binding.channelSettingsSectionSlowMode.isVisible =
             next.canManageChannel && !category && !channel.isAnnouncementChannel()
-        root.findViewById<TextView>(R.id.channel_settings_slowmode_label).setText(
+        binding.channelSettingsSlowmodeLabel.setText(
             if (isThreadOnly) R.string.forum_setting_slow_mode_posts else R.string.form_label_slowmode_cooldown,
         )
-        root.findViewById<TextView>(R.id.channel_settings_slow_mode_help).setText(
+        binding.channelSettingsSlowModeHelp.setText(
             if (isThreadOnly) R.string.form_help_slowmode_forum else R.string.form_help_slowmode,
         )
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_message_slow_mode).isVisible = isThreadOnly
+        binding.channelSettingsSectionMessageSlowMode.isVisible = isThreadOnly
 
-        configureForumTags(root, next)
-        configureForumDefaults(root, next)
-        configureCategory(root, next)
+        configureForumTags(next)
+        configureForumDefaults(next)
+        configureCategory(next)
 
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_invites).isVisible =
+        binding.channelSettingsSectionInvites.isVisible =
             next.canManageChannel && !category
-        root.findViewById<TextView>(R.id.channel_settings_invites).setOnClickListener {
+        binding.channelSettingsInvites.setOnClickListener {
             WidgetServerSettingsInstantInvites.launchForChannel(requireContext(), channel.guildId, channel.id)
         }
 
-        root.findViewById<LinearLayout>(R.id.channel_settings_section_media_download).isVisible =
+        binding.channelSettingsSectionMediaDownload.isVisible =
             next.canManageChannel && channel.isGuildMediaChannel()
-        root.findViewById<CheckedSetting>(R.id.channel_settings_media_download).apply {
+        binding.channelSettingsMediaDownload.apply {
             setOnCheckedListener(null)
             isChecked = !draftHideMediaDownloads
             setOnCheckedListener { checked ->
@@ -288,34 +301,49 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             }
         }
 
-        val archiveSection = root.findViewById<LinearLayout>(R.id.channel_settings_section_default_auto_archive_duration)
+        val archiveSection = binding.channelSettingsSectionDefaultAutoArchiveDuration
         archiveSection.isVisible = next.canManageChannel && channel.isThreaded()
         // The section above already ends in one when slow mode is hidden, as it is on announcements.
-        root.findViewById<View>(R.id.channel_settings_auto_archive_divider).isVisible =
-            root.findViewById<LinearLayout>(R.id.channel_settings_section_slow_mode).isVisible
-        bindArchiveOption(R.id.option_one_hour, R.id.option_one_hour_radio, 60)
-        bindArchiveOption(R.id.option_twenty_four_hours, R.id.option_twenty_four_hours_radio, 1_440)
-        bindArchiveOption(R.id.option_three_days, R.id.option_three_days_radio, 4_320)
-        bindArchiveOption(R.id.option_seven_days, R.id.option_seven_days_radio, 10_080)
+        binding.channelSettingsAutoArchiveDivider.isVisible =
+            binding.channelSettingsSectionSlowMode.isVisible
+        bindArchiveOptions()
         updateArchiveRadios()
+
+        binding.channelSettingsEditTopicLabel.setText(
+            if (isThreadOnly) R.string.form_label_channel_guidelines else R.string.form_label_channel_topic,
+        )
+        binding.channelSettingsEditTopicLabel.isVisible = modern && !category
+        binding.channelSettingsNotifications.apply {
+            isVisible = modern
+            setOnClickListener { WidgetChannelNotificationSettings.launch(context, channel.id) }
+        }
+        binding.channelSettingsDelete.apply {
+            isVisible = modern && next.canManageChannel
+            setText(if (category) R.string.delete_category else R.string.delete_channel)
+            setOnClickListener { deleteChannel(next) }
+        }
+        if (modern) {
+            (binding.scrollView.getChildAt(0) as ViewGroup).descendants
+                .filterIsInstance<MessageMenuGroup>().forEach(MessageMenuGroup::refresh)
+        }
         updateSaveVisibility()
     }
 
-    private fun configureForumTags(root: View, model: Model) {
+    private fun configureForumTags(model: Model) {
         val channel = model.channel
-        val section = root.findViewById<LinearLayout>(R.id.channel_settings_section_forum_tags)
+        val section = binding.channelSettingsSectionForumTags
         section.isVisible = channel.isThreadOnlyChannel()
         if (!section.isVisible) return
 
         val tags = channel.availableTags.orEmpty()
-        root.findViewById<TextView>(R.id.channel_settings_forum_tags_description).isVisible = tags.isEmpty()
-        root.findViewById<TextView>(R.id.channel_settings_forum_tag_create).apply {
+        binding.channelSettingsForumTagsDescription.isVisible = tags.isEmpty()
+        binding.channelSettingsForumTagCreate.apply {
             isVisible = tags.isEmpty()
             isEnabled = model.canManageChannel
             setOnClickListener { WidgetForumTagEdit.launch(context, channel.id, null) }
         }
 
-        val container = root.findViewById<FlexboxLayout>(R.id.channel_settings_forum_tags)
+        val container = binding.channelSettingsForumTags
         container.isVisible = tags.isNotEmpty()
         container.removeAllViews()
         tags.forEach { tag ->
@@ -337,7 +365,7 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
             container.addView(add, tagLayoutParams())
         }
 
-        root.findViewById<CheckedSetting>(R.id.channel_settings_forum_require_tag).apply {
+        binding.channelSettingsForumRequireTag.apply {
             setOnCheckedListener(null)
             isChecked = draftRequireTag
             isEnabled = model.canManageChannel && !(tags.isNotEmpty() && tags.all { it.moderated })
@@ -348,10 +376,10 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         }
     }
 
-    private fun configureCategory(root: View, model: Model) {
+    private fun configureCategory(model: Model) {
         val channel = model.channel
         val categories = model.categories
-        val section = root.findViewById<LinearLayout>(R.id.channel_settings_section_category)
+        val section = binding.channelSettingsSectionCategory
         section.isVisible = !channel.isCategory() && !channel.isThread() &&
             model.canManageChannel && categories.isNotEmpty()
         if (!section.isVisible) return
@@ -359,25 +387,25 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         val labels = listOf(getString(R.string.uncategorized)) +
             categories.map { it.getDisplayNameOrDefault(requireContext()) }
         val ids = listOf(0L) + categories.map { it.id }
-        root.findViewById<TextView>(R.id.channel_settings_category_value).text =
+        binding.channelSettingsCategoryValue.text =
             labels[ids.indexOf(draftParentId).coerceAtLeast(0)]
-        root.findViewById<LinearLayout>(R.id.channel_settings_category).setOnClickListener {
+        binding.channelSettingsCategory.setOnClickListener {
             SelectorDialog.show(
                 childFragmentManager,
                 getString(R.string.category),
                 labels.toTypedArray(),
             ) { position ->
                 draftParentId = ids[position]
-                root.findViewById<TextView>(R.id.channel_settings_category_value).text = labels[position]
+                binding.channelSettingsCategoryValue.text = labels[position]
                 updateSaveVisibility()
             }
         }
     }
 
     /** Default / Spoiler / Age-Restricted are one choice: a channel cannot be two of them at once. */
-    private fun configureContentVisibility(root: View) {
-        VISIBILITY_ROWS.forEach { (id, visibility) ->
-            root.findViewById<CheckedSetting>(id).setContainerClickListener {
+    private fun configureContentVisibility() {
+        visibilityRows().forEach { (row, visibility) ->
+            row.setContainerClickListener {
                 draftVisibility = visibility
                 updateContentVisibilityRadios()
                 updateSaveVisibility()
@@ -387,36 +415,51 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     }
 
     private fun updateContentVisibilityRadios() {
-        val root = view ?: return
-        VISIBILITY_ROWS.forEach { (id, visibility) ->
-            root.findViewById<CheckedSetting>(id)?.isChecked = draftVisibility == visibility
+        if (_binding == null) return
+        visibilityRows().forEach { (row, visibility) -> row.isChecked = draftVisibility == visibility }
+        // The modern rows carry no subtext; the chosen option's description sits under the card.
+        binding.channelSettingsVisibilityDescription.apply {
+            isVisible = modern
+            setText(
+                when (draftVisibility) {
+                    ContentVisibility.DEFAULT -> R.string.channel_content_visibility_default_description
+                    ContentVisibility.SPOILER -> R.string.spoiler_channel_description
+                    ContentVisibility.AGE_RESTRICTED -> R.string.form_help_nsfw
+                },
+            )
         }
     }
+
+    private fun visibilityRows() = listOf(
+        binding.channelSettingsVisibilityDefault to ContentVisibility.DEFAULT,
+        binding.channelSettingsSpoiler to ContentVisibility.SPOILER,
+        binding.channelSettingsNsfw to ContentVisibility.AGE_RESTRICTED,
+    )
 
     private fun tagLayoutParams() = FlexboxLayout.LayoutParams(
         FlexboxLayout.LayoutParams.WRAP_CONTENT,
         FlexboxLayout.LayoutParams.WRAP_CONTENT,
     ).apply { setMargins(dpToPixels(6), dpToPixels(6), dpToPixels(6), dpToPixels(6)) }
 
-    private fun configureForumDefaults(root: View, model: Model) {
+    private fun configureForumDefaults(model: Model) {
         val channel = model.channel
-        val section = root.findViewById<LinearLayout>(R.id.channel_settings_section_forum_defaults)
+        val section = binding.channelSettingsSectionForumDefaults
         section.isVisible = channel.isThreadOnlyChannel() && model.canManageChannel
         if (!section.isVisible) return
 
         val showLayout = channel.isGuildForumChannel()
-        val layoutList = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_layout_list)
-        val layoutGallery = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_layout_gallery)
+        val layoutList = binding.channelSettingsForumLayoutList
+        val layoutGallery = binding.channelSettingsForumLayoutGallery
         listOf(
-            root.findViewById<TextView>(R.id.channel_settings_forum_layout_header),
-            root.findViewById<TextView>(R.id.channel_settings_forum_layout_description),
+            binding.channelSettingsForumLayoutHeader,
+            binding.channelSettingsForumLayoutDescription,
             layoutList,
             layoutGallery,
         ).forEach { it.isVisible = showLayout }
-        val sortActivity = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_sort_activity)
-        val sortCreation = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_sort_creation)
-        val matchSome = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_some)
-        val matchAll = root.findViewById<CheckedSetting>(R.id.channel_settings_forum_tag_match_all)
+        val sortActivity = binding.channelSettingsForumSortActivity
+        val sortCreation = binding.channelSettingsForumSortCreation
+        val matchSome = binding.channelSettingsForumTagMatchSome
+        val matchAll = binding.channelSettingsForumTagMatchAll
 
         fun renderForumRadios() {
             layoutList.isChecked = draftForumLayout == ForumLayout.LIST
@@ -442,30 +485,32 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         matchAll.setContainerClickListener { stage { draftTagSetting = ForumTagSetting.MATCH_ALL } }
     }
 
-    private fun bindArchiveOption(rowId: Int, radioId: Int, minutes: Int) {
-        view?.findViewById<View>(rowId)?.setOnClickListener {
+    private fun archiveOptions() = with(binding.durationSelector) {
+        listOf(
+            Triple(optionOneHour, optionOneHourRadio, 60),
+            Triple(optionTwentyFourHours, optionTwentyFourHoursRadio, 1_440),
+            Triple(optionThreeDays, optionThreeDaysRadio, 4_320),
+            Triple(optionSevenDays, optionSevenDaysRadio, 10_080),
+        )
+    }
+
+    private fun bindArchiveOptions() = archiveOptions().forEach { (row, _, minutes) ->
+        row.setOnClickListener {
             draftArchiveDuration = minutes
             updateArchiveRadios()
             updateSaveVisibility()
         }
-        view?.findViewById<MaterialRadioButton>(radioId)?.isChecked = draftArchiveDuration == minutes
     }
 
-    private fun updateArchiveRadios() {
-        listOf(
-            R.id.option_one_hour_radio to 60,
-            R.id.option_twenty_four_hours_radio to 1_440,
-            R.id.option_three_days_radio to 4_320,
-            R.id.option_seven_days_radio to 10_080,
-        ).forEach { (id, value) -> view?.findViewById<MaterialRadioButton>(id)?.isChecked = draftArchiveDuration == value }
-    }
+    private fun updateArchiveRadios() =
+        archiveOptions().forEach { (_, radio, minutes) -> radio.isChecked = draftArchiveDuration == minutes }
 
     private fun saveChanges() {
         val channel = model?.channel ?: return
-        val currentName = name.editText?.text?.toString().orEmpty()
-        val currentTopic = topic.editText?.text?.toString().orEmpty()
-        val currentSlowMode = SLOWMODE_COOLDOWN_VALUES[slowMode.progress]
-        val currentMessageSlowMode = SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress]
+        val currentName = binding.channelSettingsEditName.editText?.text?.toString().orEmpty()
+        val currentTopic = binding.channelSettingsEditTopic.editText?.text?.toString().orEmpty()
+        val currentSlowMode = SLOWMODE_COOLDOWN_VALUES[binding.channelSettingsSlowModeCooldownSlider.progress]
+        val currentMessageSlowMode = SLOWMODE_COOLDOWN_VALUES[binding.channelSettingsMessageSlowModeSlider.progress]
         RestAPI.api.editTextChannel(
             channel.id,
             RestAPIParams.TextChannel(
@@ -571,11 +616,11 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
     }
 
     private fun updateSaveVisibility() {
-        if (bindingState || !::save.isInitialized) return
-        save.isVisible = name.editText?.text?.toString().orEmpty() != savedName ||
-            topic.editText?.text?.toString().orEmpty() != savedTopic ||
-            SLOWMODE_COOLDOWN_VALUES[slowMode.progress] != savedSlowMode ||
-            SLOWMODE_COOLDOWN_VALUES[messageSlowMode.progress] != savedMessageSlowMode ||
+        if (bindingState || _binding == null) return
+        binding.channelSettingsSave.isVisible = binding.channelSettingsEditName.editText?.text?.toString().orEmpty() != savedName ||
+            binding.channelSettingsEditTopic.editText?.text?.toString().orEmpty() != savedTopic ||
+            SLOWMODE_COOLDOWN_VALUES[binding.channelSettingsSlowModeCooldownSlider.progress] != savedSlowMode ||
+            SLOWMODE_COOLDOWN_VALUES[binding.channelSettingsMessageSlowModeSlider.progress] != savedMessageSlowMode ||
             draftArchiveDuration != savedArchiveDuration ||
             draftVisibility != savedVisibility ||
             draftIsAnnouncement != savedIsAnnouncement ||
@@ -642,11 +687,6 @@ class WidgetTextChannelSettings : AppFragment(R.layout.widget_text_channel_setti
         private const val ANNOUNCEMENT_ARTICLE_URL = "https://support.discord.com/hc/en-us/articles/360032008192"
         private const val MAX_TOPIC_LENGTH = 1_024
         private const val MAX_FORUM_TOPIC_LENGTH = 4_096
-        private val VISIBILITY_ROWS = listOf(
-            R.id.channel_settings_visibility_default to ContentVisibility.DEFAULT,
-            R.id.channel_settings_spoiler to ContentVisibility.SPOILER,
-            R.id.channel_settings_nsfw to ContentVisibility.AGE_RESTRICTED,
-        )
         val SLOWMODE_COOLDOWN_VALUES = listOf(0, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1_800, 3_600, 7_200, 21_600)
 
         @JvmStatic

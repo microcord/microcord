@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern channel settings' archive card: same ids and root type as widget_thread_archive_actions_sheet, so that layout's binding binds this one too. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:overScrollMode="never">
+    <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+        <LinearLayout android:id="@+id/auto_archive_header" android:visibility="gone" style="@style/UiKit.ViewGroup.LinearLayout">
+            <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            <TextView android:id="@+id/subtitle" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        </LinearLayout>
+        <TextView android:id="@+id/archive_now" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:id="@+id/auto_archive_sheet_duration_options" android:layout_width="match_parent" android:layout_height="wrap_content">
+            <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/option_one_hour" style="@style/ChannelSettings.Option">
+                <TextView android:text="@string/auto_archive_duration_1_hour" style="@style/ChannelSettings.Option.Label"/>
+                <com.google.android.material.radiobutton.MaterialRadioButton android:id="@+id/option_one_hour_radio" style="@style/ChannelSettings.Option.Radio"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+            <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/option_twenty_four_hours" style="@style/ChannelSettings.Option">
+                <TextView android:text="@string/auto_archive_duration_24_hours" style="@style/ChannelSettings.Option.Label"/>
+                <com.google.android.material.radiobutton.MaterialRadioButton android:id="@+id/option_twenty_four_hours_radio" style="@style/ChannelSettings.Option.Radio"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+            <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/option_three_days" style="@style/ChannelSettings.Option">
+                <TextView android:text="@string/auto_archive_duration_3_days" style="@style/ChannelSettings.Option.Label"/>
+                <com.google.android.material.radiobutton.MaterialRadioButton android:id="@+id/option_three_days_radio" style="@style/ChannelSettings.Option.Radio"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+            <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/option_seven_days" style="@style/ChannelSettings.Option">
+                <TextView android:text="@string/auto_archive_duration_1_week" style="@style/ChannelSettings.Option.Label"/>
+                <com.google.android.material.radiobutton.MaterialRadioButton android:id="@+id/option_seven_days_radio" style="@style/ChannelSettings.Option.Radio"/>
+            </androidx.constraintlayout.widget.ConstraintLayout>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
