@@ -24,7 +24,7 @@ import com.discord.widgets.voice.fullscreen.CallParticipant
 class VideoCallGridAdapter(
     private val onParticipantTapped: (CallParticipant) -> Unit,
     private val onParticipantLongClicked: (CallParticipant) -> Unit,
-    private val onWatchStreamClicked: (String) -> Unit,
+    private val onWatchStreamClicked: (String, Boolean) -> Unit,
     private val onStreamQualityIndicatorShown: (
         VideoCallParticipantView.StreamResolution,
         VideoCallParticipantView.StreamFps?,

@@ -196,7 +196,7 @@ class WidgetCallFullscreenViewModel constructor(
             emptyList()
         }
 
-        if (callModel.activeStream?.stream?.encodedStreamKey == pendingStreamKey) pendingStreamKey = null
+        if (pendingStreamKey in state.activeStreams) pendingStreamKey = null
         val users = when {
             !callModel.isConnected -> emptyList()
             isStage -> state.stageCallModel?.mediaParticipants?.map { it.voiceUser }.orEmpty()
@@ -206,8 +206,12 @@ class WidgetCallFullscreenViewModel constructor(
             createVideoGridEntriesForParticipant(
                 participant = it,
                 channelId = callModel.channel.id,
-                activeApplicationStream = callModel.activeStream,
-                streamQuality = state.streamQuality,
+                activeStreams = state.activeStreams,
+                streamQualities = state.streamQualities,
+                // Adding alongside only differs from Watch while someone else's stream is playing.
+                canWatchAlongside = state.activeStreams.values.any {
+                    it.stream.ownerId != callModel.myId && it.state.isStreamActive()
+                },
                 selectedVideoInputDevice = callModel.selectedVideoDevice,
                 showLabels = !(previousViewState?.isIdleFooter ?: false),
             )
@@ -569,16 +573,15 @@ class WidgetCallFullscreenViewModel constructor(
     }
 
     fun requestStopWatchingStreamFromUserInput() {
-        val state = viewState as? ViewState.Valid
-        stopWatchingStream()
-        state?.callModel?.activeStream?.stream?.let {
-            eventSubject.onNext(
-                Event.EnqueueStreamFeedbackSheet(
-                    it.encodedStreamKey,
-                    state.callModel.rtcConnectionMetadata?.mediaSessionId,
-                ),
-            )
-        }
+        val state = viewState as? ViewState.Valid ?: return
+        val stream = focusedActiveStream() ?: state.callModel.activeStream ?: return
+        stopWatchingStream(stream)
+        eventSubject.onNext(
+            Event.EnqueueStreamFeedbackSheet(
+                stream.stream.encodedStreamKey,
+                state.callModel.rtcConnectionMetadata?.mediaSessionId,
+            ),
+        )
     }
 
     fun selectTextChannelAfterFinish() {
@@ -645,15 +648,13 @@ class WidgetCallFullscreenViewModel constructor(
         if (state.cameraState == CameraState.CAMERA_ON) mediaEngineStore.cycleVideoInputDevice()
     }
 
+    /** Watches [streamKey] and fills the screen with it; [keepOthers] keeps the other streams playing. */
     @MainThread
-    fun targetAndFocusStream(streamKey: String) {
+    fun targetAndFocusStream(streamKey: String, keepOthers: Boolean = false) {
         pendingStreamKey = streamKey
-        targetStream(streamKey)
+        applicationStreamingStore.targetStream(streamKey, keepOthers = keepOthers)
         focusVideoParticipant("${ModelApplicationStream.decodeStreamKey(streamKey).ownerId}--STREAM")
     }
-
-    @MainThread
-    fun targetStream(streamKey: String) = applicationStreamingStore.targetStream(streamKey)
 
     @MainThread
     fun toggleCameraPressed() {
@@ -743,11 +744,15 @@ class WidgetCallFullscreenViewModel constructor(
                     StageCallModel.observeStageCallModel(channelId),
                     permissionsStore.observePermissionsForChannel(channelId),
                     streamRtcConnectionStore.observeStreamVolume().distinctUntilChanged(),
-                    streamRtcConnectionStore.observeConnectionQuality().distinctUntilChanged(),
+                    Observable.combineLatest(
+                        streamRtcConnectionStore.observeConnectionQualities(),
+                        applicationStreamingStore.observeActiveStreams(),
+                        ::Pair,
+                    ),
                     first,
                     second,
                     third,
-                ) { stageCall, permissions, streamVolume, streamQuality, a, b, c ->
+                ) { stageCall, permissions, streamVolume, (streamQualities, activeStreams), a, b, c ->
                     StoreState.Valid(
                         callModel = callModel,
                         stageCallModel = stageCall,
@@ -755,7 +760,8 @@ class WidgetCallFullscreenViewModel constructor(
                             StoreMediaSettings.NoiseProcessing.Cancellation,
                         myPermissions = permissions,
                         streamVolume = streamVolume,
-                        streamQuality = streamQuality,
+                        streamQualities = streamQualities,
+                        activeStreams = activeStreams,
                         isScreenReaderEnabled = a.screenReader,
                         totalMentionsCount = a.totalMentions,
                         connectivityState = a.connectivity,
@@ -791,8 +797,9 @@ class WidgetCallFullscreenViewModel constructor(
     private fun createVideoGridEntriesForParticipant(
         participant: StoreVoiceParticipants.VoiceUser,
         channelId: Long,
-        activeApplicationStream: StoreApplicationStreaming.ActiveApplicationStream?,
-        streamQuality: RtcConnection.Quality?,
+        activeStreams: Map<String, StoreApplicationStreaming.ActiveApplicationStream>,
+        streamQualities: Map<String, RtcConnection.Quality>,
+        canWatchAlongside: Boolean,
         selectedVideoInputDevice: VideoInputDeviceDescription?,
         showLabels: Boolean,
     ): List<CallParticipant> {
@@ -814,28 +821,32 @@ class WidgetCallFullscreenViewModel constructor(
 
         val participantStream = participant.applicationStream
         val selfStream = participant.voiceState?.selfStream == true
+        // Every stream being watched gets its own live tile; the rest show as joinable.
+        val watched = activeStreams.values.firstOrNull { it.stream.ownerId == participant.user.id }
+        val streamKey: String?
         val streamData = when {
-            participantStream != null && selfStream && participantStream.channelId == channelId ->
+            participantStream != null && selfStream && participantStream.channelId == channelId -> {
+                streamKey = participantStream.encodedStreamKey
                 applicationStreamParticipant(
                     participant,
-                    when (participantStream.encodedStreamKey) {
-                        activeApplicationStream?.stream?.encodedStreamKey ->
-                            activeApplicationStream.state.toParticipantState()
+                    activeStreams[streamKey]?.state?.toParticipantState() ?: when (streamKey) {
                         pendingStreamKey -> VideoCallParticipantView.ParticipantData.ApplicationStreamState.CONNECTING
                         else -> VideoCallParticipantView.ParticipantData.ApplicationStreamState.INACTIVE
                     },
                     showLabels,
+                    canWatchAlongside,
                 )
-            activeApplicationStream?.stream?.ownerId == participant.user.id &&
-                isStreamFocused(activeApplicationStream.stream) ->
-                applicationStreamParticipant(
-                    participant,
-                    activeApplicationStream.state.toParticipantState(),
-                    showLabels,
-                )
-            else -> null
+            }
+            watched != null && isStreamFocused(watched.stream) -> {
+                streamKey = watched.stream.encodedStreamKey
+                applicationStreamParticipant(participant, watched.state.toParticipantState(), showLabels)
+            }
+            else -> {
+                streamKey = null
+                null
+            }
         }
-        if (streamData != null) result += addStreamQualityMetadata(streamData, streamQuality)
+        if (streamData != null) result += addStreamQualityMetadata(streamData, streamQualities[streamKey])
         return result
     }
 
@@ -843,6 +854,7 @@ class WidgetCallFullscreenViewModel constructor(
         participant: StoreVoiceParticipants.VoiceUser,
         state: VideoCallParticipantView.ParticipantData.ApplicationStreamState,
         showLabel: Boolean,
+        canWatchAlongside: Boolean = false,
     ) = CallParticipant.UserOrStreamParticipant(
         VideoCallParticipantView.ParticipantData(
             voiceParticipant = participant,
@@ -854,6 +866,7 @@ class WidgetCallFullscreenViewModel constructor(
             showLabel = showLabel,
             isFullScreen = false,
             streamQuality = null,
+            canWatchAlongside = canWatchAlongside,
         ),
     )
 
@@ -1043,32 +1056,36 @@ class WidgetCallFullscreenViewModel constructor(
     private fun isStreamFocused(stream: ModelApplicationStream) =
         focusedVideoParticipantKey == "${stream.ownerId}--STREAM"
 
-    private fun stopWatchingStream() {
+    private fun activeStreams(): Map<String, StoreApplicationStreaming.ActiveApplicationStream> =
+        (mostRecentStoreState as? StoreState.Valid)?.activeStreams.orEmpty()
+
+    /** The watched stream currently filling the screen, if any. */
+    private fun focusedActiveStream(): StoreApplicationStreaming.ActiveApplicationStream? =
+        activeStreams().values.firstOrNull { isStreamFocused(it.stream) }
+
+    /** Stops [stream] alone; any other stream being watched keeps playing. */
+    private fun stopWatchingStream(stream: StoreApplicationStreaming.ActiveApplicationStream) {
+        applicationStreamingStore.stopStream(stream.stream.encodedStreamKey)
         val state = viewState as? ViewState.Valid ?: return
-        state.callModel.activeStream?.stream?.encodedStreamKey?.let(applicationStreamingStore::stopStream)
-        state.callModel.activeStream?.stream?.let {
-            if (isStreamFocused(it)) {
-                focusedVideoParticipantKey = null
-                updateViewState(
-                    state.copy(
-                        visibleVideoParticipants = computeVisibleVideoParticipants(),
-                        focusedParticipantKey = null,
-                        pipParticipant = computePipParticipant(
-                            state.callModel.myId,
-                            state.callModel.selectedVideoDevice,
-                            state.callModel.isStreaming,
-                            state.cameraState,
-                        ),
-                    ),
-                )
-            }
-        }
+        if (!isStreamFocused(stream.stream)) return
+        focusedVideoParticipantKey = null
+        updateViewState(
+            state.copy(
+                visibleVideoParticipants = computeVisibleVideoParticipants(),
+                focusedParticipantKey = null,
+                pipParticipant = computePipParticipant(
+                    state.callModel.myId,
+                    state.callModel.selectedVideoDevice,
+                    state.callModel.isStreaming,
+                    state.cameraState,
+                ),
+            ),
+        )
     }
 
-    private fun stopWatchingStreamIfEnded() {
-        val active = (viewState as? ViewState.Valid)?.callModel?.activeStream ?: return
-        if (active.state == StoreApplicationStreaming.ActiveApplicationStream.State.ENDED) stopWatchingStream()
-    }
+    private fun stopWatchingStreamIfEnded() = activeStreams().values
+        .filter { it.state == StoreApplicationStreaming.ActiveApplicationStream.State.ENDED }
+        .forEach(::stopWatchingStream)
 
     private fun startTapForwardingJob() {
         cancelTapForwardingJob()
@@ -1182,7 +1199,9 @@ class WidgetCallFullscreenViewModel constructor(
             val noiseCancellation: Boolean?,
             val myPermissions: Long?,
             val streamVolume: Float,
-            val streamQuality: RtcConnection.Quality?,
+            val streamQualities: Map<String, RtcConnection.Quality>,
+            /** Every stream being broadcast or watched, keyed by stream key. */
+            val activeStreams: Map<String, StoreApplicationStreaming.ActiveApplicationStream>,
             val isScreenReaderEnabled: Boolean,
             val totalMentionsCount: Int,
             val connectivityState: StoreConnectivity.DelayedState,

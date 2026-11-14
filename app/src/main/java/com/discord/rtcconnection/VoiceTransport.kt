@@ -34,6 +34,7 @@ import com.discord.utilities.networking.NetworkMonitor
 import com.discord.utilities.time.Clock
 import com.discord.widgets.voice.VoiceStoreAccess
 import com.hammerandchisel.libdiscord.Discord
+import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLSocketFactory
 import rx.Subscription
 
@@ -406,24 +407,30 @@ class VoiceTransport(
     // region Stream connection
 
     /**
-     * The second connection, the one carrying a Go Live broadcast.
+     * The Go Live connections, one per stream being broadcast or watched.
      *
-     * It is created by `STREAM_CREATE` but cannot dial until `STREAM_SERVER_UPDATE` names an
+     * Each is created by `STREAM_CREATE` but cannot dial until `STREAM_SERVER_UPDATE` names an
      * endpoint, so [connect] deliberately builds it in [RtcConnection.State.AwaitingEndpoint] by
      * passing a null endpoint, and [updateServer] is what actually opens it.
      */
     private inner class StreamConnectionControllerImpl :
         StoreStreamRtcConnection.StreamConnectionController {
 
-        private var connection: RtcConnection? = null
-        private var channelId: Long? = null
-        private var sessionId: String? = null
+        private inner class Entry(
+            val connection: RtcConnection,
+            val sessionId: String,
+            val ownerId: Long,
+            val isOwn: Boolean,
+        )
+
+        private val entries = ConcurrentHashMap<String, Entry>()
         private var screenshareIntent: Intent? = null
         private var thumbnailEmitter: ThumbnailEmitter? = null
 
-        override val connectedChannelId: Long? get() = channelId
+        /** Our own broadcast's connection; screen frames go out over it and no other. */
+        private val ownConnection: RtcConnection? get() = entries.values.firstOrNull { it.isOwn }?.connection
 
-        override val connectedSessionId: String? get() = sessionId
+        override fun connectedSessionId(streamKey: String): String? = entries[streamKey]?.sessionId
 
         override fun connect(
             userId: Long,
@@ -435,7 +442,7 @@ class VoiceTransport(
             streamKey: String,
         ) {
             if (released) return
-            disconnect()
+            disconnect(streamKey)
             val created = RtcConnection(
                 guildId = guildId,
                 channelId = channelId,
@@ -451,57 +458,55 @@ class VoiceTransport(
                 loggingTagPrefix = "Stream",
                 streamKey = streamKey,
             )
-            created.addListener(StreamConnectionListener())
-            connection = created
-            this.channelId = channelId
-            this.sessionId = sessionId
+            created.addListener(StreamConnectionListener(streamKey))
+            entries[streamKey] = Entry(created, sessionId, streamOwnerId, isOwn = streamOwnerId == userId)
             created.connect(null, null, sslSocketFactory())
         }
 
-        override fun updateServer(endpoint: String?, token: String?) {
-            connection?.connect(endpoint, token, sslSocketFactory())
+        override fun updateServer(streamKey: String, endpoint: String?, token: String?) {
+            entries[streamKey]?.connection?.connect(endpoint, token, sslSocketFactory())
         }
 
-        override fun disconnect() {
-            connection?.disconnect()
-            connection = null
-            channelId = null
-            sessionId = null
+        override fun disconnect(streamKey: String?) {
+            val keys = if (streamKey == null) entries.keys.toList() else listOf(streamKey)
+            keys.forEach { entries.remove(it)?.connection?.disconnect() }
         }
 
         override fun setUserOutputVolume(userId: Long, volume: Float) {
-            connection?.setUserOutputVolume(userId, volume)
+            entries.values.filter { it.ownerId == userId }.forEach { it.connection.setUserOutputVolume(userId, volume) }
         }
 
+        /** Each connection only carries its streamer, so the others are told nobody is focused. */
         override fun setFocusedParticipant(userId: Long?) {
-            connection?.setFocusedParticipant(userId)
+            entries.values.forEach { it.connection.setFocusedParticipant(userId?.takeIf { id -> id == it.ownerId }) }
         }
 
         fun setScreenshare(permissionResultData: Intent?, thumbnailEmitter: ThumbnailEmitter?) {
             screenshareIntent = permissionResultData
             this.thumbnailEmitter = thumbnailEmitter
-            if (permissionResultData == null) connection?.setScreenshare(null)
+            if (permissionResultData == null) ownConnection?.setScreenshare(null)
         }
 
-        fun startScreenshare() {
-            screenshareIntent?.let { connection?.setScreenshare(it, thumbnailEmitter) }
+        fun onConnected(streamKey: String) {
+            val entry = entries[streamKey]?.takeIf { it.isOwn } ?: return
+            screenshareIntent?.let { entry.connection.setScreenshare(it, thumbnailEmitter) }
         }
 
-        fun describe(): Map<String, Any?> = connection?.describe() ?: emptyMap()
+        fun describe(): Map<String, Any?> = entries.mapValues { it.value.connection.describe() }
     }
 
-    private inner class StreamConnectionListener : RtcConnection.DefaultListener() {
+    private inner class StreamConnectionListener(private val streamKey: String) : RtcConnection.DefaultListener() {
         override fun onStateChange(stateChange: RtcConnection.StateChange) {
             val connected = stateChange.state == RtcConnection.State.RtcConnected
             dispatcher.schedule {
-                storeStreamRtcConnection.handleStreamRtcConnectionStateChange(connected)
-                storeStreamRtcConnection.handleMediaSessionIdReceived(stateChange.metadata?.mediaSessionId)
+                storeStreamRtcConnection.handleStreamRtcConnectionStateChange(streamKey, connected)
+                storeStreamRtcConnection.handleMediaSessionIdReceived(streamKey, stateChange.metadata?.mediaSessionId)
             }
-            if (connected) streamController.startScreenshare()
+            if (connected) streamController.onConnected(streamKey)
         }
 
         override fun onQualityUpdate(quality: RtcConnection.Quality) {
-            dispatcher.schedule { storeStreamRtcConnection.handleQualityUpdate(quality) }
+            dispatcher.schedule { storeStreamRtcConnection.handleQualityUpdate(streamKey, quality) }
         }
 
         override fun onSecureFramesStateUpdate(stateUpdateJson: String) {
@@ -607,7 +612,7 @@ class VoiceTransport(
         if (released) return
         released = true
 
-        streamController.disconnect()
+        streamController.disconnect(null)
         voiceController.disconnect("Voice transport released")
         voiceSettingsSubscription?.unsubscribe()
         voiceSettingsSubscription = null

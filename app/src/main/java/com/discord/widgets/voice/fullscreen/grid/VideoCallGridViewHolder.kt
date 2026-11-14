@@ -28,7 +28,7 @@ sealed class VideoCallGridViewHolder(itemView: View) : RecyclerView.ViewHolder(i
             callParticipant: CallParticipant.UserOrStreamParticipant,
             onTapped: (CallParticipant) -> Unit,
             onLongClicked: (CallParticipant) -> Unit,
-            onWatchStreamClicked: (String) -> Unit,
+            onWatchStreamClicked: (String, Boolean) -> Unit,
             displayCutout: DisplayCutoutCompat?,
             spanCount: Int,
             onStreamQualityIndicatorShown: (

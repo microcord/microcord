@@ -12,7 +12,6 @@ import com.google.gson.GsonBuilder
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
@@ -21,7 +20,7 @@ import rx.schedulers.TestScheduler
 class StoreStreamRtcConnectionTest {
 
     @Test
-    fun createServerConnectAndDeleteDriveOneStreamLifecycle() {
+    fun twoWatchedStreamsKeepSeparateConnections() {
         val scheduler = TestScheduler()
         val dispatcher = Dispatcher(scheduler)
         val deck = ObservationDeck()
@@ -29,43 +28,56 @@ class StoreStreamRtcConnectionTest {
         val controller = FakeStreamController()
         val store = StoreStreamRtcConnection(dispatcher, users, controller, deck)
         dispatcher.registerDispatchHandlers(StoreV2DispatchHandler(listOf(users, store), deck))
-        val stream = ModelApplicationStream.GuildStream(GUILD_ID, CHANNEL_ID, OWNER_ID)
+        val first = ModelApplicationStream.GuildStream(GUILD_ID, CHANNEL_ID, OWNER_ID).encodedStreamKey
+        val second = ModelApplicationStream.GuildStream(GUILD_ID, CHANNEL_ID, OTHER_OWNER_ID).encodedStreamKey
 
         dispatcher.schedule {
             users.handleConnectionOpen(readyPayload())
             store.handleConnectionOpen(readyPayload())
-            store.handleStreamCreate(StreamCreateOrUpdate(stream.encodedStreamKey, RTC_SERVER_ID))
-            store.handleStreamServerUpdate(
-                StreamServerUpdate(stream.encodedStreamKey, "stream.example", "token"),
-            )
-            store.handleStreamRtcConnectionStateChange(true)
+            store.handleStreamCreate(StreamCreateOrUpdate(first, RTC_SERVER_ID))
+            store.handleStreamCreate(StreamCreateOrUpdate(second, RTC_SERVER_ID))
+            // A resumed gateway re-sends STREAM_CREATE; the live connection must survive it.
+            store.handleStreamCreate(StreamCreateOrUpdate(first, RTC_SERVER_ID))
+            store.handleStreamServerUpdate(StreamServerUpdate(first, "stream.example", "token"))
+            store.handleStreamRtcConnectionStateChange(first, true)
         }
         scheduler.triggerActions()
 
         assertEquals(
-            StreamConnection(ME_ID, GUILD_ID, CHANNEL_ID, SESSION_ID, RTC_SERVER_ID, OWNER_ID),
-            controller.connections.single(),
+            listOf(
+                StreamConnection(ME_ID, GUILD_ID, CHANNEL_ID, SESSION_ID, RTC_SERVER_ID, OWNER_ID),
+                StreamConnection(ME_ID, GUILD_ID, CHANNEL_ID, SESSION_ID, RTC_SERVER_ID, OTHER_OWNER_ID),
+            ),
+            controller.connections,
         )
-        assertEquals("stream.example" to "token", controller.serverUpdates.single())
+        assertEquals(Triple(first, "stream.example", "token"), controller.serverUpdates.single())
         assertEquals(OWNER_ID to 300f, controller.volumeUpdates.single())
-        assertTrue(store.getState().isConnected)
-        assertEquals(stream.encodedStreamKey, store.getState().streamKey)
+        assertTrue(store.getStates().getValue(first).isConnected)
+        assertFalse(store.getStates().getValue(second).isConnected)
+
+        dispatcher.schedule {
+            store.handleStreamDelete(first)
+            // A late callback from the deleted connection does not bring it back.
+            store.handleStreamRtcConnectionStateChange(first, false)
+        }
+        scheduler.triggerActions()
+
+        assertEquals(listOf<String?>(first), controller.disconnects)
+        assertEquals(setOf(second), store.getStates().keys)
 
         dispatcher.schedule { store.handleStreamDelete() }
         scheduler.triggerActions()
 
-        assertEquals(1, controller.disconnects)
-        assertFalse(store.getState().isConnected)
-        assertNull(store.getState().streamKey)
+        assertEquals(listOf(first, null), controller.disconnects)
+        assertTrue(store.getStates().isEmpty())
     }
 
     private class FakeStreamController : StoreStreamRtcConnection.StreamConnectionController {
         val connections = mutableListOf<StreamConnection>()
-        val serverUpdates = mutableListOf<Pair<String?, String?>>()
+        val serverUpdates = mutableListOf<Triple<String, String?, String?>>()
         val volumeUpdates = mutableListOf<Pair<Long, Float>>()
-        var disconnects = 0
-        override var connectedChannelId: Long? = null
-        override var connectedSessionId: String? = null
+        val disconnects = mutableListOf<String?>()
+        private val sessions = HashMap<String, String>()
 
         override fun connect(
             userId: Long,
@@ -79,19 +91,19 @@ class StoreStreamRtcConnectionTest {
             connections += StreamConnection(
                 userId, guildId, channelId, sessionId, rtcServerId, streamOwnerId,
             )
-            connectedChannelId = channelId
-            connectedSessionId = sessionId
+            sessions[streamKey] = sessionId
         }
 
-        override fun updateServer(endpoint: String?, token: String?) {
-            serverUpdates += endpoint to token
+        override fun updateServer(streamKey: String, endpoint: String?, token: String?) {
+            serverUpdates += Triple(streamKey, endpoint, token)
         }
 
-        override fun disconnect() {
-            disconnects++
-            connectedChannelId = null
-            connectedSessionId = null
+        override fun disconnect(streamKey: String?) {
+            disconnects += streamKey
+            if (streamKey == null) sessions.clear() else sessions.remove(streamKey)
         }
+
+        override fun connectedSessionId(streamKey: String): String? = sessions[streamKey]
 
         override fun setUserOutputVolume(userId: Long, volume: Float) {
             volumeUpdates += userId to volume
@@ -114,6 +126,7 @@ class StoreStreamRtcConnectionTest {
         private const val GUILD_ID = 5L
         private const val CHANNEL_ID = 50L
         private const val OWNER_ID = 9L
+        private const val OTHER_OWNER_ID = 11L
         private const val SESSION_ID = "session"
         private const val RTC_SERVER_ID = "rtc-server"
 

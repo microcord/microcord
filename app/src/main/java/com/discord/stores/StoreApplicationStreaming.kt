@@ -17,8 +17,8 @@ import rx.Observable
  * - [streamsByUser] — derived purely from voice states (`self_stream`), so it is correct for every
  *   user in every channel we can see, not just the one we are in.
  * - [streamSpectators] — from `STREAM_CREATE`/`STREAM_UPDATE`, only for streams we participate in.
- * - [activeApplicationStream] — the single stream this client is broadcasting *or* watching, with
- *   its connection state. There is only ever one.
+ * - [activeStreams] — every stream this client is broadcasting or watching, with its connection
+ *   state, keyed by stream key. Several can be watched at once, as on desktop; at most one is ours.
  *
  * [targetStream] handles the "watch a stream in a channel I am not in yet" flow: the request is
  * parked until the voice channel selection catches up, then replayed.
@@ -88,7 +88,18 @@ class StoreApplicationStreaming(
         }
     }
 
-    private var activeApplicationStream: ActiveApplicationStream? = null
+    /** Insertion-ordered, so the last entry is the stream most recently asked for. */
+    private val activeStreams = LinkedHashMap<String, ActiveApplicationStream>()
+    private var activeStreamsSnapshot: Map<String, ActiveApplicationStream> = emptyMap()
+    private var activeApplicationStreamSnapshot: ActiveApplicationStream? = null
+
+    /**
+     * The one stream for callers that only show one: our own broadcast while there is one, else
+     * the stream watched most recently.
+     */
+    private val activeApplicationStream: ActiveApplicationStream?
+        get() = activeStreams.values.firstOrNull(::isOwn) ?: activeStreams.values.lastOrNull()
+
     private var targetStream: ModelApplicationStream? = null
 
     private val streamsByUser = HashMap<Long, ModelApplicationStream>()
@@ -120,24 +131,37 @@ class StoreApplicationStreaming(
     @Synchronized
     private fun dumpBreadcrumbs() = breadCrumbs.forEach { Log.w(LOG_TAG, it) }
 
-    private fun isScreenSharing(activeApplicationStream: ActiveApplicationStream?): Boolean =
-        activeApplicationStream?.stream?.ownerId == userStore.getMeInternal().id
+    private fun isOwn(stream: ActiveApplicationStream): Boolean =
+        stream.stream.ownerId == userStore.getMeInternal().id
 
     @StoreThread
-    private fun updateActiveApplicationStream(activeApplicationStream: ActiveApplicationStream?) {
-        val wasScreenSharing = isScreenSharing(this.activeApplicationStream)
-        val isScreenSharing = isScreenSharing(activeApplicationStream)
+    private fun updateActiveStreams(update: MutableMap<String, ActiveApplicationStream>.() -> Unit) {
+        val wasScreenSharing = isScreenSharing()
+        activeStreams.update()
+        val isScreenSharing = isScreenSharing()
         if (wasScreenSharing != isScreenSharing) onIsScreenSharingChanged(isScreenSharing)
-        this.activeApplicationStream = activeApplicationStream
+        markChanged()
+    }
+
+    @StoreThread
+    private fun putActiveStream(streamKey: String, state: ActiveApplicationStream.State) =
+        updateActiveStreams {
+            this[streamKey] = ActiveApplicationStream(state, ModelApplicationStream.decodeStreamKey(streamKey))
+        }
+
+    /** Streams only exist inside their voice channel, so leaving one ends every stream in it. */
+    @StoreThread
+    private fun dropStreamsOutside(channelId: Long?) {
+        if (activeStreams.values.any { it.stream.channelId != channelId }) {
+            updateActiveStreams { values.removeAll { it.stream.channelId != channelId } }
+        }
     }
 
     @StoreThread
     private fun handleStreamCreateOrUpdate(streamKey: String, paused: Boolean, viewerIds: List<Long>) {
         val state =
             if (paused) ActiveApplicationStream.State.PAUSED else ActiveApplicationStream.State.ACTIVE
-        updateActiveApplicationStream(
-            ActiveApplicationStream(state, ModelApplicationStream.decodeStreamKey(streamKey)),
-        )
+        putActiveStream(streamKey, state)
         streamSpectators[streamKey] = viewerIds
         streamViewerTracker.onStreamUpdated(streamKey, viewerIds.size)
         markChanged()
@@ -171,17 +195,12 @@ class StoreApplicationStreaming(
             } else {
                 ModelApplicationStream.CallStream(channelId, ownerId)
             }
-            val active = activeApplicationStream
-            val alreadyStreamingThis =
-                active?.stream?.encodedStreamKey == stream.encodedStreamKey &&
-                    active?.state?.isStreamActive() == true
-            if (alreadyStreamingThis) return@schedule
+            if (activeStreams[stream.encodedStreamKey]?.state?.isStreamActive() == true) return@schedule
 
-            // Only one stream at a time: replacing an active one has to tear the old one down first
-            // or the backend keeps both alive and the viewer sees the stale feed.
-            if (active?.state?.isStreamActive() == true) {
-                stopStreamInternal(active.stream.encodedStreamKey)
-            }
+            // Only one broadcast at a time: replacing ours has to tear the old one down first or
+            // the backend keeps both alive. Streams we are watching are unaffected.
+            activeStreams.values.firstOrNull { isOwn(it) && it.state.isStreamActive() }
+                ?.let { stopStreamInternal(it.stream.encodedStreamKey) }
             streamCreateRequest(stream.encodedStreamKey, preferredRegion)
         }
 
@@ -209,9 +228,9 @@ class StoreApplicationStreaming(
         addBreadCrumb("Connection open, clearing streams by user.")
         streamsByUser.clear()
         streamViewerTracker.clear()
-        activeApplicationStream
-            ?.takeIf { it.state != ActiveApplicationStream.State.ENDED }
-            ?.let { targetStream(it.stream.encodedStreamKey, force = true) }
+        activeStreams.values
+            .filter { it.state != ActiveApplicationStream.State.ENDED }
+            .forEach { targetStream(it.stream.encodedStreamKey, force = true, keepOthers = true) }
         payload.guilds?.forEach { guild ->
             guild.voiceStates?.forEach { handleVoiceStateUpdate(it, guild.id) }
         }
@@ -231,34 +250,20 @@ class StoreApplicationStreaming(
 
     /** Local echo of our own opcode-18 send, so the UI shows "connecting" before the server replies. */
     @StoreThread
-    fun handleStreamCreateRequest(streamKey: String) {
-        updateActiveApplicationStream(
-            ActiveApplicationStream(
-                ActiveApplicationStream.State.CONNECTING,
-                ModelApplicationStream.decodeStreamKey(streamKey),
-            ),
-        )
-        markChanged()
-    }
+    fun handleStreamCreateRequest(streamKey: String) =
+        putActiveStream(streamKey, ActiveApplicationStream.State.CONNECTING)
 
     /** Local echo of our own opcode-20 send. */
     @StoreThread
-    fun handleStreamWatch(streamKey: String) {
-        updateActiveApplicationStream(
-            ActiveApplicationStream(
-                ActiveApplicationStream.State.CONNECTING,
-                ModelApplicationStream.decodeStreamKey(streamKey),
-            ),
-        )
-        markChanged()
-    }
+    fun handleStreamWatch(streamKey: String) =
+        putActiveStream(streamKey, ActiveApplicationStream.State.CONNECTING)
 
     /**
      * Applies `STREAM_DELETE`.
      *
      * The reason decides what the user sees:
-     * - `STREAM_FULL` -> [ActiveApplicationStream.State.DENIED_FULL], regardless of what we were on,
-     *   because the rejection is for the stream we just asked to watch
+     * - `STREAM_FULL` -> [ActiveApplicationStream.State.DENIED_FULL]; the rejection is for a stream
+     *   we just asked to watch
      * - `unavailable` -> [ActiveApplicationStream.State.RECONNECTING]; the server is moving us
      * - `USER_REQUESTED` -> gone, we asked for it
      * - anything else -> [ActiveApplicationStream.State.ENDED], which keeps the "stream ended" card
@@ -266,28 +271,21 @@ class StoreApplicationStreaming(
     @StoreThread
     fun handleStreamDelete(streamDelete: StreamDelete) {
         streamSpectators.remove(streamDelete.streamKey)
+        val key = streamDelete.streamKey
         if (streamDelete.deleteReason == StreamDelete.Reason.STREAM_FULL) {
-            updateActiveApplicationStream(
-                ActiveApplicationStream(
-                    ActiveApplicationStream.State.DENIED_FULL,
-                    ModelApplicationStream.decodeStreamKey(streamDelete.streamKey),
-                ),
-            )
-            markChanged()
+            putActiveStream(key, ActiveApplicationStream.State.DENIED_FULL)
             return
         }
 
-        val affected = activeApplicationStream?.stream ?: targetStream
-        if (affected?.encodedStreamKey != streamDelete.streamKey) return
-
-        val next = when {
-            streamDelete.unavailable ->
-                activeApplicationStream?.copy(state = ActiveApplicationStream.State.RECONNECTING)
-            streamDelete.deleteReason == StreamDelete.Reason.USER_REQUESTED -> null
-            else -> activeApplicationStream?.copy(state = ActiveApplicationStream.State.ENDED)
+        val affected = activeStreams[key] ?: return
+        updateActiveStreams {
+            when {
+                streamDelete.unavailable ->
+                    this[key] = affected.copy(state = ActiveApplicationStream.State.RECONNECTING)
+                streamDelete.deleteReason == StreamDelete.Reason.USER_REQUESTED -> remove(key)
+                else -> this[key] = affected.copy(state = ActiveApplicationStream.State.ENDED)
+            }
         }
-        updateActiveApplicationStream(next)
-        markChanged()
     }
 
     /**
@@ -299,8 +297,7 @@ class StoreApplicationStreaming(
     @StoreThread
     fun handleStreamTargeted(streamKey: String) {
         val stream = ModelApplicationStream.decodeStreamKey(streamKey)
-        val active = activeApplicationStream
-        if (stream == active?.stream && active.state.isStreamActive()) return
+        if (activeStreams[streamKey]?.state?.isStreamActive() == true) return
 
         if (getSelectedVoiceChannelId() == stream.channelId) {
             streamWatchRequest(stream.encodedStreamKey)
@@ -313,16 +310,10 @@ class StoreApplicationStreaming(
     @StoreThread
     fun handleVoiceChannelSelected(channelId: Long) {
         val parked = targetStream
-        if (parked != null && channelId == parked.channelId) {
-            streamWatchRequest(parked.encodedStreamKey)
-            targetStream = null
-            return
-        }
-        // Staying in the stream's channel keeps it; anything else drops it, including leaving voice.
-        if (activeApplicationStream?.stream?.channelId == channelId) return
-        updateActiveApplicationStream(null)
         targetStream = null
-        markChanged()
+        if (parked != null && channelId == parked.channelId) streamWatchRequest(parked.encodedStreamKey)
+        // Streams in the newly selected channel are kept; the rest go, including on leaving voice.
+        dropStreamsOutside(channelId)
     }
 
     /**
@@ -354,25 +345,18 @@ class StoreApplicationStreaming(
             streamsByUser.remove(userId) != null -> markChanged()
         }
 
-        val active = activeApplicationStream
-        if (active != null && userId == userStore.getMeInternal().id &&
-            active.stream.channelId != voiceState.channelId
-        ) {
-            updateActiveApplicationStream(null)
-            markChanged()
-        }
+        if (userId == userStore.getMeInternal().id) dropStreamsOutside(voiceState.channelId)
 
         val stream = streamsByUser[userId]
-        if (isStreaming && stream != null && active != null &&
-            stream.encodedStreamKey == active.stream.encodedStreamKey &&
-            active.state == ActiveApplicationStream.State.ENDED
+        if (isStreaming && stream != null &&
+            activeStreams[stream.encodedStreamKey]?.state == ActiveApplicationStream.State.ENDED
         ) {
             handleStreamTargeted(stream.encodedStreamKey)
         }
     }
 
     @StoreThread
-    fun isScreenSharing(): Boolean = isScreenSharing(activeApplicationStream)
+    fun isScreenSharing(): Boolean = activeStreams.values.any(::isOwn)
 
     @StoreThread
     fun isUserStreaming(userId: Long): Boolean {
@@ -381,7 +365,11 @@ class StoreApplicationStreaming(
     }
 
     fun observeActiveStream(): Observable<ActiveApplicationStream?> =
-        observationDeck.connectRx(this) { activeApplicationStream }
+        observationDeck.connectRx(this) { activeApplicationStreamSnapshot }
+
+    /** Every stream being broadcast or watched, keyed by stream key. */
+    fun observeActiveStreams(): Observable<Map<String, ActiveApplicationStream>> =
+        observationDeck.connectRx(this) { activeStreamsSnapshot }.distinctUntilChanged()
 
     fun observeStreamSpectators(): Observable<Map<String, List<Long>>> =
         observationDeck.connectRx(this) { streamSpectatorsSnapshot }.distinctUntilChanged()
@@ -402,19 +390,22 @@ class StoreApplicationStreaming(
     fun stopStream(streamKey: String) = dispatcher.schedule { stopStreamInternal(streamKey) }
 
     /**
-     * Asks to watch [streamKey], stopping whatever we are on first.
+     * Asks to watch [streamKey].
      *
      * @param force replays the request even when we are already on that stream; used after a
      *   reconnect, where the local state says "watching" but the server has forgotten us.
+     * @param keepOthers watches it alongside the streams already being watched, as desktop does;
+     *   otherwise they are stopped first. Our own broadcast is never stopped here.
      */
     @JvmOverloads
-    fun targetStream(streamKey: String, force: Boolean = false) = dispatcher.schedule {
-        val active = activeApplicationStream
-        val alreadyOnIt =
-            active?.stream?.encodedStreamKey == streamKey && active?.state?.isStreamActive() == true
+    fun targetStream(streamKey: String, force: Boolean = false, keepOthers: Boolean = false) = dispatcher.schedule {
+        val alreadyOnIt = activeStreams[streamKey]?.state?.isStreamActive() == true
         if (!force && alreadyOnIt) return@schedule
-        if (active?.state?.isStreamActive() == true) {
-            stopStreamInternal(active.stream.encodedStreamKey)
+        if (alreadyOnIt) stopStreamInternal(streamKey)
+        if (!keepOthers) {
+            activeStreams.values
+                .filter { !isOwn(it) && it.stream.encodedStreamKey != streamKey && it.state.isStreamActive() }
+                .forEach { stopStreamInternal(it.stream.encodedStreamKey) }
         }
         targetStreamRequest?.invoke(streamKey) ?: handleStreamTargeted(streamKey)
     }
@@ -425,6 +416,8 @@ class StoreApplicationStreaming(
         addBreadCrumb("Snapshotting 'streamsByUser' of size, ${streamsByUser.size}")
         try {
             streamsByUserSnapshot = HashMap(streamsByUser)
+            activeStreamsSnapshot = LinkedHashMap(activeStreams)
+            activeApplicationStreamSnapshot = activeApplicationStream
             streamSpectatorsSnapshot = HashMap(streamSpectators)
         } catch (failure: Exception) {
             dumpBreadcrumbs()

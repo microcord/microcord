@@ -114,8 +114,8 @@ class StreamContextService(
             // reference has a ten-argument overload and combines all of them at once.
             Observable.combineLatest(
                 head,
-                applicationStreamingStore.observeActiveStream(),
-            ) { inputs, activeStream -> build(stream, inputs, activeStream) }
+                applicationStreamingStore.observeActiveStreams(),
+            ) { inputs, activeStreams -> build(stream, inputs, activeStreams[stream.encodedStreamKey]) }
         }
 
     private fun previewObservable(
@@ -163,9 +163,7 @@ class StreamContextService(
             joinability = joinability,
             user = user,
             userNickname = inputs.userNickname,
-            isCurrentUserParticipating = activeStream != null &&
-                activeStream.state.isStreamActive() &&
-                activeStream.stream == stream,
+            isCurrentUserParticipating = activeStream?.state?.isStreamActive() == true,
             isSelfStream = user.id == inputs.me.id,
         )
     }

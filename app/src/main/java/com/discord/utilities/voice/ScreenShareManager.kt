@@ -82,12 +82,14 @@ class ScreenShareManager @JvmOverloads constructor(
     }
 
     private fun subscribeToStores() {
+        // Only our own broadcast matters here; streams we are watching have their own connections.
         Observable.combineLatest(
-            storeApplicationStreaming.observeActiveStream(),
-            storeStreamRtcConnection.observeState(),
+            storeApplicationStreaming.observeActiveStreams(),
+            storeStreamRtcConnection.observeStates(),
             storeUser.observeMe(),
-        ) { activeStream, streamRtcConnection, me ->
-            State(activeStream, streamRtcConnection, me.id)
+        ) { activeStreams, streamRtcConnections, me ->
+            val own = activeStreams.values.firstOrNull { it.stream.ownerId == me.id }
+            State(own, own?.let { streamRtcConnections[it.stream.encodedStreamKey] } ?: StoreStreamRtcConnection.State(), me.id)
         }
             .distinctUntilChanged()
             .ui(appComponent)

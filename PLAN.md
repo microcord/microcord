@@ -71,6 +71,11 @@ that compatibility. This documentation cleanup does not change the SDK settings.
 - Voice and streams share the owning media engine. Voice uses the `default`
   native context; streams use separate stream contexts to avoid replacing the
   voice/camera sender. Preserve exact JNI descriptors and callback lifetimes.
+- Several Go Live streams can be watched at once, as on desktop and React Native
+  (a deliberate divergence from 126.21's single stream). Stream state and RTC
+  connections are keyed by stream key; single-stream callers read a primary
+  stream (our broadcast, else the latest watch). Simultaneous playback of more
+  than one stream has not been observed on a device yet.
 - Native provenance and verification are documented under
   [third_party/webrtc-discord-333.5](third_party/webrtc-discord-333.5/README.md).
   The obsolete 126.21 bridge and extractor have been removed; their provenance

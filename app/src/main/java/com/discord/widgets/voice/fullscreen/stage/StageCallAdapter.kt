@@ -28,7 +28,7 @@ class StageCallAdapter(
     private val fragmentManager: FragmentManager,
     val onMediaParticipantTapped: (CallParticipant.UserOrStreamParticipant) -> Unit,
     val onMediaParticipantLongClicked: (CallParticipant.UserOrStreamParticipant) -> Unit,
-    val onWatchStreamClicked: (String) -> Unit,
+    val onWatchStreamClicked: (String, Boolean) -> Unit,
     val onStreamQualityIndicatorShown: (
         VideoCallParticipantView.StreamResolution,
         VideoCallParticipantView.StreamFps?,

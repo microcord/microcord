@@ -1373,11 +1373,13 @@ class StoreStream private constructor(
         voiceTransport.storeRtcConnection.connectionState.filter { it }.subscribe {
             gatewayConnection.handleRtcConnectionLive(null)
         }
-        voiceTransport.storeStreamRtcConnection.observeState()
-            .filter { it.isConnected && it.streamKey != null }
-            .map { requireNotNull(it.streamKey) }
-            .distinctUntilChanged()
-            .subscribe(gatewayConnection::handleRtcConnectionLive)
+        var liveStreamKeys = emptySet<String>()
+        voiceTransport.storeStreamRtcConnection.observeStates()
+            .map { states -> states.filterValues { it.isConnected }.keys }
+            .subscribe { connected ->
+                (connected - liveStreamKeys).forEach(gatewayConnection::handleRtcConnectionLive)
+                liveStreamKeys = connected
+            }
         BootLog.record(BootLogEvent.REST_READY)
         authentication.bindApi(api)
         userSettings.bindApi(api)
@@ -2508,7 +2510,7 @@ class StoreStream private constructor(
         }
         dispatchSubscribe(events.streamUpdate, "streamUpdate", applicationStreaming::handleStreamUpdate)
         dispatchSubscribe(events.streamDelete, "streamDelete") { event ->
-            if (::voiceTransport.isInitialized) voiceTransport.storeStreamRtcConnection.handleStreamDelete()
+            if (::voiceTransport.isInitialized) voiceTransport.storeStreamRtcConnection.handleStreamDelete(event.streamKey)
             applicationStreaming.handleStreamDelete(event)
         }
         dispatchSubscribe(events.streamServerUpdate, "streamServerUpdate") { event ->

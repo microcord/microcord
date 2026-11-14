@@ -22,6 +22,7 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.DisplayCutoutCompat
 import com.discord.R
+import com.discord.databinding.ViewVideoCallParticipantBinding
 import com.discord.i18n.i18nFormat
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreVoiceParticipants
@@ -47,6 +48,8 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         val showLabel: Boolean,
         val isFullScreen: Boolean,
         val streamQuality: StreamQuality?,
+        /** Offers watching this stream alongside another one already playing. */
+        val canWatchAlongside: Boolean = false,
     ) {
         val id = "${voiceParticipant.user.id}$type"
         val streamId: Int?
@@ -98,7 +101,8 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
     val dataId: String? get() = data?.id
     var onStreamQualityIndicatorShown: (StreamResolution, StreamFps?) -> Unit = { _, _ -> }
     var onStreamQualityIndicatorClicked: (StreamResolution, StreamFps?) -> Unit = { _, _ -> }
-    private var onWatchStreamClicked: (String) -> Unit = {}
+    /** Called with the stream key and whether to keep the streams already being watched. */
+    private var onWatchStreamClicked: (String, Boolean) -> Unit = { _, _ -> }
     private var displayCutout: DisplayCutoutCompat? = null
     private var isTopRow = false
     private var callUiInsets = CallUiInsets()
@@ -159,47 +163,13 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
     }).apply { setIsLongpressEnabled(false) }
     private var zoomOutAnimator: ValueAnimator? = null
 
-    private val avatarBackground: View
-    private val letterbox: View
-    private val voiceUser: VoiceUserView
-    private val renderer: AppVideoStreamRenderer
-    private val preview: VitoImageView
-    private val previewText: TextView
-    private val paused: TextView
-    private val ended: View
-    private val loading: ProgressBar
-    private val label: TextView
-    private val mute: ImageView
-    private val deafen: ImageView
-    private val indicators: LinearLayout
-    private val live: TextView
-    private val qualityContainer: View
-    private val qualityIcon: ImageView
-    private val qualityInfo: TextView
-    private val qualityLive: TextView
+    private val binding = ViewVideoCallParticipantBinding.inflate(LayoutInflater.from(context), this)
 
     init {
-        LayoutInflater.from(context).inflate(R.layout.view_video_call_participant, this, true)
-        avatarBackground = requireNotNull(findViewById(R.id.participant_bg_avatar))
-        letterbox = requireNotNull(findViewById(R.id.participant_bg_letterbox))
-        voiceUser = requireNotNull(findViewById(R.id.participant_voice_user_view))
-        renderer = requireNotNull(findViewById(R.id.participant_video_stream_renderer))
-        preview = requireNotNull(findViewById(R.id.participant_stream_preview_image))
-        previewText = requireNotNull(findViewById(R.id.participant_stream_preview_text))
-        paused = requireNotNull(findViewById(R.id.participant_stream_paused))
-        ended = requireNotNull(findViewById(R.id.participant_stream_ended))
-        loading = requireNotNull(findViewById(R.id.participant_video_loading_indicator))
-        label = requireNotNull(findViewById(R.id.participant_video_label))
-        mute = requireNotNull(findViewById(R.id.participant_mute_status_indicator))
-        deafen = requireNotNull(findViewById(R.id.participant_deafen_status_indicator))
-        indicators = requireNotNull(findViewById(R.id.participant_voice_indicators))
-        live = requireNotNull(findViewById(R.id.participant_live_indicator))
-        qualityContainer = requireNotNull(findViewById(R.id.participant_fullscreen_streamqual_container))
-        qualityIcon = requireNotNull(findViewById(R.id.participant_fullscreen_streamqual_icon))
-        qualityInfo = requireNotNull(findViewById(R.id.participant_fullscreen_streamqual_info))
-        qualityLive = requireNotNull(findViewById(R.id.participant_fullscreen_streamqual_live_indicator))
-        voiceUser.setOnBitmapLoadedListener { bitmap, _ -> avatarBackground.setBackgroundColor(bitmap.averageColor()) }
-        qualityContainer.setOnClickListener {
+        binding.participantVoiceUserView.setOnBitmapLoadedListener { bitmap, _ ->
+            binding.participantBgAvatar.setBackgroundColor(bitmap.averageColor())
+        }
+        binding.participantFullscreenStreamqualContainer.setOnClickListener {
             data?.streamQuality?.let { onStreamQualityIndicatorClicked(it.resolution, it.fps) }
         }
 
@@ -219,8 +189,8 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
                 }
             }
         }
-        renderer.setIsOverlay(isOverlay)
-        renderer.setMatchVideoOrientation(matchVideoOrientation)
+        binding.participantVideoStreamRenderer.setIsOverlay(isOverlay)
+        binding.participantVideoStreamRenderer.setMatchVideoOrientation(matchVideoOrientation)
     }
 
     /**
@@ -246,74 +216,79 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
 
     fun onBind(data: ParticipantData) = configure(data)
     fun onRemove() = detachRenderer()
-    fun setOnWatchStreamClicked(listener: (String) -> Unit) { onWatchStreamClicked = listener }
+    fun setOnWatchStreamClicked(listener: (String, Boolean) -> Unit) { onWatchStreamClicked = listener }
 
     private fun render(data: ParticipantData?) {
         val participant = data?.voiceParticipant
         participant?.let {
-            voiceUser.setVoiceUser(it, R.dimen.avatar_size_large)
-            voiceUser.setAvatarDecoration(it.guildMember?.avatarDecoration ?: it.user.avatarDecoration)
+            binding.participantVoiceUserView.setVoiceUser(it, R.dimen.avatar_size_large)
+            binding.participantVoiceUserView.setAvatarDecoration(it.guildMember?.avatarDecoration ?: it.user.avatarDecoration)
         }
-        mute.visibility = visible(participant?.isMuted == true && data?.type == ParticipantData.Type.DEFAULT)
-        deafen.visibility = visible(participant?.isDeafened == true && data?.type == ParticipantData.Type.DEFAULT)
-        indicators.visibility = visible(mute.visibility == VISIBLE || deafen.visibility == VISIBLE)
+        binding.participantMuteStatusIndicator.visibility = visible(participant?.isMuted == true && data?.type == ParticipantData.Type.DEFAULT)
+        binding.participantDeafenStatusIndicator.visibility = visible(participant?.isDeafened == true && data?.type == ParticipantData.Type.DEFAULT)
+        binding.participantVoiceIndicators.visibility = visible(binding.participantMuteStatusIndicator.visibility == VISIBLE || binding.participantDeafenStatusIndicator.visibility == VISIBLE)
 
         resetStreamState()
         if (data?.type == ParticipantData.Type.APPLICATION_STREAMING) {
-            avatarBackground.visibility = GONE
-            voiceUser.visibility = GONE
+            binding.participantBgAvatar.visibility = GONE
+            binding.participantVoiceUserView.visibility = GONE
             when (data.applicationStreamState) {
                 ParticipantData.ApplicationStreamState.CONNECTING -> {
-                    preview.visibility = VISIBLE
-                    loading.visibility = VISIBLE
-                    live.visibility = visible(!data.isFullScreen)
+                    binding.participantStreamPreviewImage.visibility = VISIBLE
+                    binding.participantVideoLoadingIndicator.visibility = VISIBLE
+                    binding.participantLiveIndicator.visibility = visible(!data.isFullScreen)
                 }
-                ParticipantData.ApplicationStreamState.ACTIVE -> live.visibility = visible(!data.isFullScreen)
+                ParticipantData.ApplicationStreamState.ACTIVE -> binding.participantLiveIndicator.visibility = visible(!data.isFullScreen)
                 ParticipantData.ApplicationStreamState.INACTIVE -> {
-                    preview.visibility = VISIBLE
-                    previewText.visibility = VISIBLE
-                    previewText.setOnClickListener {
-                        participant?.streamContext?.stream?.encodedStreamKey?.let(onWatchStreamClicked)
+                    binding.participantStreamPreviewImage.visibility = VISIBLE
+                    binding.participantStreamPreviewText.visibility = VISIBLE
+                    val streamKey = participant?.streamContext?.stream?.encodedStreamKey
+                    binding.participantStreamPreviewText.setOnClickListener {
+                        streamKey?.let { onWatchStreamClicked(it, false) }
+                    }
+                    binding.participantStreamPreviewAdd.visibility = visible(data.canWatchAlongside)
+                    binding.participantStreamPreviewAdd.setOnClickListener {
+                        streamKey?.let { onWatchStreamClicked(it, true) }
                     }
                     val resolved = participant?.streamContext?.preview as? StoreApplicationStreamPreviews.StreamPreview.Resolved
-                    preview.setImageURI(resolved?.url)
+                    binding.participantStreamPreviewImage.setImageURI(resolved?.url)
                 }
                 ParticipantData.ApplicationStreamState.PAUSED -> {
-                    preview.visibility = VISIBLE
-                    paused.visibility = VISIBLE
-                    live.visibility = visible(!data.isFullScreen)
+                    binding.participantStreamPreviewImage.visibility = VISIBLE
+                    binding.participantStreamPaused.visibility = VISIBLE
+                    binding.participantLiveIndicator.visibility = visible(!data.isFullScreen)
                 }
-                ParticipantData.ApplicationStreamState.ENDED -> ended.visibility = VISIBLE
+                ParticipantData.ApplicationStreamState.ENDED -> binding.participantStreamEnded.visibility = VISIBLE
                 null -> Unit
             }
         } else {
-            avatarBackground.visibility = visible(data?.streamId == null)
-            voiceUser.visibility = visible(data?.streamId == null)
+            binding.participantBgAvatar.visibility = visible(data?.streamId == null)
+            binding.participantVoiceUserView.visibility = visible(data?.streamId == null)
         }
 
         val streamChanged = boundStreamId != data?.streamId
         if (streamChanged) {
-            renderer.visibility = GONE
-            loading.visibility = visible(data?.streamId != null)
+            binding.participantVideoStreamRenderer.visibility = GONE
+            binding.participantVideoLoadingIndicator.visibility = visible(data?.streamId != null)
         }
         boundStreamId = data?.streamId
-        renderer.configure(data?.streamId, data?.scalingType, data?.insetScalingType, data?.mirror == true)
+        binding.participantVideoStreamRenderer.configure(data?.streamId, data?.scalingType, data?.insetScalingType, data?.mirror == true)
         fitToFrame = data?.scalingType == RendererCommon.ScalingType.SCALE_ASPECT_FIT
         drawFits = data?.isFullScreen == true && fitToFrame
         if (streamChanged) lastFrame = null
         if (streamChanged || !drawFits) resetZoom()
         if (drawFits || !fitToFrame) fitRendererTo(null)
-        renderer.setFitZoom(zoom.takeIf { drawFits }, zoomCenterX, zoomCenterY)
-        renderer.onFrameRenderedListener = { frame: Point ->
+        binding.participantVideoStreamRenderer.setFitZoom(zoom.takeIf { drawFits }, zoomCenterX, zoomCenterY)
+        binding.participantVideoStreamRenderer.onFrameRenderedListener = { frame: Point ->
             lastFrame = frame.takeIf { it.x > 0 && it.y > 0 }
             // The renderer crops every frame to its own shape, so "fit" only shows the whole frame
             // once the view itself takes the frame's aspect ratio; the letterbox fills the rest.
             if (!drawFits) fitRendererTo(lastFrame.takeIf { fitToFrame })
-            renderer.visibility = VISIBLE
-            loading.visibility = GONE
-            letterbox.visibility = visible(preview.visibility != VISIBLE)
-            preview.visibility = GONE
-            previewText.visibility = GONE
+            binding.participantVideoStreamRenderer.visibility = VISIBLE
+            binding.participantVideoLoadingIndicator.visibility = GONE
+            binding.participantBgLetterbox.visibility = visible(binding.participantStreamPreviewImage.visibility != VISIBLE)
+            binding.participantStreamPreviewImage.visibility = GONE
+            binding.participantStreamPreviewText.visibility = GONE
             if (matchVideoOrientation && (frame.x > frame.y) != (width > height)) {
                 // A portrait tile showing landscape video (or the reverse) swaps its
                 // own dimensions so the frame is not letterboxed to nothing.
@@ -336,7 +311,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
      * the tile, so it neither toggles the call controls nor opens the long-press sheet.
      */
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        val zoomable = drawFits && lastFrame != null && renderer.visibility == VISIBLE
+        val zoomable = drawFits && lastFrame != null && binding.participantVideoStreamRenderer.visibility == VISIBLE
         if (!zoomable && !zoomGestureActive) return super.dispatchTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             // Touching the picture stops a double-tap zoom-out where it is.
@@ -346,7 +321,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
             downY = event.y
             lastX = event.x
             lastY = event.y
-            renderer.setHoldLastFrame(true)
+            binding.participantVideoStreamRenderer.setHoldLastFrame(true)
             // A zoomed picture owns one-finger drags; otherwise the screen behind it sees the drag
             // first and takes it, and the pan never starts.
             if (zoom > 1f) parent?.requestDisallowInterceptTouchEvent(true)
@@ -369,7 +344,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
             }
         }
         val ended = event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL
-        if (ended && zoomOutAnimator?.isRunning != true) renderer.setHoldLastFrame(false)
+        if (ended && zoomOutAnimator?.isRunning != true) binding.participantVideoStreamRenderer.setHoldLastFrame(false)
         if (!zoomGestureActive) return super.dispatchTouchEvent(event)
         if (ended) zoomGestureActive = false
         return true
@@ -427,7 +402,7 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         // The shown part never leaves the picture; an axis the picture does not fill stays centred.
         zoomCenterX = zoomCenterX.coerceIn(fractionX / 2f, 1f - fractionX / 2f)
         zoomCenterY = zoomCenterY.coerceIn(fractionY / 2f, 1f - fractionY / 2f)
-        renderer.setFitZoom(zoom, zoomCenterX, zoomCenterY)
+        binding.participantVideoStreamRenderer.setFitZoom(zoom, zoomCenterX, zoomCenterY)
     }
 
     private fun animateZoomOut() {
@@ -439,34 +414,35 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
                 zoom = it.animatedValue as Float
                 applyZoom()
             }
-            doOnEnd { renderer.setHoldLastFrame(false) }
+            doOnEnd { binding.participantVideoStreamRenderer.setHoldLastFrame(false) }
             start()
         }
     }
 
     private fun resetZoom() {
         zoomOutAnimator?.cancel()
-        renderer.setHoldLastFrame(false)
+        binding.participantVideoStreamRenderer.setHoldLastFrame(false)
         zoom = 1f
         zoomCenterX = 0.5f
         zoomCenterY = 0.5f
     }
 
     private fun fitRendererTo(frame: Point?) {
-        val params = renderer.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val params = binding.participantVideoStreamRenderer.layoutParams as? ConstraintLayout.LayoutParams ?: return
         val ratio = frame?.let { "${it.x}:${it.y}" }
         if (params.dimensionRatio == ratio) return
         params.dimensionRatio = ratio
-        renderer.layoutParams = params
+        binding.participantVideoStreamRenderer.layoutParams = params
     }
 
     private fun resetStreamState() {
-        preview.visibility = GONE
-        previewText.visibility = GONE
-        paused.visibility = GONE
-        ended.visibility = GONE
-        live.visibility = GONE
-        letterbox.visibility = GONE
+        binding.participantStreamPreviewImage.visibility = GONE
+        binding.participantStreamPreviewText.visibility = GONE
+        binding.participantStreamPreviewAdd.visibility = GONE
+        binding.participantStreamPaused.visibility = GONE
+        binding.participantStreamEnded.visibility = GONE
+        binding.participantLiveIndicator.visibility = GONE
+        binding.participantBgLetterbox.visibility = GONE
     }
 
     private fun configureQuality(data: ParticipantData?) {
@@ -477,19 +453,19 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
                 ParticipantData.ApplicationStreamState.PAUSED,
             )
         if (!shown || quality == null) {
-            qualityContainer.fadeBy(false, FADE_DURATION_MS)
+            binding.participantFullscreenStreamqualContainer.fadeBy(false, FADE_DURATION_MS)
             return
         }
-        qualityContainer.translationX = -callUiInsets.right.toFloat()
-        qualityContainer.translationY = callUiInsets.top.toFloat()
-        qualityIcon.visibility = visible(quality.isPremium)
-        qualityInfo.text = listOfNotNull(
+        binding.participantFullscreenStreamqualContainer.translationX = -callUiInsets.right.toFloat()
+        binding.participantFullscreenStreamqualContainer.translationY = callUiInsets.top.toFloat()
+        binding.participantFullscreenStreamqualIcon.visibility = visible(quality.isPremium)
+        binding.participantFullscreenStreamqualInfo.text = listOfNotNull(
             quality.resolution.label(context).toString().takeIf(String::isNotBlank),
             quality.fps?.let { context.i18nFormat(R.string.stream_fps_option, "value" to it.value) },
         ).joinToString(" ")
-        qualityInfo.visibility = visible(qualityInfo.text.isNotEmpty())
-        qualityContainer.fadeBy(true, FADE_DURATION_MS)
-        qualityLive.setTextColor(
+        binding.participantFullscreenStreamqualInfo.visibility = visible(binding.participantFullscreenStreamqualInfo.text.isNotEmpty())
+        binding.participantFullscreenStreamqualContainer.fadeBy(true, FADE_DURATION_MS)
+        binding.participantFullscreenStreamqualLiveIndicator.setTextColor(
             androidx.core.content.ContextCompat.getColor(
                 context,
                 if (quality.isPoorQuality) R.color.status_yellow_500 else R.color.white,
@@ -500,8 +476,8 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
 
     private fun configureLabel(data: ParticipantData?) {
         val participant = data?.voiceParticipant ?: return
-        label.text = participant.displayName
-        label.setCompoundDrawablesWithIntrinsicBounds(
+        binding.participantVideoLabel.text = participant.displayName
+        binding.participantVideoLabel.setCompoundDrawablesWithIntrinsicBounds(
             if (data.type == ParticipantData.Type.APPLICATION_STREAMING) R.drawable.ic_screen_14dp else 0,
             0,
             0,
@@ -512,8 +488,8 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         } else participant.displayName
         // The first bind sets the label outright; only later changes cross-fade, so
         // a freshly attached tile does not flash its label in.
-        if (labelInitialized) label.fadeBy(data.showLabel, FADE_DURATION_MS)
-        else label.visibility = visible(data.showLabel)
+        if (labelInitialized) binding.participantVideoLabel.fadeBy(data.showLabel, FADE_DURATION_MS)
+        else binding.participantVideoLabel.visibility = visible(data.showLabel)
         labelInitialized = true
     }
 
@@ -523,14 +499,14 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
         // A top-row tile on a device with a notch moves the LIVE pill to the bottom
         // so it is not hidden by the cutout, unless the mute/deafen row already
         // occupies that corner.
-        val moveToBottom = insetTop > 0 && isTopRow && indicators.visibility != VISIBLE
-        set.connect(live.id, ConstraintSet.RIGHT, ConstraintSet.PARENT_ID, ConstraintSet.RIGHT, dpToPixels(8))
+        val moveToBottom = insetTop > 0 && isTopRow && binding.participantVoiceIndicators.visibility != VISIBLE
+        set.connect(binding.participantLiveIndicator.id, ConstraintSet.RIGHT, ConstraintSet.PARENT_ID, ConstraintSet.RIGHT, dpToPixels(8))
         if (moveToBottom) {
-            set.connect(live.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM, dpToPixels(8))
-            set.clear(live.id, ConstraintSet.TOP)
+            set.connect(binding.participantLiveIndicator.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM, dpToPixels(8))
+            set.clear(binding.participantLiveIndicator.id, ConstraintSet.TOP)
         } else {
-            set.connect(live.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, dpToPixels(8))
-            set.clear(live.id, ConstraintSet.BOTTOM)
+            set.connect(binding.participantLiveIndicator.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP, dpToPixels(8))
+            set.clear(binding.participantLiveIndicator.id, ConstraintSet.BOTTOM)
         }
         set.applyTo(this)
     }
@@ -542,8 +518,8 @@ class VideoCallParticipantView @JvmOverloads @SuppressLint("ResourceType") const
     }
 
     private fun detachRenderer() {
-        renderer.onFrameRenderedListener = null
-        renderer.configure(null, null, null, false)
+        binding.participantVideoStreamRenderer.onFrameRenderedListener = null
+        binding.participantVideoStreamRenderer.configure(null, null, null, false)
         boundStreamId = null
     }
 
