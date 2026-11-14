@@ -64,13 +64,16 @@ data class UserProfile(
     /**
      * The frame this profile is wearing, if any.
      *
-     * A per-guild identity replaces the global one outright rather than merging into it, which is
-     * why a guild profile with no frame hides the global one.
+     * A guild profile's own frame wins, and without one the global frame shows, as React Native's
+     * display profile does. A guild profile comes back with most server profiles even when it sets
+     * nothing, so letting its presence alone hide the global frame hid nearly every frame.
      */
-    fun equippedProfileFrameSkuId(): Long? =
-        (guildMemberProfile ?: userProfile)?.collectibles
-            ?.firstOrNull { it.type == PROFILE_FRAME_TYPE }
-            ?.skuId
+    fun equippedProfileFrameSkuId(): Long? = guildMemberProfile.frameSkuId() ?: userProfile.frameSkuId()
+
+    private fun ProfileMetadata?.frameSkuId(): Long? =
+        // Gson can leave the list null when the field is absent, whatever its declared default.
+        @Suppress("UNNECESSARY_SAFE_CALL")
+        this?.collectibles?.firstOrNull { it.type == PROFILE_FRAME_TYPE }?.skuId
 
     data class GuildReference(val id: Long, val nick: String?)
 

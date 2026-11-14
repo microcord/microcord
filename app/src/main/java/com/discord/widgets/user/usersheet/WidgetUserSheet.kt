@@ -878,6 +878,9 @@ class WidgetUserSheet : AppBottomSheet() {
             )
             decor.addView(created.back, decor.indexOfChild(sheet), params)
             decor.addView(created.front, params)
+            // The sheet is raised, and a raised view draws over siblings with none whatever their
+            // order, so the front half is lifted just past it to stay over the banner.
+            created.front.translationZ = sheet.elevation + sheet.translationZ + 1f
             decor.viewTreeObserver.addOnPreDrawListener(frameAnchorListener)
         }
         views.back.bind(frame)
