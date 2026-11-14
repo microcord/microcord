@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.github.mmin18</groupId>
+  <artifactId>RealtimeBlurView</artifactId>
+  <version>82df3520b4</version>
+  <packaging>aar</packaging>
+  <name>RealtimeBlurView</name>
+  <description>mmin18/RealtimeBlurView v1.2.1, Apache License 2.0, copied from the build JitPack once served.</description>
+  <url>https://github.com/mmin18/RealtimeBlurView</url>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+</project>
