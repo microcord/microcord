@@ -57,7 +57,9 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageParseState
+import com.discord.utilities.textprocessing.MessagePreprocessor
 import com.discord.utilities.textprocessing.MessageRenderContext
+import com.discord.widgets.chat.list.utils.collapseEmbeddedMessageLines
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.channel.specialGuildChannelIcon
 import com.discord.utilities.drawable.getThemedDrawableRes
@@ -1218,7 +1220,7 @@ class WidgetChannelsListAdapter(
                     )
                 }
             when {
-                preview != null -> desc.text = preview
+                preview != null -> desc.setDraweeSpanStringBuilder(renderPreview(preview, channel))
                 !DmListCustomization.visible(DmListCustomization.Component.STATUS) ->
                     desc.setTextAndVisibilityBy(null as CharSequence?)
                 channel.isSystemDM() ->
@@ -1289,6 +1291,20 @@ class WidgetChannelsListAdapter(
                 "channelName" to channelName,
             )
         }
+
+        /** The preview as one line of rendered markdown, so emoji and mentions show as they do in chat. */
+        private fun renderPreview(content: String, channel: Channel) = DiscordParser.parseChannelMessage(
+            itemView.context,
+            collapseEmbeddedMessageLines(content),
+            MessageRenderContext(
+                itemView.context,
+                StoreStream.getUsers().getMe().id,
+                isAnimationEnabled = false,
+                userNames = channel.recipients?.associate { it.id to it.username },
+            ),
+            MessagePreprocessor(0L, shouldJumboify = false),
+            DiscordParser.ParserOptions.REPLY,
+        )
 
         /** The recipient list excludes the current user, hence the `+ 1`. */
         private fun memberCount(channel: Channel, context: Context): String =
