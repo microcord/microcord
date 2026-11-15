@@ -22,6 +22,8 @@ data class MessageAttachment(
     val durationSecs: Double? = null,
     val waveform: String? = null,
     val description: String? = null,
+    /** Base64 ThumbHash of the media, shown blurred while it loads. */
+    val placeholder: String? = null,
 ) {
     val type: MessageAttachmentType
         get() {

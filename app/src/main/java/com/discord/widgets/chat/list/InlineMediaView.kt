@@ -166,6 +166,7 @@ class InlineMediaView @JvmOverloads constructor(
                     requestLayout()
                 }
                 params.previewImage?.url?.let { url ->
+                    binding.inlineMediaImagePreview.setThumbHash(params.previewImage.placeholder)
                     MGImages.setImage(
                         binding.inlineMediaImagePreview,
                         EmbedResourceUtils.getPreviewUrls(url, width, height, shouldAutoPlay(params)),

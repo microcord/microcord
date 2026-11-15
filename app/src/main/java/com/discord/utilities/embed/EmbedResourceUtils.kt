@@ -244,6 +244,7 @@ object EmbedResourceUtils {
             MediaProxyUrl.forAttachment(attachment, attachment.proxyUrl),
             attachment.width,
             attachment.height,
+            attachment.placeholder,
         )
         MessageAttachmentType.FILE -> createFileRenderableMedia(attachment.filename)
     }
@@ -269,11 +270,11 @@ object EmbedResourceUtils {
      * only one guaranteed to be reachable from a client behind a restrictive network.
      */
     internal fun EmbedImage.asRenderableEmbedMedia() =
-        RenderableEmbedMedia((proxyUrl?.takeIf(String::isNotBlank) ?: url)?.let(MediaProxyUrl::forMedia), width, height)
+        RenderableEmbedMedia((proxyUrl?.takeIf(String::isNotBlank) ?: url)?.let(MediaProxyUrl::forMedia), width, height, placeholder)
 
     private fun EmbedThumbnail.asRenderableEmbedMedia() =
-        RenderableEmbedMedia((proxyUrl ?: url)?.let(MediaProxyUrl::forMedia), width, height)
+        RenderableEmbedMedia((proxyUrl ?: url)?.let(MediaProxyUrl::forMedia), width, height, placeholder)
 
     private fun EmbedVideo.asRenderableEmbedMedia() =
-        RenderableEmbedMedia(proxyUrl ?: url, width, height)
+        RenderableEmbedMedia(proxyUrl ?: url, width, height, placeholder)
 }

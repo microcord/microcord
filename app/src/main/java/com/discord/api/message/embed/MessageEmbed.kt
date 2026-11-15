@@ -23,9 +23,9 @@ data class MessageEmbed(
     val flags: Int? = null,
 )
 
-data class EmbedImage(val url: String?, val proxyUrl: String?, val width: Int?, val height: Int?)
-data class EmbedThumbnail(val url: String?, val proxyUrl: String?, val height: Int?, val width: Int?)
-data class EmbedVideo(val url: String?, val proxyUrl: String?, val height: Int?, val width: Int?)
+data class EmbedImage(val url: String?, val proxyUrl: String?, val width: Int?, val height: Int?, val placeholder: String? = null)
+data class EmbedThumbnail(val url: String?, val proxyUrl: String?, val height: Int?, val width: Int?, val placeholder: String? = null)
+data class EmbedVideo(val url: String?, val proxyUrl: String?, val height: Int?, val width: Int?, val placeholder: String? = null)
 data class EmbedAuthor(val name: String?, val url: String?, val iconUrl: String?, val proxyIconUrl: String?)
 data class EmbedFooter(val text: String, val iconUrl: String?, val proxyIconUrl: String?)
 data class EmbedProvider(val name: String?, val url: String?)

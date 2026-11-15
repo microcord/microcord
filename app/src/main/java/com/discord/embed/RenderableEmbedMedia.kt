@@ -1,3 +1,3 @@
 package com.discord.embed
 
-data class RenderableEmbedMedia(val url: String?, val width: Int?, val height: Int?)
+data class RenderableEmbedMedia(val url: String?, val width: Int?, val height: Int?, val placeholder: String? = null)

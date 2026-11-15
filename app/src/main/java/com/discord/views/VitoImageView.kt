@@ -1,12 +1,15 @@
 package com.discord.views
 
 import android.content.Context
+import android.graphics.Color
 import android.graphics.drawable.Animatable
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatImageView
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.images.ThumbHash
 import com.facebook.drawee.controller.ControllerListener
 import com.facebook.drawee.drawable.ScalingUtils
 import com.facebook.drawee.generic.GenericDraweeHierarchyInflater
@@ -75,6 +78,16 @@ open class VitoImageView : AppCompatImageView {
         setImageResource(resId)
         shownUri = null
         lastSource = null
+    }
+
+    /** The inflated placeholder, put back for media that has no ThumbHash. */
+    private val ownPlaceholder by lazy { imageOptions.placeholderDrawable to imageOptions.placeholderScaleType }
+
+    /** Shows [thumbHash] blurred under the next image until it loads, or this view's own placeholder without one. */
+    fun setThumbHash(thumbHash: String?) {
+        val (drawable, scale) = ThumbHash.toDrawable(resources, thumbHash)?.let { it to ScalingUtils.ScaleType.FIT_XY }
+            ?: ownPlaceholder
+        imageOptions = imageOptions.extend().placeholder(drawable ?: ColorDrawable(Color.TRANSPARENT), scale).build()
     }
 
     fun release() {

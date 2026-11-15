@@ -54,6 +54,7 @@ import com.discord.utilities.view.extensions.fadeIn
 import com.discord.utilities.view.extensions.fadeOut
 import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import com.discord.views.ThemedColor
+import com.discord.views.VitoImageView
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.InlineMediaView
 import com.discord.widgets.chat.list.bindGifFavorite
@@ -425,6 +426,7 @@ class WidgetChatListAdapterItemEmbed(
             width = embedThumbnail.width ?: 0,
             height = embedThumbnail.height ?: 0,
             imageProxyUrl = embedThumbnail.proxyUrl,
+            placeholder = embedThumbnail.placeholder,
         )
     }
 
@@ -452,6 +454,7 @@ class WidgetChatListAdapterItemEmbed(
                 height = preview.height ?: 0,
                 imageProxyUrl = preview.url,
                 minWidth = maxEmbedImageWidth / 2,
+                placeholder = preview.placeholder,
             )
             binding.embedImageContainer.visibility = View.VISIBLE
         } else {
@@ -504,6 +507,7 @@ class WidgetChatListAdapterItemEmbed(
             }
             tile.contentDescription = itemView.context.getString(R.string.embed_gallery_image_description, index + 1, images.size)
             val url = with(EmbedResourceUtils) { image.asRenderableEmbedMedia().url }
+            (tile as? VitoImageView)?.setThumbHash(image.placeholder)
             MGImages.setImage(tile, url?.let { EmbedResourceUtils.getPreviewUrls(it, tileWidth, cell, model.embedEntry.autoPlayGifs) }.orEmpty(),
                 width = tileWidth, height = cell, changeDetector = imageChangeDetector,
                 autoPlayAnimations = model.embedEntry.autoPlayGifs)
@@ -574,8 +578,10 @@ class WidgetChatListAdapterItemEmbed(
         height: Int,
         imageProxyUrl: String?,
         minWidth: Int = 0,
+        placeholder: String? = null,
     ) {
         if (imageProxyUrl == null) return
+        (view as? VitoImageView)?.setThumbHash(placeholder)
         view.visibility = View.VISIBLE
         val (scaledWidth, scaledHeight) = EmbedResourceUtils.calculateScaledSize(
             actualWidth = width,
