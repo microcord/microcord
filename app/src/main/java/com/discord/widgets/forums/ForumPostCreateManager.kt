@@ -48,6 +48,7 @@ object ForumPostCreateManager {
         attachmentsRequest: AttachmentsRequest? = null,
         onMessageTooLong: ((Int, Int) -> Unit)? = null,
         onFilesTooLarge: ((AttachmentLimits.Violation, Boolean) -> Unit)? = null,
+        onFailed: (() -> Unit)? = null,
     ): Boolean {
         if (isCreateInProgress.value == true) return false
         val permissions = StoreStream.getPermissions().getPermissionsByChannel()[forumChannelId]
@@ -97,6 +98,7 @@ object ForumPostCreateManager {
                 errorClass = ForumPostCreateManager::class.java,
                 context = context,
                 errorHandler = { error ->
+                    onFailed?.invoke()
                     // The upload is refused outright rather than the post being created without it.
                     if (error.code == EXPLICIT_CONTENT_CODE) {
                         AlertDialog.Builder(context)

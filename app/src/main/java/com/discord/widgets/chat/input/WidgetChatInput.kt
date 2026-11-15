@@ -14,6 +14,7 @@ import android.os.SystemClock
 import android.text.Editable
 import android.text.Spanned
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
@@ -1360,6 +1361,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val loaded = state ?: return false
         val characterLimit = MessageSendCoordinator.characterLimit(loaded.me.premiumTier)
         var content = contentOverride ?: autocomplete?.getInputContent() ?: input?.text?.toString().orEmpty()
+        // The composer clears as soon as a send is accepted; a post or thread that then fails puts this back.
+        val typed = input?.text?.let(::SpannableStringBuilder)
         val pendingReply =
             (loaded.pendingReplyState as? ChatInputViewModel.ViewState.PendingReplyState.Replying)?.pendingReply
 
@@ -1468,6 +1471,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 content = content,
                 threadDraftState = loaded.threadDraftState,
                 attachmentsRequest = attachmentsRequest,
+                onFailed = { restoreUnsentText(loaded.channelId, typed) },
             )
             if (accepted) drafts.setTextChannelInput(loaded.channelId, null)
             return accepted
@@ -1508,6 +1512,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                     errorClass = WidgetChatInput::class.java,
                     context = requireContext(),
                     errorHandler = { error ->
+                        restoreUnsentText(loaded.channelId, typed)
                         state?.threadDraftState?.copy(isSending = false)
                             ?.let(StoreStream.getThreadDraft()::setDraftState)
                         if (error.code == THREAD_CREATE_RATE_LIMIT_CODE) {
@@ -1996,6 +2001,16 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         val channelId = state?.channelId ?: return
         val flex = childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment ?: return
         drafts.setAttachments(channelId, flex.selectionAggregator.attachments)
+    }
+
+    private fun restoreUnsentText(channelId: Long, text: CharSequence?) {
+        if (text.isNullOrEmpty()) return
+        drafts.setTextChannelInput(channelId, text)
+        if (state?.channelId != channelId || !input?.text.isNullOrEmpty()) return
+        restoringText = true
+        input?.setText(text)
+        input?.setSelection(text.length)
+        restoringText = false
     }
 
     private fun restoreInput(next: ChatInputViewModel.ViewState.Loaded) {
