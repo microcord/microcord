@@ -2,7 +2,6 @@ package com.discord.panels
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Rect
 import android.os.Build
 import android.os.Parcel
 import android.os.Parcelable
@@ -62,7 +61,6 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     private var endPanelLockState = LockState.UNLOCKED
     private val startPanelStateListeners = arrayListOf<PanelStateListener>()
     private val endPanelStateListeners = arrayListOf<PanelStateListener>()
-    private var childGestureRegions: List<Rect> = emptyList()
     private var useFullWidthForStartPanel = false
     /*
      * Sentinels, not zeroes. Confirmed in the reference's <init> bytecode, which loads
@@ -289,7 +287,6 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     }
 
     fun getSelectedPanel(): Panel = selectedPanel
-    fun setChildGestureRegions(regions: List<Rect>) { childGestureRegions = regions }
 
     /**
      * Asked, with the gesture's down event, whether a leftward swipe on the center panel belongs to
@@ -319,7 +316,8 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
                 if (isScrollingHorizontally) return true
                 val dx = event.x - xFromInterceptActionDown
                 val dy = event.y - yFromInterceptActionDown
-                if (abs(dx) > scrollingSlopPx && abs(dx) > abs(dy) && !touchingChildGestureRegion(event) &&
+                // onTouchEvent refuses a home-gesture drag, so taking it here would only swallow it.
+                if (!isHomeSystemGesture && abs(dx) > scrollingSlopPx && abs(dx) > abs(dy) && !touchingChildGestureRegion(event) &&
                     !(dx < 0 && leftSwipeClaimed)
                 ) {
                     isScrollingHorizontally = true
@@ -409,9 +407,8 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     private fun leftPanelLockState() = if (isLeftToRight) startPanelLockState else endPanelLockState
     private fun rightPanelLockState() = if (isLeftToRight) endPanelLockState else startPanelLockState
 
-    private fun touchingChildGestureRegion(event: MotionEvent) = childGestureRegions.any {
-        event.rawX >= it.left && event.rawX <= it.right && event.rawY >= it.top && event.rawY <= it.bottom
-    }
+    private fun touchingChildGestureRegion(event: MotionEvent) =
+        PanelsChildGestureRegionObserver.Provider.get().contains(event.rawX, event.rawY)
 
     private fun touchingCenterWhilePanelOpen(event: MotionEvent): Boolean {
         val center = centerPanel ?: return false

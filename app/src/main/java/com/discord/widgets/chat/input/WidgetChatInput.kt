@@ -256,18 +256,12 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
      * dismisses the keyboard mid-scroll. Short messages leave panel swipes alone.
      */
     private var inputClaimsPanelGestures = false
-    private val inputGestureRegionUpdater = View.OnLayoutChangeListener { view, left, top, right, bottom, _, _, _, _ ->
+    private val inputGestureRegionUpdater = View.OnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
         val scrollable = view.canScrollVertically(1) || view.canScrollVertically(-1)
         if (scrollable == inputClaimsPanelGestures) return@OnLayoutChangeListener
         inputClaimsPanelGestures = scrollable
         val regions = PanelsChildGestureRegionObserver.Provider.get()
-        if (scrollable) {
-            regions.register(view)
-            // Registered mid-layout, so the observer missed this pass; hand it the bounds now.
-            regions.onLayoutChange(view, left, top, right, bottom, 0, 0, 0, 0)
-        } else {
-            regions.unregister(view)
-        }
+        if (scrollable) regions.register(view) else regions.unregister(view)
     }
 
     private val watcher = object : TextWatcher {

@@ -3,6 +3,7 @@ package com.discord.dialogs.useractions
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -150,9 +151,20 @@ class UserActionsDialog : AppDialog(R.layout.user_actions_dialog) {
         val top = argumentsOrDefault.getInt(ARG_ANCHOR_TOP, ANCHOR_UNSET)
         if (top == ANCHOR_UNSET) return
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        // A dialog window stops at the system bars without these, leaving its content below the
-        // status bar and a black navigation bar.
-        window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+        // Without these a dialog window is fitted below the status bar (126px down, measured with
+        // dumpsys) and paints a black navigation bar. Android 11+ fits it by fitInsetsTypes and the cutout.
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.attributes = window.attributes.apply {
+                fitInsetsTypes = 0
+                // The status bar sits in the camera cutout, which a window stays out of by default.
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT

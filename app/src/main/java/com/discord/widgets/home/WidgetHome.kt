@@ -11,7 +11,6 @@ import com.discord.app.AppFragment
 import androidx.fragment.app.commitNow
 import com.discord.R
 import com.discord.panels.OverlappingPanelsLayout
-import com.discord.panels.PanelsChildGestureRegionObserver
 import com.discord.panels.PanelState
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreNavigation
@@ -103,11 +102,9 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var dmPresenceSubscription: Subscription? = null
     private var unreadCount = 0
     private var awaitingInitialSelection = true
-    private var gestureRegionsListener: PanelsChildGestureRegionObserver.GestureRegionsListener? = null
 
     // Provider only holds a WeakReference, so both this screen and the surfaces that register
     // views have to keep the same instance alive themselves.
-    private val gestureRegionObserver by lazy { PanelsChildGestureRegionObserver.Provider.get() }
     private var onboardingGuildId: Long? = null
     private var onboardingVisitGuildId: Long = Long.MIN_VALUE
     private var startPanelState: PanelState = PanelState.Closed
@@ -132,11 +129,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         // Registered here rather than in onViewBound so `panels` is already resolved, and before the
         // child transactions below so this stays behind WidgetTabsHost in the registry.
         setOnBackPressed(::handleBackPressed)
-        gestureRegionObserver.let { observer ->
-            gestureRegionsListener = PanelsChildGestureRegionObserver.GestureRegionsListener(panels::setChildGestureRegions)
-            observer.addGestureRegionsUpdateListener(requireNotNull(gestureRegionsListener))
-            panels.setChildGestureRegions(observer.getCurrentGestureRegions())
-        }
         panels.registerStartPanelStateListeners(
             OverlappingPanelsLayout.PanelStateListener {
                 if (it == PanelState.Opening || it == PanelState.Open) ensureStartPanelFragments()
@@ -333,8 +325,6 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         chatBinding?.homeToolbar?.menu?.let(WidgetHomeHeaderManager::clearPluginActions)
         pluginHeaderRegistration?.unregister()
         pluginHeaderRegistration = null
-        gestureRegionsListener?.let(gestureRegionObserver::removeGestureRegionsUpdateListener)
-        gestureRegionsListener = null
         WidgetChannelSidebarActions.onNotifications = null
         WidgetChannelSidebarActions.onSearch = null
         WidgetUserSheet.onCall = null

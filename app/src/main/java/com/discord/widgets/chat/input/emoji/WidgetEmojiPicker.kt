@@ -13,7 +13,6 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
-import com.discord.panels.PanelsChildGestureRegionObserver
 import com.discord.app.AppFragment
 import com.discord.databinding.WidgetEmojiPickerBinding
 import com.discord.models.domain.emoji.Emoji
@@ -53,7 +52,6 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     internal var onPicked: ((Emoji) -> Unit)? = null
 
     /** Whether this picker's server rail claims horizontal drags from the home panels. */
-    private var railRegistered = false
 
     /** Suppresses the scroll listener while the rail drives the grid. */
     private var scrollingToCategory = false
@@ -151,8 +149,6 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
     }
 
     override fun onDestroyView() {
-        if (railRegistered) _binding?.emojiPickerCategoryRecycler?.let(PanelsChildGestureRegionObserver.Provider.get()::unregister)
-        railRegistered = false
         _binding?.chatInputEmojiPickerRecycler?.adapter = null
         _binding?.emojiPickerCategoryRecycler?.adapter = null
         _binding = null
@@ -192,8 +188,14 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
             // Inline, the picker sits inside the home panels, which would take a sideways drag on
             // the server rail as a swipe to the member list.
             if (arguments?.getSerializable(ARG_MODE) as? EmojiPickerMode != EmojiPickerMode.BOTTOM_SHEET) {
-                PanelsChildGestureRegionObserver.Provider.get().register(this)
-                railRegistered = true
+                // Claimed on touch down instead of through a gesture-region rectangle, which can be
+                // out of date when the tray moves without the rail re-laying out.
+                addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+                    override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                        if (e.actionMasked == MotionEvent.ACTION_DOWN) rv.parent.requestDisallowInterceptTouchEvent(true)
+                        return false
+                    }
+                })
             }
         }
     }
