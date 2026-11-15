@@ -405,6 +405,30 @@ data class NotificationData(
 
         fun parsePushPayload(data: Map<String, String>): PushPayload = PushPayload.parse(data)
 
+        private val MARKUP = Regex("""<@!?(\d+)>|<@&(\d+)>|<#(\d+)>|<a?:(\w+):\d+>|<t:(-?\d{1,17})(?::[tTdDfFR])?>""")
+
+        /**
+         * Message markup as people read it, since a system notification shows raw text: mentions
+         * become `@name`, custom emoji `:name:` and timestamps a date, as RN's `unparseWithMeta`
+         * does for notifications. A name nobody can resolve reads like Discord's placeholders.
+         */
+        fun plainText(
+            content: String,
+            user: (Long) -> String? = { null },
+            channel: (Long) -> String? = { null },
+            role: (Long) -> String? = { null },
+        ): String = MARKUP.replace(content) { match ->
+            val (userId, roleId, channelId, emoji, timestamp) = match.destructured
+            when {
+                userId.isNotEmpty() -> "@" + (user(userId.toLong()) ?: "unknown-user")
+                roleId.isNotEmpty() -> "@" + (role(roleId.toLong()) ?: "deleted-role")
+                channelId.isNotEmpty() -> "#" + (channel(channelId.toLong()) ?: "deleted-channel")
+                emoji.isNotEmpty() -> ":$emoji:"
+                else -> java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                    .format(java.util.Date(timestamp.toLong() * 1000))
+            }
+        }
+
         fun messageBody(
             context: Context,
             content: String?,

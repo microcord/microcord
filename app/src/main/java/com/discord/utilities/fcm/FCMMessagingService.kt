@@ -90,7 +90,8 @@ class FCMMessagingService : FirebaseMessagingService() {
             title = resolvedTitle,
             body = NotificationData.messageBody(
                 this@FCMMessagingService,
-                messageContent,
+                // This process has no stores, so only the markup itself can be cleaned up.
+                messageContent?.let(NotificationData::plainText),
                 sticker?.name,
                 attachmentFilename,
             ),

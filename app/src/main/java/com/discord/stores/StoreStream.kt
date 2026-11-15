@@ -1973,7 +1973,20 @@ class StoreStream private constructor(
             title = title,
             body = NotificationData.messageBody(
                 applicationContext,
-                message.content,
+                message.content?.let { content ->
+                    val guildId = channel.guildId.takeIf { it != 0L }
+                    val mentioned = message.mentions.orEmpty().associateBy { it.id }
+                    NotificationData.plainText(
+                        content,
+                        user = { id ->
+                            (mentioned[id]?.let { NicknameUtils.getName(guildId, channel.id, it) }
+                                ?: users.getUsers()[id]?.let { NicknameUtils.getName(guildId, channel.id, it) })
+                                ?.ifEmpty { null }
+                        },
+                        channel = { id -> channels.getChannel(id)?.getDisplayName() },
+                        role = { id -> guildId?.let { guilds.getRoles()[it]?.get(id)?.name } },
+                    )
+                },
                 message.stickers?.firstOrNull()?.name ?: message.stickerItems?.firstOrNull()?.name,
                 message.attachments?.firstOrNull()?.filename ?: message.localAttachments?.firstOrNull()?.displayName,
             ),
