@@ -13,6 +13,8 @@ import com.discord.utilities.guilds.RoleUtils
  * Message types the user is allowed to delete. Everything else — join notices, boost
  * notices, and so on — is permanent even for moderators.
  */
+private const val USER_INSTALL = 1
+
 val DELETEABLE_MESSAGE_TYPES: Set<Int> =
     setOf(0, 6, 7, 8, 9, 10, 11, 12, 18, 19, 20, 22, 23, 25)
 
@@ -128,7 +130,12 @@ data class ManageMessageContext(
                 ) &&
                 !isArchivedThread
             val canModerate = canManageMessages || isOwnPrivateChannel
-            val canRemove = canManageMessages || isAuthor
+            // RN's canDeleteOwnMessage: an app installed only on your account answers as you, so
+            // its replies to your commands are yours to delete too.
+            val ownAppReply = message.interactionMetadata?.let {
+                it.user?.id == meUser.id && it.authorizingIntegrationOwners?.keys == setOf(USER_INSTALL)
+            } == true
+            val canRemove = canManageMessages || isAuthor || ownAppReply
             return ManageMessageContext(
                 canManageMessages = canManageMessages,
                 // Stickers cannot be edited, so a message carrying one is frozen.
