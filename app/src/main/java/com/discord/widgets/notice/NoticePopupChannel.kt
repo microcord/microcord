@@ -1,12 +1,7 @@
 package com.discord.widgets.notice
 
 import android.content.Context
-import android.graphics.Typeface
 import android.graphics.drawable.Drawable
-import android.text.Spanned
-import android.text.SpannableStringBuilder
-import android.text.style.ForegroundColorSpan
-import android.text.style.StyleSpan
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.discord.R
@@ -195,33 +190,19 @@ object NoticePopupChannel {
             body.append(message.embeds?.firstOrNull()?.title.orEmpty())
         }
 
+        // RN's header: who wrote it, then where — "#channel, server", a group DM's name, or nothing
+        // in a one-to-one DM, where the author already says it all.
         val isInGuild = channel.guildId != NO_GUILD_ID && channel.guildId != 0L
-        val title: CharSequence = if (isInGuild) guild?.name.orEmpty() else channel.getDisplayName()
-        val subtitle: CharSequence? = if (isInGuild) "#${channel.getDisplayName()}" else null
-
-        val iconUrl = if (channel.isGuildTextyChannel()) {
-            IconUtils.getForGuild(guild, DEFAULT_GUILD_ICON_ASSET)
-        } else {
-            IconUtils.getForChannel(channel)
+        val author = message.author
+        val title: CharSequence = author?.let { GuildMember.getNickOrUsername(members[it.id], CoreUser(it)) }
+            ?: channel.getDisplayName()
+        val subtitle: CharSequence? = when {
+            isInGuild -> "#${channel.getDisplayName()}" + guild?.name?.let { ", $it" }.orEmpty()
+            channel.isDM() -> null
+            else -> channel.getDisplayName()
         }
-
-        // In a one-to-one DM the banner title is already the other person, so prefixing the body
-        // with their name would say it twice.
-        if (!channel.isDM()) {
-            message.author?.let { author ->
-                val user = CoreUser(author)
-                val authorPrefix = SpannableStringBuilder(
-                    "${GuildMember.getNickOrUsername(members[user.id], user)}: ",
-                )
-                listOf(
-                    ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.primary_000)),
-                    StyleSpan(Typeface.BOLD),
-                ).forEach { span ->
-                    authorPrefix.setSpan(span, 0, authorPrefix.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-                body.insert(0, authorPrefix)
-            }
-        }
+        val iconUrl = author?.let { IconUtils.getForGuildMemberOrUser(CoreUser(it), members[it.id]) }
+            ?: IconUtils.getForChannel(channel)
 
         val attachment = message.attachments?.firstOrNull()
         var bodyImageUrl: String? = null
@@ -290,5 +271,4 @@ object NoticePopupChannel {
     /** `Channel.guildId` for a channel that is not in a guild. */
     private const val NO_GUILD_ID = -1L
 
-    private const val DEFAULT_GUILD_ICON_ASSET = "asset://asset/images/default_icon_selected.jpg"
 }

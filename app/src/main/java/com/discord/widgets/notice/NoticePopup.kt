@@ -22,7 +22,6 @@ import com.discord.api.sticker.Sticker
 import com.discord.app.AppComponent
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
-import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.images.MGImages
 import com.discord.utilities.view.extensions.setTextAndVisibilityBy
@@ -170,9 +169,6 @@ object NoticePopup {
         alertParent = WeakReference(decorView)
 
         val alert = NoticeAlertView(decorView.context, R.layout.widget_notice_popup)
-        alert.setAlertBackgroundColor(
-            ColorCompat.getThemedColor(activity, R.attr.colorBackgroundTertiary),
-        )
         alert.setEnterAnimation(AnimationUtils.loadAnimation(alert.context, R.anim.anim_slide_in_down))
         alert.setAlertClickListener { view ->
             onClick(view)
@@ -182,12 +178,22 @@ object NoticePopup {
         alert.onHideListener = { StoreStream.getNotices().markSeen(noticeName) }
 
         val container = alert.layoutContainer
+        // Rounds the countdown bar off with the card's own corners.
+        container.clipToOutline = true
+        val progress = container.findViewById<View>(R.id.popup_progress)
         val autoDismissAnimator = getAutoDismissAnimator(noticeAutoDismissPeriodSecs) {
             dismiss(noticeName)
+        }?.apply {
+            progress.visibility = View.VISIBLE
+            progress.pivotX = 0f
+            addUpdateListener { progress.scaleX = 1f - it.animatedFraction }
         }
         // Touching the banner at all cancels the countdown — the user is reading it.
         container.setOnTouchListener { _, event ->
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) cancelCountdown(autoDismissAnimator)
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                cancelCountdown(autoDismissAnimator)
+                progress.visibility = View.GONE
+            }
             false
         }
 
@@ -211,9 +217,7 @@ object NoticePopup {
         Handler(Looper.getMainLooper()).post { decorView.addView(alert) }
         // Elevation goes on the card, not on the transparent shield around it, or the shadow would
         // be drawn across the whole width of the screen.
-        alert.findViewById<View>(R.id.llAlertBackground)?.let {
-            ViewCompat.setElevation(it, activity.resources.getDimension(R.dimen.app_elevation))
-        }
+        ViewCompat.setElevation(container, activity.resources.getDimension(R.dimen.app_elevation))
         return true
     }
 
@@ -254,7 +258,8 @@ object NoticePopup {
         }
 
         title.text = noticeTitle
-        subtitle.setTextAndVisibilityBy(noticeSubtitle)
+        // RN's header: the title, a dot, then where it came from.
+        subtitle.setTextAndVisibilityBy(noticeSubtitle?.let { SpannableStringBuilder("· ").append(it) })
 
         if (noticeBody is DraweeSpanStringBuilder) {
             body.setDraweeSpanStringBuilder(noticeBody)

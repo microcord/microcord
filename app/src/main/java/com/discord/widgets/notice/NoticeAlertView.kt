@@ -11,7 +11,6 @@ import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import androidx.annotation.ColorInt
 import androidx.annotation.LayoutRes
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -79,8 +78,6 @@ internal class NoticeAlertView(
             insets
         }
     }
-
-    fun setAlertBackgroundColor(@ColorInt color: Int) = alertBackground.setBackgroundColor(color)
 
     fun setEnterAnimation(animation: Animation) {
         enterAnimation = animation
