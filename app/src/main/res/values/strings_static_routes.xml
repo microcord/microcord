@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="static_route_server_guide">Server Guide</string>
+    <string name="static_route_linked_roles">Linked Roles</string>
+</resources>

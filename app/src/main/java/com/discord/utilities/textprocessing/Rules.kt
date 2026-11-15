@@ -37,6 +37,7 @@ import com.discord.utilities.textprocessing.node.ListItemNode
 import com.discord.utilities.textprocessing.node.ListNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
+import com.discord.utilities.textprocessing.node.StaticRouteNode
 import com.discord.utilities.textprocessing.node.SubtextNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
@@ -75,6 +76,7 @@ object Rules {
     private val PATTERN_BLOCK_QUOTE: Pattern =
         Pattern.compile("^(?: *>>> +(.*)| *>(?!>>) +([^\\n]*\\n?))", Pattern.DOTALL)
     private val PATTERN_CHANNEL_MENTION: Pattern = Pattern.compile("^<#(\\d+)>")
+    private val PATTERN_STATIC_ROUTE: Pattern = Pattern.compile("^<id:(home|browse|customize|guide|linked-roles)(?::(\\d+))?>")
     private val PATTERN_ROLE_MENTION: Pattern = Pattern.compile("^<@&(\\d+)>")
     private val PATTERN_MENTION: Pattern = Pattern.compile("^<@!?(\\d+)>|^@(everyone|here)")
     private val PATTERN_CUSTOM_EMOJI: Pattern = Pattern.compile("^$REGEX_CUSTOM_EMOJI")
@@ -478,6 +480,16 @@ object Rules {
                 parser: Parser<T, in ChannelMentionNode<T>, S>,
                 state: S,
             ): ParseSpec<T, S> = ParseSpec(ChannelMentionNode(matcher.group(1).toLongOrDefault()), state)
+        }
+
+    /** `<id:customize>` and the guild's other built-in pages. */
+    fun <T : StaticRouteNode.RenderContext, S> createStaticRouteRule(): Rule<T, StaticRouteNode<T>, S> =
+        object : Rule<T, StaticRouteNode<T>, S>(PATTERN_STATIC_ROUTE) {
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<T, in StaticRouteNode<T>, S>,
+                state: S,
+            ): ParseSpec<T, S> = ParseSpec(StaticRouteNode(matcher.group(1)!!, matcher.group(2)?.toLongOrNull()), state)
         }
 
     /** `<@&id>` */

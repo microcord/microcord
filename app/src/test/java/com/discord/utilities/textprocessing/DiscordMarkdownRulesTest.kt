@@ -15,6 +15,7 @@ import com.discord.utilities.textprocessing.node.ListItemNode
 import com.discord.utilities.textprocessing.node.ListNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
+import com.discord.utilities.textprocessing.node.StaticRouteNode
 import com.discord.utilities.textprocessing.node.SubtextNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
@@ -307,6 +308,12 @@ class DiscordMarkdownRulesTest {
     @Test
     fun channelMentionRuleCapturesTheChannelId() {
         assertEquals(456L, parse("<#456>").filterIsInstance<ChannelMentionNode<*>>().single().channelId)
+    }
+
+    @Test
+    fun staticRouteRuleCapturesTheRouteAndItem() {
+        val routes = parse("<id:customize> <id:linked-roles:42> <id:nope>").filterIsInstance<StaticRouteNode<*>>()
+        assertEquals(listOf("customize" to null, "linked-roles" to 42L), routes.map { it.route to it.itemId })
     }
 
     @Test

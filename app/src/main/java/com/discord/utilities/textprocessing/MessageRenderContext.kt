@@ -14,6 +14,7 @@ import com.discord.utilities.textprocessing.node.CommandMentionNode
 import com.discord.utilities.textprocessing.node.EmojiNode
 import com.discord.utilities.textprocessing.node.RoleMentionNode
 import com.discord.utilities.textprocessing.node.SpoilerNode
+import com.discord.utilities.textprocessing.node.StaticRouteNode
 import com.discord.utilities.textprocessing.node.TimestampNode
 import com.discord.utilities.textprocessing.node.UrlNode
 import com.discord.utilities.textprocessing.node.UserLinkNode
@@ -79,6 +80,7 @@ data class MessageRenderContext(
     AttachmentLinkNode.RenderContext,
     CommandMentionNode.RenderContext,
     RoleMentionNode.RenderContext,
+    StaticRouteNode.RenderContext,
     UrlNode.RenderContext,
     SpoilerNode.RenderContext,
     TimestampNode.RenderContext {

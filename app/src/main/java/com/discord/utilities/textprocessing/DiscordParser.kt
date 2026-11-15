@@ -117,6 +117,7 @@ object DiscordParser {
 
         if (supportEntityMentions) {
             parser.addRule(Rules.createChannelMentionRule())
+            parser.addRule(Rules.createStaticRouteRule())
             parser.addRule(Rules.createRoleMentionRule())
             parser.addRule(Rules.createUserMentionRule())
             parser.addRule(Rules.createCommandMentionRule())

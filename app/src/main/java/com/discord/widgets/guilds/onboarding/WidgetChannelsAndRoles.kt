@@ -76,6 +76,7 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
             renderRows()
         }
         StoreStream.getGuildOnboarding().fetch(guildId())
+        if (mostRecentIntent.getBooleanExtra(ARG_BROWSE, false)) tab = Tab.BROWSE
         renderTabs()
     }
 
@@ -389,12 +390,13 @@ class WidgetChannelsAndRoles : AppFragment(R.layout.widget_channels_and_roles) {
 
     companion object {
         private const val ARG_GUILD_ID = "ARG_GUILD_ID"
+        private const val ARG_BROWSE = "ARG_BROWSE"
 
-        fun launch(context: Context, guildId: Long) {
+        fun launch(context: Context, guildId: Long, browse: Boolean = false) {
             AppScreenRouter.launch(
                 context,
                 WidgetChannelsAndRoles::class.java,
-                Intent().putExtra(ARG_GUILD_ID, guildId),
+                Intent().putExtra(ARG_GUILD_ID, guildId).putExtra(ARG_BROWSE, browse),
             )
         }
     }
