@@ -13,6 +13,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.lifecycle.Lifecycle
+import com.discord.api.channel.isStageVoiceChannel
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -437,7 +438,14 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
                     .appSubscribe(WidgetTabsHost::class.java) {
                         StoreStream.getTabsNavigation()
                             .selectHomeTab(StoreNavigation.PanelAction.CLOSE, true)
-                        ChannelSelector.getInstance().selectChannel(route.guildId ?: 0L, route.channelId)
+                        // A link to a message is for reading it: selecting a stage would join it.
+                        val stage = StoreStream.getChannels().getChannel(route.channelId)
+                            ?.takeIf { route.messageId != null && it.isStageVoiceChannel() }
+                        if (stage != null) {
+                            ChannelSelector.getInstance().openVocalChannelChat(stage)
+                        } else {
+                            ChannelSelector.getInstance().selectChannel(route.guildId ?: 0L, route.channelId)
+                        }
                         route.messageId?.let { StoreStream.getMessagesLoader().jumpToMessage(route.channelId, it) }
                     }
             }
