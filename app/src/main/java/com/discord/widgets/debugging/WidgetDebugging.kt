@@ -1,37 +1,41 @@
 package com.discord.widgets.debugging
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.annotation.ColorInt
 import androidx.core.content.FileProvider
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.databinding.WidgetDebuggingAdapterItemBinding
+import com.discord.databinding.WidgetDebuggingBinding
 import com.discord.utilities.analytics.AnalyticSuperProperties
 import com.discord.utilities.color.ColorCompat
-import com.discord.utilities.mg_recycler.MGRecyclerAdapter
-import com.discord.utilities.mg_recycler.MGRecyclerAdapterSimple
-import com.discord.utilities.mg_recycler.MGRecyclerDataPayload
-import com.discord.utilities.mg_recycler.MGRecyclerViewHolder
 import com.discord.utilities.rx.appSubscribe
-import com.discord.utilities.rx.computationBuffered
+import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
 import com.discord.utilities.systemlog.SystemLogUtils
-import com.discord.utilities.view.extensions.setOnLongClickListenerConsumeClick
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 import rx.Observable
 import rx.schedulers.Schedulers
 import rx.subjects.BehaviorSubject
@@ -40,9 +44,10 @@ import rx.subjects.BehaviorSubject
  * The in-app log viewer: the bounded [AppLog] snapshot, newest first, colour-coded by priority and
  * expandable per row.
  *
- * The reference's `AppLog` subject replays at most 5,000 entries. [AppLog.observeLogs] exposes that
- * same bounded lifecycle snapshot so pausing or reopening the screen neither loses nor duplicates
- * lines.
+ * The buffer holds at most [AppLog.MAX_BUFFERED_LOGS] lines, so while logs stream in the oldest are
+ * dropped. The list therefore only follows live updates while it is scrolled to the newest line;
+ * scrolled away it holds still and offers a "new logs" button, instead of shifting or losing the
+ * lines being read.
  *
  * **No secrets reach this screen.** `AppLog` redacts tokens, cookies, passwords, MFA codes and
  * message content before a line is ever recorded, so the viewer renders whatever survived that
@@ -52,43 +57,88 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
 
     private val filterSubject: BehaviorSubject<Boolean> = BehaviorSubject.create(true)
     private val showSystemLogsSubject: BehaviorSubject<Boolean> = BehaviorSubject.create(false)
-    private var logsAdapter: Adapter? = null
+    private val querySubject: BehaviorSubject<String> = BehaviorSubject.create("")
+    private var _binding: WidgetDebuggingBinding? = null
+    private val binding get() = requireNotNull(_binding)
+    private val adapter = LogAdapter()
+
+    /** The newest rows, held back while the user reads older ones. */
+    private var pending: List<AppLog.LoggedItem>? = null
+
+    /** Set when a filter changes: its result is shown even while scrolled away. */
+    private var applyNext = true
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        val recycler: RecyclerView = view.findViewById(R.id.debugging_logs)
-        logsAdapter = MGRecyclerAdapter.configure(Adapter(recycler))
-        // Newest at the top and the list pinned there: `configure` installs a forward layout
-        // manager, so it has to be reversed afterwards.
-        (recycler.layoutManager as? LinearLayoutManager)?.apply {
-            reverseLayout = true
-            isSmoothScrollbarEnabled = true
+        _binding = WidgetDebuggingBinding.bind(view)
+        binding.debuggingLogs.layoutManager = LinearLayoutManager(requireContext())
+        binding.debuggingLogs.adapter = adapter
+        binding.debuggingLogs.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (isAtNewest()) pending?.let(::submit)
+            }
+        })
+        binding.debuggingNewLogs.setOnClickListener {
+            scrollToNewest()
+            pending?.let(::submit)
+        }
+        binding.debuggingFilter.bindTextWatcher(this) {
+            applyNext = true
+            querySubject.onNext(it.trim())
         }
         setActionBarDisplayHomeAsUpEnabled()
         setActionBarTitle(R.string.debug)
         configureMenu()
     }
 
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
+    }
+
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
-        // Pinned above the newest log line (the list is reversed, so the end renders at the top),
-        // and shown whatever the filters: no report is useful without them.
-        val headerRows = debugHeader(requireContext()).asReversed()
-            .map { LogRow(AppLog.LoggedItem(Log.INFO, it, null)) }
+        // Device info leads the list whatever the filters: no report is useful without it.
+        val headerRows = debugHeader(requireContext()).map { AppLog.LoggedItem(Log.INFO, it, null) }
         Observable.combineLatest(
             AppLog.observeLogs().distinctUntilChanged(),
             filterSubject.distinctUntilChanged(),
             showSystemLogsSubject.distinctUntilChanged(),
-        ) { logs, isFiltered, showSystemLogs ->
-            filterDebugLogs(logs, isFiltered, showSystemLogs).map(::LogRow) + headerRows
+            querySubject.distinctUntilChanged(),
+        ) { logs, isFiltered, showSystemLogs, query ->
+            val rows = filterDebugLogs(logs, isFiltered, showSystemLogs)
+                .filter { query.isEmpty() || logRowText(it).contains(query, ignoreCase = true) }
+                .asReversed()
+            if (query.isEmpty()) headerRows + rows else rows
         }
-            .computationBuffered()
+            .throttleLast(UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS)
+            .computationLatest()
             .ui(this)
             .appSubscribe(errorClass = WidgetDebugging::class.java, onNext = ::configureUI)
     }
 
-    private fun configureUI(logs: List<LogRow>) {
-        logsAdapter?.setData(logs)
+    private fun configureUI(rows: List<AppLog.LoggedItem>) {
+        if (applyNext || adapter.itemCount == 0 || isAtNewest()) {
+            applyNext = false
+            submit(rows)
+        } else {
+            pending = rows
+            binding.debuggingNewLogs.visibility = View.VISIBLE
+        }
+    }
+
+    private fun submit(rows: List<AppLog.LoggedItem>) {
+        val follow = isAtNewest()
+        pending = null
+        binding.debuggingNewLogs.visibility = View.GONE
+        // Rows inserted above the first visible one would otherwise leave the list anchored below them.
+        adapter.submitList(rows) { if (follow) scrollToNewest() }
+    }
+
+    private fun isAtNewest() = _binding?.debuggingLogs?.canScrollVertically(-1) == false
+
+    private fun scrollToNewest() {
+        _binding?.debuggingLogs?.scrollToPosition(0)
     }
 
     /**
@@ -104,11 +154,13 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
                     R.id.menu_debugging_filter -> {
                         val checked = !menuItem.isChecked
                         menuItem.isChecked = checked
+                        applyNext = true
                         filterSubject.onNext(checked)
                     }
                     R.id.menu_debugging_system_logs -> {
                         val checked = !menuItem.isChecked
                         menuItem.isChecked = checked
+                        applyNext = true
                         showSystemLogsSubject.onNext(checked)
                     }
                     R.id.menu_debugging_share -> shareLogs()
@@ -180,88 +232,73 @@ class WidgetDebugging : AppFragment(R.layout.widget_debugging) {
             )
     }
 
-    /**
-     * One log line as a diffable row.
-     *
-     * `AppLog.LoggedItem` cannot implement [MGRecyclerDataPayload] itself — `com.discord.app` must
-     * not depend on the recycler utilities — so the row type lives here and forwards the item's own
-     * stable key.
-     */
-    private data class LogRow(val item: AppLog.LoggedItem) : MGRecyclerDataPayload {
-        override val type: Int = VIEW_TYPE_LOG
-        override val key: String = item.key
-    }
+    /** Rows keep their expanded state across updates, so a log being read does not snap shut. */
+    private class LogAdapter : ListAdapter<AppLog.LoggedItem, LogAdapter.Holder>(DIFF) {
+        private val expanded = HashSet<String>()
 
-    private class Adapter(recycler: RecyclerView) : MGRecyclerAdapterSimple<LogRow>(recycler) {
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
+            WidgetDebuggingAdapterItemBinding.inflate(LayoutInflater.from(parent.context), parent, false),
+        )
 
-        init {
-            setOnUpdated { _, _ ->
-                // Follow the tail only while the user is already at it; otherwise leave their
-                // scroll position alone.
-                val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return@setOnUpdated
-                if (layoutManager.findFirstCompletelyVisibleItemPosition() == 0) {
-                    recycler.scrollToPosition(0)
-                }
+        override fun onBindViewHolder(holder: Holder, position: Int) {
+            val item = getItem(position)
+            val context = holder.binding.root.context
+            holder.binding.logMeta.apply {
+                text = TIME_FORMAT.get()!!.format(Date(item.timeMillis)) + "  " + priorityLabel(item.priority)
+                setTextColor(priorityColor(context, item.priority))
+            }
+            holder.binding.logMessage.apply {
+                text = logRowText(item)
+                maxLines = if (item.key in expanded) Int.MAX_VALUE else COLLAPSED_MAX_LINES
+            }
+            holder.binding.root.setOnClickListener {
+                if (!expanded.remove(item.key)) expanded += item.key
+                notifyItemChanged(holder.bindingAdapterPosition)
+            }
+            holder.binding.root.setOnLongClickListener {
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+                    ?.setPrimaryClip(ClipData.newPlainText("", holder.binding.logMessage.text))
+                true
             }
         }
 
-        /** Newest first: the backing list grows at the end, the list renders from the end. */
-        override fun getItem(position: Int): LogRow = internalData[internalData.size - 1 - position]
+        class Holder(val binding: WidgetDebuggingAdapterItemBinding) : RecyclerView.ViewHolder(binding.root)
 
-        override fun onCreateViewHolder(
-            parent: ViewGroup,
-            viewType: Int,
-        ): MGRecyclerViewHolder<*, LogRow> = when (viewType) {
-            VIEW_TYPE_LOG -> Item(R.layout.widget_debugging_adapter_item, this)
-            else -> throw invalidViewTypeException(viewType)
-        }
+        private companion object {
+            val DIFF = object : DiffUtil.ItemCallback<AppLog.LoggedItem>() {
+                override fun areItemsTheSame(old: AppLog.LoggedItem, new: AppLog.LoggedItem) = old.key == new.key
+                override fun areContentsTheSame(old: AppLog.LoggedItem, new: AppLog.LoggedItem) = old.key == new.key
+            }
+            val TIME_FORMAT: ThreadLocal<SimpleDateFormat> = object : ThreadLocal<SimpleDateFormat>() {
+                override fun initialValue() = SimpleDateFormat("HH:mm:ss.SSS", Locale.ROOT)
+            }
 
-        private class Item(
-            layout: Int,
-            adapter: Adapter,
-        ) : MGRecyclerViewHolder<Adapter, LogRow>(layout, adapter) {
-
-            private val logMessage: TextView = itemView.findViewById(R.id.log_message)
-
-            @SuppressLint("SetTextI18n")
-            override fun onConfigure(position: Int, data: LogRow) {
-                super.onConfigure(position, data)
-                val item = data.item
-                logMessage.setTextColor(getColor(logMessage.context, item.priority))
-                logMessage.text = logRowText(item)
-                logMessage.maxLines = COLLAPSED_MAX_LINES
-
-                itemView.setOnLongClickListenerConsumeClick {
-                    copyToClipboard(itemView.context, logMessage.text)
-                }
-                itemView.setOnClickListener {
-                    logMessage.maxLines =
-                        if (logMessage.maxLines == Int.MAX_VALUE) COLLAPSED_MAX_LINES else Int.MAX_VALUE
-                    itemView.requestLayout()
-                }
+            fun priorityLabel(priority: Int) = when (priority) {
+                Log.VERBOSE -> "VERBOSE"
+                Log.DEBUG -> "DEBUG"
+                Log.WARN -> "WARN"
+                Log.ERROR -> "ERROR"
+                Log.ASSERT -> "ASSERT"
+                else -> "INFO"
             }
 
             @ColorInt
-            private fun getColor(context: Context, priority: Int): Int = when (priority) {
-                Log.VERBOSE -> ColorCompat.getThemedColor(context, R.attr.primary_300)
-                Log.DEBUG -> ColorCompat.getColor(context, R.color.status_green_600)
-                Log.WARN -> ColorCompat.getColor(context, R.color.status_yellow_500)
-                Log.ERROR -> ColorCompat.getColor(context, R.color.status_red_500)
-                else -> ColorCompat.getThemedColor(context, R.attr.primary_100)
-            }
-
-            private fun copyToClipboard(context: Context, text: CharSequence) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                    as? android.content.ClipboardManager ?: return
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", text))
-            }
+            fun priorityColor(context: Context, priority: Int): Int = ColorCompat.getThemedColor(
+                context,
+                when (priority) {
+                    Log.DEBUG -> R.attr.colorStatusPositive
+                    Log.WARN -> R.attr.colorStatusWarning
+                    Log.ERROR, Log.ASSERT -> R.attr.colorStatusDanger
+                    else -> R.attr.colorTextMuted
+                },
+            )
         }
     }
 
     companion object {
         private const val COLLAPSED_MAX_LINES = 2
-        private const val VIEW_TYPE_LOG = 0
         private const val REQUEST_SAVE_LOGS = 6_201
+        private const val UPDATE_INTERVAL_MS = 250L
 
         fun launch(context: Context) {
             AppScreenRouter.launch(context, WidgetDebugging::class.java)

@@ -23,6 +23,7 @@ object AppLog {
         val isSystem: Boolean = false,
     ) {
         val key: String = UUID.randomUUID().toString()
+        val timeMillis: Long = System.currentTimeMillis()
     }
 
     private const val DEFAULT_TAG = "Discord"
