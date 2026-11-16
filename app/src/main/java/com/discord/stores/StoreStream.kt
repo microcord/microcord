@@ -2805,7 +2805,8 @@ class StoreStream private constructor(
         WidgetUserMutualGuilds.stateSource = { userId ->
             userProfiles.fetchProfile(userId, withMutualGuilds = true)
             Observable.combineLatest(
-                userProfiles.observeUserProfile(userId),
+                // The scope fetched just above, not whichever server's profile was fetched last.
+                userProfiles.observeUserProfile(userId, null),
                 guilds.observeGuilds(),
                 users.observeUser(userId),
                 guilds.observeComputed(),

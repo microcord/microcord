@@ -142,7 +142,9 @@ class SettingsViewModel(
                 // is fetched. Cached afterwards, so re-opening settings does not re-request.
                 StoreStream.getUserProfiles().fetchProfileIfMissing(meUser.id)
                 Observable.combineLatest(
-                    StoreStream.getUserProfiles().observeUserProfile(meUser.id),
+                    // Account scope: the unscoped profile is whichever was fetched last, so a
+                    // server profile seen in that server would otherwise show its banner here.
+                    StoreStream.getUserProfiles().observeUserProfile(meUser.id, null),
                     StoreStream.getPresences().observeAllPresences().map { it[meUser.id] },
                     settings.observeIsAnimatedEmojisEnabled(),
                     StoreStream.getAccessibility().observeReducedMotionEnabled(),

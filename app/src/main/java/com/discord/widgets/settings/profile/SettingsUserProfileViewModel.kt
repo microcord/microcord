@@ -790,7 +790,7 @@ class SettingsUserProfileViewModel(
             StoreStream.getUsers().observeMe().flatMap { user ->
                 Observable.combineLatest(
                     StoreStream.getGuilds().observeGuild(guildId ?: -1L),
-                    StoreStream.getUserProfiles().observeUserProfile(user.id),
+                    StoreStream.getUserProfiles().observeUserProfile(user.id, guildId),
                     StoreStream.getGuilds().observeComputedMember(guildId ?: -1L, user.id),
                     GuildChannelsInfo.get(guildId ?: -1L),
                     StoreStream.getCollectibles().observeState(),

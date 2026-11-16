@@ -45,7 +45,8 @@ class EditProfileBannerSheetViewModel(
     companion object {
         private fun observeStoreState(): Observable<StoreState> = StoreStream.getUsers().observeMe()
             .flatMap { user ->
-                StoreStream.getUserProfiles().observeUserProfile(user.id)
+                // The banner color is an account setting, so never a server profile's.
+                StoreStream.getUserProfiles().observeUserProfile(user.id, null)
                     .map { profile -> StoreState(user, profile) }
             }
 

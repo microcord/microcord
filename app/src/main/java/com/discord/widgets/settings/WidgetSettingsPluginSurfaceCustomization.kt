@@ -281,7 +281,7 @@ class WidgetSettingsPluginSurfaceCustomization :
 
     private fun configureProfilePreview() {
         val me = StoreStream.getUsers().getMe()
-        val profile = StoreStream.getUserProfiles().getUserProfile(me.id)
+        val profile = StoreStream.getUserProfiles().getUserProfile(me.id, null)
         binding.pluginSurfaceProfilePreview.bindContext(parentFragmentManager, me)
         binding.pluginSurfaceProfilePreview.bindHeader(
             UserProfileHeaderViewModel.ViewState.Loaded(
