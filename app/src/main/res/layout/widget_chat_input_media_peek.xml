@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Press-and-hold preview of a gallery item in the attachment picker; it closes on release. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="32dp" android:background="#B3000000">
+    <!-- Sized by the image, so the rounded corners follow the media rather than the screen. -->
+    <FrameLayout android:id="@+id/media_peek_card" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:background="@drawable/drawable_media_peek_card" android:elevation="8dp">
+        <ImageView android:id="@+id/media_peek_image" android:layout_width="wrap_content" android:layout_height="wrap_content" android:scaleType="fitXY" android:importantForAccessibility="no"/>
+        <VideoView android:id="@+id/media_peek_video" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+    </FrameLayout>
+</FrameLayout>

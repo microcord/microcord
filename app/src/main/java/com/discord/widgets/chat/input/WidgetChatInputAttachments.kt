@@ -2,24 +2,28 @@ package com.discord.widgets.chat.input
 
 import android.content.Context
 import android.app.Activity
+import android.app.Dialog
 import android.content.AsyncQueryHandler
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Intent
 import android.database.Cursor
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Size
 import android.text.TextPaint
+import android.util.LruCache
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.GestureDetector
@@ -47,6 +51,7 @@ import com.discord.app.AppFragment
 import com.discord.app.AppLog
 import com.discord.databinding.FragmentCameraBinding
 import com.discord.databinding.WidgetChatInputGridImageBinding
+import com.discord.databinding.WidgetChatInputMediaPeekBinding
 import com.discord.databinding.WidgetChatInputPermReqMediaBinding
 import com.discord.i18n.setI18nText
 import com.discord.models.domain.emoji.Emoji
@@ -89,6 +94,7 @@ import java.io.FileNotFoundException
 import java.util.UUID
 import rx.Observable
 import rx.schedulers.Schedulers
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -227,8 +233,16 @@ class WidgetChatInputAttachments(
         )
 
         previewList.addItemDecoration(FilePreviewDecoration(adapter))
+        // The strip holds only the few picked files, so each is stat-ed once and remembered.
+        val sizes = HashMap<Uri, Long?>()
         previewList.addItemDecoration(MediaSizeDecoration { position ->
-            adapter.selectionAggregator.attachments.getOrNull(position)?.uri
+            adapter.selectionAggregator.attachments.getOrNull(position)?.uri?.let { uri ->
+                sizes.getOrPut(uri) {
+                    runCatching {
+                        previewList.context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+                    }.getOrNull()
+                }
+            }
         })
         previewList.addItemDecoration(SpoilerPreviewDecoration(adapter))
         installLongPressToOpenSheet(fragment, previewList, adapter)
@@ -590,15 +604,10 @@ class WidgetChatInputAttachments(
             grantedSelectionCoordinator = coordinator
             val thumbnailSide = resources.displayMetrics.widthPixels / MEDIA_GRID_COLUMNS
             recyclerView.layoutManager = GridLayoutManager(context, MEDIA_GRID_COLUMNS)
-            val adapter = MediaCursorAdapter(
-                context.contentResolver,
-                coordinator,
-                thumbnailSide,
-                viewLifecycleOwner.lifecycleScope,
-            )
+            val adapter = MediaCursorAdapter(context.contentResolver, coordinator, thumbnailSide, viewLifecycleOwner.lifecycleScope)
             recyclerView.adapter = adapter
             mediaSizeDecoration?.let(recyclerView::removeItemDecoration)
-            mediaSizeDecoration = MediaSizeDecoration(adapter::uri).also(recyclerView::addItemDecoration)
+            mediaSizeDecoration = MediaSizeDecoration(adapter::size).also(recyclerView::addItemDecoration)
             recyclerView.invalidateItemDecorations()
             view?.findViewById<SwipeRefreshLayout>(com.lytefast.flexinput.R.id.swipeRefreshLayout)?.let { swipeRefresh ->
                 swipeRefresh.setOnRefreshListener {
@@ -620,13 +629,19 @@ class WidgetChatInputAttachments(
         private val resolver: ContentResolver,
         coordinator: SelectionCoordinator<Attachment<Any>, Attachment<Any>>,
         private val thumbnailSize: Int,
-        private val scope: kotlinx.coroutines.CoroutineScope,
+        private val scope: CoroutineScope,
     ) : RecyclerView.Adapter<MediaCursorAdapter.Holder>() {
         private val selection = coordinator.bind(this)
         private var cursor: Cursor? = null
         private var idColumn = 0
         private var nameColumn = 0
         private var typeColumn = 0
+        private var sizeColumn = 0
+
+        /** Tile thumbnails by media id, so scrolling back does not decode them again. */
+        private val thumbnails = object : LruCache<Long, Bitmap>((Runtime.getRuntime().maxMemory() / 8 / 1024).toInt()) {
+            override fun sizeOf(key: Long, value: Bitmap) = value.byteCount / 1024
+        }
 
         init {
             setHasStableIds(true)
@@ -647,9 +662,15 @@ class WidgetChatInputAttachments(
 
         override fun getItemId(position: Int) = item(position)?.id ?: RecyclerView.NO_ID
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
-            WidgetChatInputGridImageBinding.inflate(LayoutInflater.from(parent.context), parent, false),
-        )
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+            val binding = WidgetChatInputGridImageBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+            // Square tiles: a column's width, less the tile's own padding.
+            val column = (parent.width - parent.paddingLeft - parent.paddingRight).takeIf { it > 0 }
+                ?.div(MEDIA_GRID_COLUMNS) ?: thumbnailSize
+            binding.contentIv.layoutParams.height = column - binding.root.paddingTop - binding.root.paddingBottom
+            binding.contentIv.clipToOutline = true
+            return Holder(binding)
+        }
 
         override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(item(position), position)
 
@@ -673,6 +694,7 @@ class WidgetChatInputAttachments(
                     idColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
                     nameColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
                     typeColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
+                    sizeColumn = result.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
                     notifyDataSetChanged()
                 }
             }.startQuery(
@@ -683,6 +705,7 @@ class WidgetChatInputAttachments(
                     MediaStore.Files.FileColumns._ID,
                     MediaStore.Files.FileColumns.DISPLAY_NAME,
                     MediaStore.Files.FileColumns.MEDIA_TYPE,
+                    MediaStore.Files.FileColumns.SIZE,
                 ),
                 "${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?",
                 arrayOf(
@@ -711,16 +734,34 @@ class WidgetChatInputAttachments(
             )
         }
 
-        fun uri(position: Int): Uri? = item(position)?.uri
+        /** From the query itself: opening each file to stat it on the draw pass is what made scrolling stutter. */
+        fun size(position: Int): Long? = cursor?.takeIf { it.moveToPosition(position) }
+            ?.takeUnless { it.isNull(sizeColumn) }?.getLong(sizeColumn)
 
         inner class Holder(private val binding: WidgetChatInputGridImageBinding) : RecyclerView.ViewHolder(binding.root) {
-            private var thumbnailJob: Job? = null
             private var attachment: Attachment<Any>? = null
+            private var peek: Dialog? = null
+            private var thumbnailJob: Job? = null
 
             init {
                 itemView.setOnClickListener {
                     bindingAdapterPosition.takeIf { it != RecyclerView.NO_POSITION }
                         ?.let { position -> selection.toggleItem(attachment, position) }
+                }
+                // Press and hold to look at an item larger; letting go closes it. The gesture stays
+                // with this window, so the release still arrives here once the preview is up.
+                itemView.setOnLongClickListener {
+                    val item = attachment ?: return@setOnLongClickListener false
+                    itemView.parent?.requestDisallowInterceptTouchEvent(true)
+                    peek = showMediaPeek(itemView.context, item, scope, thumbnails.get(item.id))
+                    true
+                }
+                itemView.setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                        peek?.dismiss()
+                        peek = null
+                    }
+                    false
                 }
             }
 
@@ -729,31 +770,21 @@ class WidgetChatInputAttachments(
                 attachment = item
                 setSelected(item != null && selection.isSelected(item, position), animate = false)
                 if (item == null) return
-                val isVideo = item.data == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                binding.itemVideoIndicator.visibility = if (isVideo) View.VISIBLE else View.GONE
-                if (isVideo) {
-                    thumbnailJob = scope.launch {
-                        val bitmap = withContext(Dispatchers.IO) {
-                            runCatching {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    resolver.loadThumbnail(item.uri, Size(thumbnailSize, thumbnailSize), null)
-                                } else {
-                                    @Suppress("DEPRECATION")
-                                    MediaStore.Video.Thumbnails.getThumbnail(
-                                        resolver,
-                                        item.id,
-                                        MediaStore.Video.Thumbnails.MINI_KIND,
-                                        null,
-                                    )
-                                }
-                            }.getOrNull()
-                        }
-                        if (attachment == item && bitmap != null) {
-                            binding.contentIv.setImageBitmap(bitmap)
-                        }
-                    }
-                } else {
-                    binding.contentIv.setImageURI(item.uri)
+                binding.itemVideoIndicator.visibility =
+                    if (item.data == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) View.VISIBLE else View.GONE
+                thumbnails.get(item.id)?.let {
+                    binding.contentIv.setImageBitmap(it)
+                    return
+                }
+                // The system's own thumbnail, for photos and videos alike: Fresco's local path read
+                // the legacy thumbnail table, which can hold another item's picture. recycle()
+                // cancels this, and the check below drops a result for a tile that was reused.
+                thumbnailJob = scope.launch {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        loadMediaThumbnail(resolver, item, thumbnailSize, thumbnailSize)
+                    } ?: return@launch
+                    thumbnails.put(item.id, bitmap)
+                    if (attachment == item) binding.contentIv.setImageBitmap(bitmap)
                 }
             }
 
@@ -771,11 +802,13 @@ class WidgetChatInputAttachments(
             }
 
             fun recycle() {
+                peek?.dismiss()
+                peek = null
                 thumbnailJob?.cancel()
                 thumbnailJob = null
                 attachment = null
                 binding.itemVideoIndicator.visibility = View.GONE
-                binding.contentIv.release()
+                binding.contentIv.setImageDrawable(null)
             }
         }
     }
@@ -1003,9 +1036,8 @@ class WidgetChatInputAttachments(
     }
 
     private class MediaSizeDecoration(
-        private val uriAt: (Int) -> Uri?,
+        private val sizeAt: (Int) -> Long?,
     ) : RecyclerView.ItemDecoration() {
-        private val sizes = mutableMapOf<String, String?>()
         private val background = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(210, 0, 0, 0) }
         private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
 
@@ -1016,16 +1048,8 @@ class WidgetChatInputAttachments(
                 val child = parent.getChildAt(childIndex)
                 val position = parent.getChildAdapterPosition(child)
                 if (position == RecyclerView.NO_POSITION) return@repeat
-                val uri = uriAt(position) ?: return@repeat
-                val label = sizes.getOrPut(uri.toString()) {
-                    runCatching {
-                        parent.context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-                            descriptor.statSize.takeIf { it >= 0L }?.let {
-                                android.text.format.Formatter.formatShortFileSize(parent.context, it)
-                            }
-                        }
-                    }.getOrNull()
-                } ?: return@repeat
+                val bytes = sizeAt(position)?.takeIf { it >= 0L } ?: return@repeat
+                val label = android.text.format.Formatter.formatShortFileSize(parent.context, bytes)
                 val horizontal = 5f * density
                 val vertical = 2f * density
                 val width = text.measureText(label) + horizontal * 2
@@ -1071,7 +1095,7 @@ class WidgetChatInputAttachments(
         private const val KEYBOARD_ATTACHMENT_DIRECTORY = "keyboard-attachments"
         const val SOURCE_MEDIA_PICKER = "media_picker"
         const val SOURCE_DOCUMENT_PICKER = "document_picker"
-        const val MEDIA_GRID_COLUMNS = 3
+        const val MEDIA_GRID_COLUMNS = 4
 
         val R_DRAWABLE_IMAGE = com.lytefast.flexinput.R.drawable.ic_image_24dp
         val R_DRAWABLE_FILE = com.lytefast.flexinput.R.drawable.ic_file_24dp
@@ -1100,3 +1124,87 @@ private fun Fragment.appFragment(): AppFragment? =
 @Suppress("UNCHECKED_CAST")
 private fun Fragment.flexInputCoordinator(): FlexInputCoordinator<Any>? =
     parentFragment?.parentFragment as? FlexInputCoordinator<Any>
+
+/**
+ * A frame of [item] fitted within [width]x[height]: the system's cached thumbnail where there is one,
+ * which also gives videos their first frame. Blocks; call off the main thread.
+ */
+private fun loadMediaThumbnail(resolver: ContentResolver, item: Attachment<Any>, width: Int, height: Int): Bitmap? =
+    runCatching {
+        val isVideo = item.data == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> resolver.loadThumbnail(item.uri, android.util.Size(width, height), null)
+            @Suppress("DEPRECATION")
+            isVideo -> MediaStore.Video.Thumbnails.getThumbnail(resolver, item.id, MediaStore.Video.Thumbnails.MINI_KIND, null)
+            else -> {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                resolver.openInputStream(item.uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= width && bounds.outHeight / (sample * 2) >= height) sample *= 2
+                resolver.openInputStream(item.uri)?.use {
+                    BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+                }
+            }
+        }
+    }.getOrNull()
+
+/**
+ * Press-and-hold preview of [item] over a dimmed screen: a rounded card shaped like the media, the
+ * photo or the video's first frame, and the video then playing muted on a loop.
+ */
+private fun showMediaPeek(context: Context, item: Attachment<Any>, scope: CoroutineScope, tile: Bitmap?): Dialog {
+    val binding = WidgetChatInputMediaPeekBinding.inflate(LayoutInflater.from(context))
+    binding.mediaPeekCard.clipToOutline = true
+    val metrics = context.resources.displayMetrics
+    // Sized from the media's shape to fill the screen, so the tile's picture (shown at once) and
+    // the sharper frame that replaces it occupy the same card and nothing jumps.
+    fun showFitted(bitmap: Bitmap) {
+        val room = binding.root.paddingLeft + binding.root.paddingRight
+        val scale = minOf(
+            (metrics.widthPixels - room).toFloat() / bitmap.width,
+            (metrics.heightPixels - room).toFloat() / bitmap.height,
+        )
+        binding.mediaPeekImage.layoutParams = binding.mediaPeekImage.layoutParams.apply {
+            width = (bitmap.width * scale).toInt()
+            height = (bitmap.height * scale).toInt()
+        }
+        binding.mediaPeekImage.setImageBitmap(bitmap)
+    }
+    tile?.let(::showFitted)
+    val dialog = Dialog(context, android.R.style.Theme_Translucent_NoTitleBar_Fullscreen).apply {
+        setContentView(binding.root)
+        show()
+    }
+    val job = scope.launch {
+        val bitmap = withContext(Dispatchers.IO) {
+            loadMediaThumbnail(context.contentResolver, item, metrics.widthPixels, metrics.heightPixels)
+        } ?: return@launch
+        showFitted(bitmap)
+        if (item.data != MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) return@launch
+        // The video's surface is black until its first frame renders, so the frame is drawn over it
+        // as its background until then.
+        binding.mediaPeekVideo.apply {
+            layoutParams = layoutParams.apply {
+                width = binding.mediaPeekImage.layoutParams.width
+                height = binding.mediaPeekImage.layoutParams.height
+            }
+            background = BitmapDrawable(resources, bitmap)
+            visibility = View.VISIBLE
+            setOnPreparedListener { player ->
+                player.setVolume(0f, 0f)
+                player.isLooping = true
+                start()
+            }
+            setOnInfoListener { _, what, _ ->
+                if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) background = null
+                false
+            }
+            setVideoURI(item.uri)
+        }
+    }
+    dialog.setOnDismissListener {
+        job.cancel()
+        binding.mediaPeekVideo.stopPlayback()
+    }
+    return dialog
+}

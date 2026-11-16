@@ -1,15 +1,21 @@
 package com.discord.widgets.chat.input
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.os.Bundle
 import android.util.AttributeSet
 import android.util.Xml
+import android.view.MotionEvent
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.viewpager.widget.ViewPager
@@ -22,6 +28,7 @@ import com.lytefast.flexinput.fragment.AddContentDialogFragment
 import com.lytefast.flexinput.fragment.FlexInputFragmentCompat
 import com.lytefast.flexinput.managers.KeyboardManager
 import org.xmlpull.v1.XmlPullParser
+import kotlin.math.abs
 
 /** Restores the XML attributes that the public FlexInput build loses on fragment recreation. */
 class AppFlexInputFragment : FlexInputFragmentCompat() {
@@ -63,6 +70,7 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
                 })
                 pager.currentItem = 0
                 tabs.getTabAt(0)?.select()
+                makeResizable(pager, view)
             }
         }
     }
@@ -70,6 +78,52 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         childFragmentManager.registerFragmentLifecycleCallbacks(addContentTabCallbacks, false)
+    }
+
+    /**
+     * Lets the handle above the content pager resize it, as RN's attachment sheet does: drag or flick
+     * it up for a taller gallery, down to shrink it back, or tap it to toggle. The list inside keeps
+     * scrolling on its own; the launcher and send buttons are anchored to the pager and follow.
+     */
+    private fun makeResizable(pager: View, root: View) {
+        val handle = root.findViewById<View>(R.id.content_drag_handle) ?: return
+        val collapsed = pager.height.takeIf { it > 0 } ?: return
+        val statusBar = ViewCompat.getRootWindowInsets(root)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
+        val expanded = root.height - statusBar - resources.getDimensionPixelSize(R.dimen.tab_height)
+        if (expanded <= collapsed) {
+            handle.visibility = View.GONE
+            return
+        }
+        val touchSlop = ViewConfiguration.get(root.context).scaledTouchSlop
+        var animator: ValueAnimator? = null
+        var startY = 0f
+        var startHeight = 0
+        fun settle(target: Int) {
+            animator = ValueAnimator.ofInt(pager.height, target).apply {
+                duration = 200L
+                addUpdateListener { pager.updateLayoutParams { height = it.animatedValue as Int } }
+                start()
+            }
+        }
+        handle.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    animator?.cancel()
+                    startY = event.rawY
+                    startHeight = pager.height
+                }
+                MotionEvent.ACTION_MOVE -> pager.updateLayoutParams {
+                    height = (startHeight + (startY - event.rawY)).toInt().coerceIn(collapsed, expanded)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    // Settles the way the finger was going, so a short flick is enough either way.
+                    val moved = startY - event.rawY
+                    val grow = if (abs(moved) < touchSlop) startHeight < expanded else moved > 0
+                    settle(if (grow) expanded else collapsed)
+                }
+            }
+            true
+        }
     }
 
     override fun onAttach(context: Context) {
