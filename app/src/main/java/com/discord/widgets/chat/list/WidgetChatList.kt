@@ -78,6 +78,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
         recycler = list
         val existing = adapter
         if (existing == null) createAdapter(list) else configureExistingAdapter(existing, list)
+        sizeRowPools(list)
         attachSwipeToReply(list)
         // The picker is shown from a chat row, so its result lands here rather than in the row.
         WidgetForumPostTagsSheet.registerForResult(this) { tags ->
@@ -212,6 +213,18 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
         adapter = created
     }
 
+    /**
+     * RecyclerView keeps only five spare rows per type and two recently scrolled-off rows. A screen
+     * holds about thirty grouped messages, so when an older page loads and every visible row is
+     * scrapped at once, most were thrown away and inflated again inside that frame. Keep a screenful
+     * of each message row, and a few just-scrolled-off rows so scrolling back does not rebind them.
+     */
+    private fun sizeRowPools(list: RecyclerView) {
+        list.recycledViewPool.setMaxRecycledViews(ChatListEntry.MESSAGE, POOLED_MESSAGE_ROWS)
+        list.recycledViewPool.setMaxRecycledViews(ChatListEntry.MESSAGE_MINIMAL, POOLED_MINIMAL_ROWS)
+        list.setItemViewCacheSize(SCROLLED_OFF_ROWS)
+    }
+
     private fun configureExistingAdapter(adapter: WidgetChatListAdapter, recycler: RecyclerView) {
         adapter.fragmentManager = parentFragmentManager
         adapter.recycler = recycler
@@ -245,6 +258,10 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
     }
 
     companion object {
+        private const val POOLED_MESSAGE_ROWS = 15
+        private const val POOLED_MINIMAL_ROWS = 35
+        private const val SCROLLED_OFF_ROWS = 6
+
         @Volatile var actionCoordinator: MessageActionCoordinator? = null
 
         /** Kept only for the existing composition-root call; models now consume StoreStream directly. */

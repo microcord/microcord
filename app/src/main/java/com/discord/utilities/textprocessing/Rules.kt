@@ -218,7 +218,16 @@ object Rules {
     }
 
     private var emojiDataProvider: EmojiDataProvider = NoEmojiData
-    private var unicodeEmojiPattern: Pattern = anchoredUnicodeEmojiPattern(NoEmojiData)
+    @Volatile private var unicodeEmojiPatternCache: Pattern? = null
+
+    /**
+     * Built on first parse rather than when the provider is set: reading the emoji catalog waits
+     * for its background preload, and the provider is set during `Application.onCreate`, where that
+     * wait held the main thread for the whole preload.
+     */
+    private val unicodeEmojiPattern: Pattern
+        get() = unicodeEmojiPatternCache
+            ?: anchoredUnicodeEmojiPattern(emojiDataProvider).also { unicodeEmojiPatternCache = it }
 
     /**
      * Installs the unicode emoji catalog.
@@ -229,7 +238,7 @@ object Rules {
     @JvmStatic
     fun setEmojiDataProvider(emojiDataProvider: EmojiDataProvider) {
         this.emojiDataProvider = emojiDataProvider
-        this.unicodeEmojiPattern = anchoredUnicodeEmojiPattern(emojiDataProvider)
+        unicodeEmojiPatternCache = null
     }
 
     /** Looks a unicode emoji up by its canonical name, for callers that only kept the name. */

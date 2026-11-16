@@ -32,8 +32,7 @@ open class WidgetChatListItem(
 ) : MGRecyclerViewHolder<WidgetChatListAdapter, ChatListEntry>(itemView, adapter) {
 
     constructor(@LayoutRes layout: Int, adapter: WidgetChatListAdapter) : this(
-        android.view.LayoutInflater.from(adapter.recycler.context)
-            .inflate(layout, adapter.recycler, false),
+        com.discord.utilities.mg_recycler.RowPrewarm.inflate(layout, adapter.recycler),
         adapter,
     )
 

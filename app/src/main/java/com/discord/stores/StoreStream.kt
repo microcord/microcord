@@ -1494,8 +1494,9 @@ class StoreStream private constructor(
         }
         // Order is load-bearing. `DiscordParser` builds its rule set once and the unicode-emoji
         // rule captures the catalog pattern at that moment, so `setEmojiDataProvider` must run
-        // after the catalog is loaded and before anything parses a message. Miss it and named and
-        // unicode emoji render as literal text app-wide, with no error anywhere.
+        // before anything parses a message. It no longer reads the catalog itself, so it does not
+        // wait for the emoji preload. Miss it and named and unicode emoji render as literal text
+        // app-wide, with no error anywhere.
         notices.init(context)
         nux.init(context)
         changeLog.init(context.applicationContext as Application)

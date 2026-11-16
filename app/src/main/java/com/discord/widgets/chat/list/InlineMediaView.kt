@@ -181,7 +181,9 @@ class InlineMediaView @JvmOverloads constructor(
             uri,
             featureTag,
         )
-        if (params.embedType == EmbedType.GIFV) {
+        // Only on screen: a row is often bound ahead of time by the list's prefetch, while detached,
+        // and attaching renders again, so a player made here was released unused a moment later.
+        if (params.embedType == EmbedType.GIFV && isAttachedToWindow && visibility == View.VISIBLE) {
             val player = createPlayer(params)
             player.play(mediaSource, getPlayerView(), autoPlayWhenReady = shouldAutoPlay(params), loopMedia = true)
             player.setVolume(0f)

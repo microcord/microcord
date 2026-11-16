@@ -29,6 +29,7 @@ import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.Lifecycle
+import com.discord.utilities.mg_recycler.RowPrewarm
 import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.theme.ThemeWallpaper
 import com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -846,9 +847,44 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         .resourceId
 
     class Main : AppActivity() {
+        override fun onCreate(savedInstanceState: Bundle?) {
+            super.onCreate(savedInstanceState)
+            // The boot screen leaves the main thread idle while the stores load; the rows the chat
+            // and the DM list build first are inflated then rather than inside their first frames.
+            // The persisted token, not the store's auth state: that is only published later, on
+            // the store thread.
+            val signedIn = !App.settingsRecoveryRequired &&
+                com.discord.stores.authentication.AuthStateCache(com.discord.utilities.cache.SharedPreferencesProvider.get()).getCachedAuthState() != null
+            if (signedIn) {
+                RowPrewarm.prewarm(
+                    this,
+                    mapOf(
+                        R.layout.widget_chat_list_adapter_item_text to PREWARM_MESSAGE_ROWS,
+                        R.layout.widget_chat_list_adapter_item_minimal to PREWARM_MINIMAL_ROWS,
+                        R.layout.widget_chat_list_adapter_item_embed to PREWARM_ACCESSORIES,
+                        R.layout.widget_chat_list_adapter_item_attachment to PREWARM_ACCESSORIES,
+                        R.layout.widget_channels_list_item_channel_private to PREWARM_DM_ROWS,
+                    ),
+                )
+            }
+        }
+
         override fun onDestroy() {
+            RowPrewarm.clear(this)
             if (!App.settingsRecoveryRequired && isFinishing && !isChangingConfigurations) StoreStream.disconnectGatewayForTaskRemoval()
             super.onDestroy()
+        }
+
+        private companion object {
+            /** About a screenful of each on a tall phone. */
+            const val PREWARM_MESSAGE_ROWS = 8
+            const val PREWARM_DM_ROWS = 14
+
+            /** Grouped follow-up messages are short, so a screen holds many more of them. */
+            const val PREWARM_MINIMAL_ROWS = 20
+
+            /** Embeds and attachments are hosted inside message rows and pooled across them. */
+            const val PREWARM_ACCESSORIES = 4
         }
     }
 

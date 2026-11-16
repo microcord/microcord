@@ -1,6 +1,5 @@
 package com.discord.utilities.mg_recycler
 
-import android.view.LayoutInflater
 import android.view.View
 import androidx.annotation.LayoutRes
 import androidx.recyclerview.widget.RecyclerView
@@ -19,10 +18,7 @@ open class MGRecyclerViewHolder<T : MGRecyclerAdapter<D>, D>(
     protected val adapter: T,
 ) : RecyclerView.ViewHolder(itemView) {
 
-    constructor(@LayoutRes layout: Int, adapter: T) : this(
-        LayoutInflater.from(adapter.recycler.context).inflate(layout, adapter.recycler, false),
-        adapter,
-    )
+    constructor(@LayoutRes layout: Int, adapter: T) : this(RowPrewarm.inflate(layout, adapter.recycler), adapter)
 
     /** The subscription currently owned by this row, if any. */
     protected open val subscription: Subscription? get() = null

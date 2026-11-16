@@ -250,6 +250,11 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         else -> throw invalidViewTypeException(viewType)
     }
 
+    override fun onViewRecycled(holder: MGRecyclerViewHolder<*, ChatListEntry>) {
+        super.onViewRecycled(holder)
+        (holder as? WidgetChatListAdapterItemMessage)?.releaseAccessories()
+    }
+
     // region lifecycle
 
     /**

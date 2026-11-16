@@ -786,6 +786,16 @@ class WidgetChatListAdapterItemMessage(
         }
     }
 
+    /**
+     * Hands every accessory back to the adapter's shared pool when this row is recycled. Kept here,
+     * an embed or attachment sat idle in a pooled row while the next message of that kind, in some
+     * other row, inflated a fresh one inside the scrolling frame.
+     */
+    internal fun releaseAccessories() {
+        val container = itemAttachments ?: return
+        while (container.childCount > 0) releaseAccessory(container, container.childCount - 1)
+    }
+
     /** Detaches the accessory at [index] and hands its holder back to the adapter for reuse. */
     private fun releaseAccessory(container: ViewGroup, index: Int) {
         val view = container.getChildAt(index)
