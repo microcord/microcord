@@ -32,4 +32,10 @@ class ContextSearchStringProvider(context: Context) : SearchStringProvider {
     override val userAuthorTypeAnswerString: String = context.getString(R.string.search_answer_author_type_user)
     override val botAuthorTypeAnswerString: String = context.getString(R.string.search_answer_author_type_bot)
     override val webhookAuthorTypeAnswerString: String = context.getString(R.string.search_answer_author_type_webhook)
+
+    override val todayShortcutString: String = context.getString(R.string.search_shortcut_today)
+    override val yesterdayShortcutString: String = context.getString(R.string.search_shortcut_yesterday)
+    override val weekShortcutString: String = context.getString(R.string.search_shortcut_week)
+    override val monthShortcutString: String = context.getString(R.string.search_shortcut_month)
+    override val yearShortcutString: String = context.getString(R.string.search_shortcut_year)
 }

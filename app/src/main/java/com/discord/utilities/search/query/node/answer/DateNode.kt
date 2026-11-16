@@ -3,24 +3,28 @@ package com.discord.utilities.search.query.node.answer
 import com.discord.utilities.SnowflakeUtils
 import com.discord.utilities.search.network.SearchQuery
 import com.discord.utilities.search.query.FilterType
+import com.discord.utilities.search.strings.SearchStringProvider
 import com.discord.utilities.search.validation.SearchData
+import java.text.DateFormatSymbols
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-import java.util.TimeZone
 
 /**
  * The answer to `before:`, `after:` or `during:`.
  *
- * A date names a whole day, so it resolves to the half-open range `[startOfDay, startOfNextDay)`.
+ * A date names a local-time range — a day, a month, a year, or one of RN's words (`today`,
+ * `yesterday`, `week`, `month`, `year`, a month or weekday name) — as `[start, end)`.
  * Which end reaches the wire is what distinguishes the three filters:
  * `during:` sends both bounds, `before:` sends only the start as `max_id`, and `after:` only the
  * end as `min_id` — so `after:2024-01-01` means "from 2024-01-02 onwards", matching the reference.
+ *
+ * [range] is resolved when the node is made, since the words are localised and relative to now.
  */
-data class DateNode(override val text: CharSequence) : AnswerNode() {
-
-    /** Unix millis for `[start, end)`, or null when [text] is not a date this understands. */
-    private val range: Pair<Long, Long>? get() = parseRange(text.toString())
+data class DateNode(
+    override val text: CharSequence,
+    private val range: Pair<Long, Long>? = parseRange(text.toString()),
+) : AnswerNode() {
 
     override val validFilters: Set<FilterType>
         get() = setOf(FilterType.BEFORE, FilterType.AFTER, FilterType.DURING)
@@ -60,27 +64,82 @@ data class DateNode(override val text: CharSequence) : AnswerNode() {
             val day = parts.getOrNull(2)?.toIntOrNull()
             if (month != null && month !in 1..12) return null
 
-            val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.ROOT).apply {
+            val calendar = Calendar.getInstance().apply {
                 clear()
                 set(year, (month ?: 1) - 1, day ?: 1)
             }
             if (day != null && day > calendar.getActualMaximum(Calendar.DAY_OF_MONTH)) return null
-            val start = calendar.timeInMillis
-            val field = when {
-                day != null -> Calendar.DAY_OF_MONTH
-                month != null -> Calendar.MONTH
-                else -> Calendar.YEAR
-            }
-            calendar.add(field, 1)
-            return start to calendar.timeInMillis
+            return calendar.rangeOf(
+                when {
+                    day != null -> Calendar.DAY_OF_MONTH
+                    month != null -> Calendar.MONTH
+                    else -> Calendar.YEAR
+                },
+            )
         }
 
-        fun isDate(value: String): Boolean = parseRange(value) != null
+        /** [parseRange], plus the localised date words RN accepts. */
+        fun parseRange(
+            value: String,
+            strings: SearchStringProvider,
+            now: Calendar = Calendar.getInstance(),
+        ): Pair<Long, Long>? {
+            parseRange(value)?.let { return it }
+            val word = value.lowercase()
+            val calendar = (now.clone() as Calendar).apply { startOf(Calendar.DAY_OF_MONTH) }
+            val unit = when (word) {
+                strings.todayShortcutString -> Calendar.DAY_OF_MONTH
+                strings.yesterdayShortcutString -> Calendar.DAY_OF_MONTH.also { calendar.add(it, -1) }
+                strings.weekShortcutString -> Calendar.WEEK_OF_YEAR.also { calendar.startOf(it) }
+                strings.monthShortcutString -> Calendar.MONTH.also { calendar.startOf(it) }
+                strings.yearShortcutString -> Calendar.YEAR.also { calendar.startOf(it) }
+                else -> {
+                    val symbols = DateFormatSymbols.getInstance()
+                    val month = symbols.months.indexOfFirst { it.isNotEmpty() && it.lowercase() == word }
+                    val weekday = symbols.weekdays.indexOfFirst { it.isNotEmpty() && it.lowercase() == word }
+                    when {
+                        // A month name is that month of this year; a weekday is that day of this week.
+                        month >= 0 -> Calendar.MONTH.also {
+                            calendar.set(Calendar.MONTH, month)
+                            calendar.startOf(it)
+                        }
+                        weekday >= 0 -> Calendar.DAY_OF_MONTH.also { calendar.set(Calendar.DAY_OF_WEEK, weekday) }
+                        else -> return null
+                    }
+                }
+            }
+            return calendar.rangeOf(unit)
+        }
 
-        fun format(timestamp: Long): String =
-            SimpleDateFormat(DATE_FORMAT, Locale.ROOT)
-                .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                .format(java.util.Date(timestamp))
+        /** Every date word [parseRange] understands, for building the parser's pattern. */
+        fun words(strings: SearchStringProvider): List<String> {
+            val symbols = DateFormatSymbols.getInstance()
+            return listOf(
+                strings.todayShortcutString,
+                strings.yesterdayShortcutString,
+                strings.weekShortcutString,
+                strings.monthShortcutString,
+                strings.yearShortcutString,
+            ) + symbols.months.filter { it.isNotEmpty() } + symbols.weekdays.filter { it.isNotEmpty() }
+        }
+
+        private fun Calendar.startOf(unit: Int) {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            when (unit) {
+                Calendar.WEEK_OF_YEAR -> set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+                Calendar.MONTH -> set(Calendar.DAY_OF_MONTH, 1)
+                Calendar.YEAR -> set(Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+
+        private fun Calendar.rangeOf(unit: Int): Pair<Long, Long> {
+            val start = timeInMillis
+            add(unit, 1)
+            return start to timeInMillis
+        }
 
         fun formatLocalDate(timestamp: Long): String =
             SimpleDateFormat(DATE_FORMAT, Locale.ROOT).format(java.util.Date(timestamp))

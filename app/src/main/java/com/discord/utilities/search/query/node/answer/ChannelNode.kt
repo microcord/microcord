@@ -4,15 +4,22 @@ import com.discord.utilities.search.network.SearchQuery
 import com.discord.utilities.search.query.FilterType
 import com.discord.utilities.search.validation.SearchData
 
-/** `in:#channel-name`. Resolves the name back to an id against the guild's searchable channels. */
+/**
+ * `in:#channel-name`, or `in:"name with spaces"`. Resolves the name back to the ids of every
+ * searchable channel that carries it, as RN does.
+ */
 data class ChannelNode(val channelName: String) : AnswerNode() {
 
-    override val text: String get() = "#$channelName"
+    override val text: String
+        get() = if (channelName.any(Char::isWhitespace)) {
+            "#\"" + channelName.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        } else {
+            "#$channelName"
+        }
 
     override val validFilters: Set<FilterType> get() = setOf(FilterType.IN)
 
-    override fun isValid(searchData: SearchData): Boolean =
-        searchData.channelNameIndex.containsKey(channelName)
+    override fun isValid(searchData: SearchData): Boolean = searchData.getChannelIds(channelName).isNotEmpty()
 
     override fun updateQuery(
         queryBuilder: SearchQuery.Builder,
@@ -20,7 +27,8 @@ data class ChannelNode(val channelName: String) : AnswerNode() {
         filterType: FilterType?,
     ) {
         if (filterType !in validFilters) return
-        val channelId = searchData.channelNameIndex[channelName] ?: return
-        queryBuilder.appendParam(SearchQuery.PARAM_CHANNEL_ID, channelId.toString())
+        searchData.getChannelIds(channelName).forEach {
+            queryBuilder.appendParam(SearchQuery.PARAM_CHANNEL_ID, it.toString())
+        }
     }
 }

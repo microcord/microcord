@@ -62,7 +62,7 @@ class StoreSearchData(
                 .map { channels -> channels.filterValues { it.isGuildTextyChannel() } },
             StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
         ) { members, users, channels, permissions ->
-            SearchData.Builder().buildForGuild(members, users, channels, permissions)
+            SearchData.Builder().buildForGuild(members, users, channels, permissions, storeUser.getMe().id)
         }
         .leadingEdgeThrottle(GUILD_DATA_THROTTLE_SECONDS, TimeUnit.SECONDS)
 

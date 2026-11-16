@@ -50,11 +50,12 @@ class QueryParser(
         addRule(filterRule(FilterType.DURING, searchStringProvider.onFilterString))
         addRule(filterRule(FilterType.BEFORE, searchStringProvider.beforeFilterString))
         addRule(filterRule(FilterType.AFTER, searchStringProvider.afterFilterString))
-        addRule(dateAnswerRule())
+        addRule(dateAnswerRule(searchStringProvider))
         addRule(filterRule(FilterType.LINK_FROM, searchStringProvider.linkFromFilterString))
         addRule(filterRule(FilterType.FILE_TYPE, searchStringProvider.fileTypeFilterString))
         addRule(filterRule(FilterType.FILE_NAME, searchStringProvider.fileNameFilterString))
         addRule(filterRule(FilterType.IN, searchStringProvider.inFilterString))
+        addRule(quotedInAnswerRule(searchStringProvider.inFilterString))
         addRule(inAnswerRule())
         addRule(contentRule())
     }
@@ -66,7 +67,9 @@ class QueryParser(
          * `forward` value followed by `messages.zip`, and was searched and saved to history split.
          */
         private const val WORD_END = """(?=\s|$)"""
-        private const val DATE_ANSWER_REGEX = """(?:\s*([0-9]{4}(?:-[0-9]{1,2}){0,2}))$WORD_END"""
+        private const val DATE_NUMBER_REGEX = """[0-9]{4}(?:-[0-9]{1,2}){0,2}"""
+        /** RN's quoted channel name; a backslash escapes the next character. */
+        private const val QUOTED_IN_ANSWER_REGEX = """(?:\s*#?"((?:\\.|[^\\"])*)")"""
         private const val BOOLEAN_ANSWER_REGEX = """(?:\s*(true|false))$WORD_END"""
         private const val IN_ANSWER_REGEX = """(?:\s*#([^ ]+))"""
         private const val USER_REGEX = """(?:\s*([^@#:]+)#([0-9]{4}))"""
@@ -92,6 +95,34 @@ class QueryParser(
         fun userRule(): Rule<Context, QueryNode, Unit> =
             rule(compile("^$USER_REGEX")) { matcher ->
                 UserNode(matcher.group(1)!!, matcher.group(2)!!.toInt())
+            }
+
+        /**
+         * A rule that only matches directly after one of [keywords]' filters, like RN's `follows`.
+         * The parser hands each rule the previous token's text as `lastCapture`.
+         */
+        private fun followsRule(
+            keywords: List<CharSequence>,
+            pattern: Pattern,
+            node: (Matcher) -> QueryNode,
+        ): Rule<Context, QueryNode, Unit> = object : Rule<Context, QueryNode, Unit>(pattern) {
+            override fun match(inspectionSource: CharSequence, lastCapture: String?, state: Unit): Matcher? {
+                val previous = lastCapture?.trim() ?: return null
+                if (keywords.none { previous == "$it:" }) return null
+                return pattern.matcher(inspectionSource).takeIf(Matcher::find)
+            }
+
+            override fun parse(
+                matcher: Matcher,
+                parser: Parser<Context, in QueryNode, Unit>,
+                state: Unit,
+            ): ParseSpec<Context, Unit> = ParseSpec(node(matcher), state)
+        }
+
+        /** `in:"voice chat"`: only after `in:`, so a quoted phrase elsewhere stays free text. */
+        fun quotedInAnswerRule(inFilter: CharSequence): Rule<Context, QueryNode, Unit> =
+            followsRule(listOf(inFilter), compile("^$QUOTED_IN_ANSWER_REGEX")) { matcher ->
+                ChannelNode(matcher.group(1)!!.replace(Regex("""\\(.)"""), "$1"))
             }
 
         /** `#channel-name`. */
@@ -122,11 +153,26 @@ class QueryParser(
             }
 
         /**
-         * A bare `yyyy[-MM[-dd]]`. Which bound it becomes is decided by the filter it follows, so
-         * one rule serves `before:`, `after:` and `during:` — [DateNode] carries the filter.
+         * `yyyy[-MM[-dd]]` or one of RN's date words, directly after a date filter. Which bound it
+         * becomes is decided by that filter, so one rule serves `before:`, `after:` and `during:`.
          */
-        fun dateAnswerRule(): Rule<Context, QueryNode, Unit> =
-            rule(compile("^$DATE_ANSWER_REGEX")) { matcher -> DateNode(matcher.group(1)!!) }
+        fun dateAnswerRule(strings: SearchStringProvider): Rule<Context, QueryNode, Unit> {
+            val words = DateNode.words(strings).sortedByDescending { it.length }.joinToString("|", transform = Pattern::quote)
+            val pattern = Pattern.compile(
+                """^(?:\s*($DATE_NUMBER_REGEX|$words))$WORD_END""",
+                Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE,
+            )
+            val filters = listOf(
+                strings.beforeFilterString,
+                strings.afterFilterString,
+                strings.duringFilterString,
+                strings.onFilterString,
+            )
+            return followsRule(filters, pattern) { matcher ->
+                val text = matcher.group(1)!!
+                DateNode(text, DateNode.parseRange(text, strings))
+            }
+        }
 
         private fun createHasAnswerRegex(searchStringProvider: SearchStringProvider): String =
             createNegatableOptionsRegex(

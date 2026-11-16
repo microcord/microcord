@@ -21,16 +21,26 @@ import java.util.Locale
 data class SearchData(
     private val usernameAndDiscriminatorIndex: Map<String, Long> = emptyMap(),
     private val usernameIndex: Map<String, Long> = emptyMap(),
-    val channelNameIndex: Map<String, Long> = emptyMap(),
+    val channelNameIndex: Map<String, List<Long>> = emptyMap(),
     val users: Map<Long, UserGuildMember> = emptyMap(),
     val channels: Map<Long, Channel> = emptyMap(),
     val channelPermissions: Map<Long, Long> = emptyMap(),
+    private val meId: Long? = null,
 ) {
 
     fun getUserId(username: String, discriminator: Int): Long? =
         usernameAndDiscriminatorIndex[username + discriminator]
 
-    fun getUserId(username: String): Long? = usernameIndex[username.lowercase(Locale.ROOT)]
+    /** RN's `from:` answer: a raw id, `@me`, or a unique username. */
+    fun getUserId(username: String): Long? = when {
+        SNOWFLAKE.matches(username) -> username.toLong()
+        username.equals("@me", ignoreCase = true) -> meId
+        else -> usernameIndex[username.lowercase(Locale.ROOT)]
+    }
+
+    /** RN's `in:` answer: a raw id, or every searchable channel with that name. */
+    fun getChannelIds(name: String): List<Long> =
+        if (SNOWFLAKE.matches(name)) listOf(name.toLong()) else channelNameIndex[name].orEmpty()
 
     class Builder {
 
@@ -59,35 +69,32 @@ data class SearchData(
                 usernameAndDiscriminatorIndex = usernameAndDiscriminatorIndex,
                 usernameIndex = usernameIndex,
                 users = users,
+                meId = meUser.id,
             )
         }
 
         /**
-         * Guild search. Only users present in both the member map and the user map are indexed —
-         * a member the client has not hydrated a user for cannot be named or rendered.
+         * Guild search. Suggestions ([users]) only offer loaded members, but a typed name resolves
+         * against every cached user, as RN's `findByTag` does: the member list of a large guild is
+         * rarely loaded, and the server decides whether the author is in the guild anyway.
          */
         fun buildForGuild(
             guildMembers: Map<Long, GuildMember>,
             allUsers: Map<Long, User>,
             guildSearchableChannels: Map<Long, Channel>,
             guildChannelPermissions: Map<Long, Long>,
+            meId: Long? = null,
         ): SearchData {
-            val channelNameIndex = HashMap<String, Long>()
-            guildSearchableChannels.values.forEach { channel ->
-                channelNameIndex[channel.getDisplayName()] = channel.id
-            }
+            val channelNameIndex = guildSearchableChannels.values
+                .groupBy({ it.getDisplayName() }, { it.id })
 
             val users = HashMap<Long, UserGuildMember>()
             val usernameAndDiscriminatorIndex = HashMap<String, Long>()
             val usernameIndex = HashMap<String, Long>()
-            allUsers.keys.forEach { userId ->
-                val member = guildMembers[userId]
-                val user = allUsers[userId]
-                if (member != null && user != null) {
-                    users[userId] = UserGuildMember(user, member)
-                    usernameAndDiscriminatorIndex[user.usernameWithDiscrim] = userId
-                    if (user.discriminator == 0) usernameIndex[user.username.lowercase(Locale.ROOT)] = userId
-                }
+            allUsers.forEach { (userId, user) ->
+                guildMembers[userId]?.let { users[userId] = UserGuildMember(user, it) }
+                usernameAndDiscriminatorIndex[user.usernameWithDiscrim] = userId
+                if (user.discriminator == 0) usernameIndex[user.username.lowercase(Locale.ROOT)] = userId
             }
 
             return SearchData(
@@ -97,7 +104,12 @@ data class SearchData(
                 users = users,
                 channels = guildSearchableChannels,
                 channelPermissions = guildChannelPermissions,
+                meId = meId,
             )
         }
+    }
+
+    private companion object {
+        val SNOWFLAKE = Regex("""\d{17,20}""")
     }
 }

@@ -36,4 +36,11 @@ interface SearchStringProvider {
     val userAuthorTypeAnswerString: String
     val botAuthorTypeAnswerString: String
     val webhookAuthorTypeAnswerString: String
+
+    /** Date words accepted after `before:`, `after:` and `during:`/`on:`. */
+    val todayShortcutString: String get() = "today"
+    val yesterdayShortcutString: String get() = "yesterday"
+    val weekShortcutString: String get() = "week"
+    val monthShortcutString: String get() = "month"
+    val yearShortcutString: String get() = "year"
 }

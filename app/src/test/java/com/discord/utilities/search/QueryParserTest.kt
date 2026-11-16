@@ -105,7 +105,7 @@ class QueryParserTest {
     fun buildsRestParametersFromTheAst() {
         val searchData = SearchData(
             usernameAndDiscriminatorIndex = mapOf("alice1" to 7L),
-            channelNameIndex = mapOf("general" to 11L),
+            channelNameIndex = mapOf("general" to listOf(11L)),
         )
         val nodes = parse("from:alice#0001 in:#general has:image hello").toMutableList()
         nodes.preprocess(searchData)
@@ -130,6 +130,13 @@ class QueryParserTest {
 
         assertEquals(listOf("7"), query.params[SearchQuery.PARAM_AUTHOR_ID])
         assertEquals(null, query.params[SearchQuery.PARAM_CONTENT])
+
+        // The answer is not merged into the words after it.
+        val withText = parse("from:manti hello world").toMutableList()
+        withText.preprocess(searchData)
+        val textQuery = SearchQuery.Builder().buildFrom(withText, searchData)
+        assertEquals(listOf("7"), textQuery.params[SearchQuery.PARAM_AUTHOR_ID])
+        assertEquals(listOf("hello world"), textQuery.params[SearchQuery.PARAM_CONTENT])
     }
 
     @Test
@@ -194,6 +201,52 @@ class QueryParserTest {
 
         assertEquals(null, query.params[SearchQuery.PARAM_AUTHOR_ID])
         assertEquals(listOf("alice#0001"), query.params[SearchQuery.PARAM_CONTENT])
+    }
+
+    @Test
+    fun userAnswersAcceptIdsAndMe() {
+        val searchData = SearchData.Builder().buildForGuild(emptyMap(), emptyMap(), emptyMap(), emptyMap(), meId = 5L)
+        val query = SearchQuery.Builder().buildFrom(parse("from:@me mentions:123456789012345678"), searchData)
+
+        assertEquals(listOf("5"), query.params[SearchQuery.PARAM_AUTHOR_ID])
+        assertEquals(listOf("123456789012345678"), query.params[SearchQuery.PARAM_MENTIONS])
+    }
+
+    @Test
+    fun channelAnswersAcceptQuotesSharedNamesAndIds() {
+        val searchData = SearchData(channelNameIndex = mapOf("voice chat" to listOf(1L), "general" to listOf(2L, 3L)))
+        val nodes = parse("""in:"voice chat" in:general in:123456789012345678 "not a channel"""").toMutableList()
+        nodes.preprocess(searchData)
+        val query = SearchQuery.Builder().buildFrom(nodes, searchData)
+
+        assertEquals(listOf("1", "2", "3", "123456789012345678"), query.params[SearchQuery.PARAM_CHANNEL_ID])
+        assertEquals(listOf("\"not a channel\""), query.params[SearchQuery.PARAM_CONTENT])
+        assertEquals("#\"voice chat\"", (nodes[1] as ChannelNode).text)
+    }
+
+    @Test
+    fun dateWordsResolveOnlyAfterADateFilter() {
+        val now = Calendar.getInstance().apply { set(2026, Calendar.MARCH, 18, 15, 30) }
+        val yesterday = DateNode.parseRange("yesterday", EnglishSearchStrings, now)!!
+        val start = Calendar.getInstance().apply { timeInMillis = yesterday.first }
+        assertEquals(17, start.get(Calendar.DAY_OF_MONTH))
+        assertEquals(0, start.get(Calendar.HOUR_OF_DAY))
+        assertEquals(24 * 60 * 60 * 1000L, yesterday.second - yesterday.first)
+        assertEquals(Calendar.JANUARY, Calendar.getInstance().apply {
+            // Month names follow the locale, as RN's moment does.
+            val january = java.text.DateFormatSymbols.getInstance().months[0]
+            timeInMillis = DateNode.parseRange(january, EnglishSearchStrings, now)!!.first
+        }.get(Calendar.MONTH))
+
+        val query = SearchQuery.Builder().buildFrom(parse("after:Today today"), SearchData())
+        assertTrue(query.params[SearchQuery.PARAM_MIN_ID]?.isNotEmpty() == true)
+        assertEquals(listOf("today"), query.params[SearchQuery.PARAM_CONTENT])
+    }
+
+    @Test
+    fun repeatedTextIsSearchedOnce() {
+        val query = SearchQuery.Builder().buildFrom(parse("hi has:link hi"), SearchData())
+        assertEquals(listOf("hi"), query.params[SearchQuery.PARAM_CONTENT])
     }
 
     @Test

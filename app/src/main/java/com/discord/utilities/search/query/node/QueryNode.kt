@@ -4,6 +4,7 @@ import android.content.Context
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.search.query.node.answer.AnswerNode
 import com.discord.utilities.search.query.node.content.ContentNode
+import com.discord.utilities.search.query.node.filter.FilterNode
 import com.discord.utilities.search.validation.SearchData
 
 /**
@@ -53,7 +54,11 @@ abstract class QueryNode : Node<Context>() {
             while (index < size) {
                 val previous = this[index - 1]
                 val current = this[index]
-                if (previous is ContentNode && current is ContentNode) {
+                // A token right after a filter is that filter's answer (`from:alice`, now that
+                // usernames have no `#0001` to parse as a UserNode), so it is never merged into
+                // the free text that follows.
+                val answersFilter = getOrNull(index - 2) is FilterNode
+                if (previous is ContentNode && current is ContentNode && !answersFilter) {
                     this[index - 1] = ContentNode(previous, current)
                     removeAt(index)
                 } else {

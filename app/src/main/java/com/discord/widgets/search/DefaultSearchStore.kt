@@ -594,7 +594,7 @@ class DefaultSearchDataStore : SearchDataStore {
                 .map { channels -> channels.filterValues { it.isGuildTextyChannel() } },
             StoreStream.getPermissions().observeChannelPermissionsForGuild(guildId),
         ) { members, users, channels, permissions ->
-            SearchData.Builder().buildForGuild(members, users, channels, permissions)
+            SearchData.Builder().buildForGuild(members, users, channels, permissions, StoreStream.getUsers().getMe().id)
         }
         .leadingEdgeThrottle(GUILD_THROTTLE_SECONDS, TimeUnit.SECONDS)
 

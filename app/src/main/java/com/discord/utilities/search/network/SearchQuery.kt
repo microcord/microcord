@@ -32,7 +32,8 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
      * consuming branches jump one instruction earlier, to the `filterType = null` store.
      */
     class Builder {
-        private val contentBuilder = StringBuilder()
+        /** RN keeps the free-text runs in a set, so a repeated run is searched once. */
+        private val content = LinkedHashSet<String>()
         private val paramsMap = LinkedHashMap<String, MutableList<String>>()
         private var includeNsfw: Boolean = false
 
@@ -42,8 +43,8 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
             paramsMap.getOrPut(paramKey) { ArrayList() }.add(param)
         }
 
-        private fun appendContent(content: CharSequence) {
-            contentBuilder.append(content).append(' ')
+        private fun appendContent(text: CharSequence) {
+            text.trim().takeIf { it.isNotEmpty() }?.let { content += it.toString() }
         }
 
         fun buildFrom(queryNodes: List<QueryNode>, searchData: SearchData): SearchQuery {
@@ -70,9 +71,12 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
                             FilterType.MENTIONS -> PARAM_MENTIONS
                             else -> null
                         }
-                        val userId = userParam?.let { searchData.getUserId(node.text.toString()) }
+                        val text = node.text.toString()
+                        val userId = userParam?.let { searchData.getUserId(text) }
+                        val channelIds = if (currentFilter == FilterType.IN) searchData.getChannelIds(text) else emptyList()
                         when {
                             userParam != null && userId != null -> appendParam(userParam, userId.toString())
+                            channelIds.isNotEmpty() -> channelIds.forEach { appendParam(PARAM_CHANNEL_ID, it.toString()) }
                             textParam != null -> appendParam(textParam, node.text.toString())
                             else -> appendContent(node.text)
                         }
@@ -82,8 +86,7 @@ class SearchQuery(val params: Map<String, List<String>>, val includeNsfw: Boolea
                     else -> Unit
                 }
             }
-            val content = contentBuilder.toString().trim()
-            if (content.isNotEmpty()) paramsMap[PARAM_CONTENT] = mutableListOf(content)
+            if (content.isNotEmpty()) paramsMap[PARAM_CONTENT] = mutableListOf(content.joinToString(" "))
             return SearchQuery(paramsMap, includeNsfw)
         }
     }
