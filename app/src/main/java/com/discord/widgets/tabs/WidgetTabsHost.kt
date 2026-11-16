@@ -15,6 +15,7 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.lifecycle.Lifecycle
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.R
+import com.discord.app.AppLog
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
@@ -54,7 +55,6 @@ import com.discord.widgets.user.WidgetUserSetCustomStatus
 import com.discord.widgets.user.WidgetUserStatusSheet
 import com.discord.widgets.user.search.WidgetGlobalSearchDialog
 import com.discord.widgets.user.usersheet.WidgetUserSheet
-import rx.Subscription
 import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 
 /**
@@ -92,7 +92,6 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private var systemTopInset = 0
     private var globalStatusVisible = false
     private var viewState: TabsHostViewModel.ViewState? = null
-    private var pendingIntentSubscription: Subscription? = null
     private var pluginBottomTabsRegistration: PluginRegistration? = null
 
     override fun onViewBound(view: View) {
@@ -123,20 +122,14 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         viewModel.observeEvents()
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetTabsHost::class.java) { handleEvent(it) }
-        configureSystemStatusBar()
-    }
-
-    override fun onStart() {
-        super.onStart()
-        pendingIntentSubscription = StoreStream.getNavigation().observePendingIntent()
+        // Per resume, like everything bound to this screen's lifecycle: `ui(this)` ends at pause,
+        // and a pause without a stop (a translucent screen on top, a system dialog) is followed by
+        // a resume but no start, which left every later banner tap and link queued forever. The
+        // subject replays the pending route, so one queued while paused runs here.
+        StoreStream.getNavigation().observePendingIntent()
             .ui(this)
-            .subscribe({ consumeOwnedRoute(it) }, {})
-    }
-
-    override fun onStop() {
-        pendingIntentSubscription?.unsubscribe()
-        pendingIntentSubscription = null
-        super.onStop()
+            .subscribe({ consumeOwnedRoute(it) }, { AppLog.e("WidgetTabsHost", "pending intent", it) })
+        configureSystemStatusBar()
     }
 
     override fun onDestroyView() {

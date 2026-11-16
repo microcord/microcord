@@ -1,10 +1,12 @@
 package com.discord.widgets.notice
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.discord.R
+import com.discord.app.AppActivity
 import com.discord.api.channel.Channel
 import com.discord.api.channel.getDisplayName
 import com.discord.api.channel.isDM
@@ -140,10 +142,20 @@ object NoticePopupChannel {
         }
     }
 
+    /**
+     * Queues the channel route, which only the main screen consumes, and only while it is started.
+     * A banner tapped over any other screen (settings, a profile, media) therefore also brings the
+     * single-task main activity back to the front, closing what was above it.
+     */
     internal fun openChannel(context: Context, guildId: Long?, channelId: Long, messageId: Long?) {
         val intent = IntentUtils.RouteBuilders.selectChannel(channelId, guildId ?: 0L, messageId)
             .putExtra("com.discord.intent.ORIGIN_SOURCE", "com.discord.intent.ORIGIN_NOTIF_INAPP")
-        IntentUtils.consumeExternalRoutingIntent(intent, context)
+        if (IntentUtils.consumeExternalRoutingIntent(intent, context) && context !is AppActivity.Main) {
+            context.startActivity(
+                Intent(context, AppActivity.Main::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+        }
     }
 
     /** @return `null` when there is no channel, or the user is already reading it. */
