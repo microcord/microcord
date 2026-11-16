@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingHorizontal="16dp" android:paddingVertical="10dp" android:background="?attr/selectableItemBackground">
+    <TextView android:id="@+id/rest_log_item_summary" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="14sp" android:fontFamily="?attr/font_primary_semibold" android:textColor="?attr/colorHeaderPrimary"/>
+    <TextView android:id="@+id/rest_log_item_path" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:textSize="12sp" android:fontFamily="monospace" android:textColor="?attr/colorTextNormal" android:maxLines="2" android:ellipsize="end"/>
+    <TextView android:id="@+id/rest_log_item_detail" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:padding="8dp" android:background="?attr/colorBackgroundSecondary" android:textIsSelectable="true" android:textSize="11sp" android:fontFamily="monospace" android:textColor="?attr/colorHeaderPrimary"/>
+</LinearLayout>

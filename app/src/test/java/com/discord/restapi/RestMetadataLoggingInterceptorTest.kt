@@ -1,5 +1,6 @@
 package com.discord.restapi
 
+import com.discord.utilities.logging.RestRequestLog
 import okhttp3.CookieJar
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -32,6 +33,36 @@ class RestMetadataLoggingInterceptorTest {
         assertFalse(log.contains("private"))
         assertTrue(log.contains("\"channel_id\":\"10\""))
         assertTrue(log.contains("\"message_id\":\"20\""))
+    }
+
+    @Test
+    fun `every call reaches the in-app log, with bodies only while the switch is on`() {
+        val server = MockWebServer()
+        repeat(2) { server.enqueue(MockResponse().setBody("""{"id":"1","token":"secret"}""")) }
+        var switchOn = false
+        val client = OkHttpClient.Builder().addDebugRestLogging(false, {}) { switchOn }.build()
+        fun call() = client.newCall(
+            okhttp3.Request.Builder().url(server.url("/api/v9/search?content=private&limit=25")).build(),
+        ).execute().close()
+        RestRequestLog.clear()
+
+        call()
+        switchOn = true
+        call()
+
+        val (verbose, quiet) = snapshot()
+        assertEquals("/api/v9/search?content=<redacted>&limit=25", quiet.path)
+        assertEquals(200, quiet.status)
+        assertEquals(null, quiet.responseBody)
+        assertTrue(verbose.responseBody!!.contains("\"id\":\"1\""))
+        assertFalse(verbose.responseBody!!.contains("secret"))
+        server.shutdown()
+    }
+
+    private fun snapshot(): List<RestRequestLog.Entry> {
+        var entries = emptyList<RestRequestLog.Entry>()
+        RestRequestLog.observe { entries = it }()
+        return entries
     }
 
     @Test

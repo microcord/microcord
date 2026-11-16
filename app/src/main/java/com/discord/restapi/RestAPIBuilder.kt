@@ -5,6 +5,7 @@ import com.discord.app.AppLog
 import com.discord.models.deserialization.gson.registerDiscordApiTypeAdapters
 import com.discord.models.domain.Model
 import com.discord.utilities.logging.AppRestRequestLogger
+import com.discord.utilities.logging.RestRequestLog
 import com.google.gson.FieldNamingPolicy
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -41,27 +42,52 @@ internal class RestMetadataLoggingInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val verbose = verbose()
-        if (!verbose && !alwaysLogStatus) return chain.proceed(request)
         val startedAt = System.nanoTime()
         val prefix = "method=${request.method} path=${request.url.encodedPath}"
-        if (verbose) {
-            logger("$prefix requestHeaders=${request.headers.sanitized()} requestBody=${request.body.sanitized()}")
-        }
+        val requestHeaders = if (verbose) request.headers.sanitized() else null
+        val requestBody = if (verbose) request.body.sanitized() else null
+        if (verbose) logger("$prefix requestHeaders=$requestHeaders requestBody=$requestBody")
+        fun record(status: Int?, error: String?, responseHeaders: String?, responseBody: String?) =
+            RestRequestLog.record { id ->
+                RestRequestLog.Entry(
+                    id = id,
+                    timeMillis = System.currentTimeMillis(),
+                    method = request.method,
+                    path = request.url.encodedPath + request.url.sanitizedQuery(),
+                    status = status,
+                    error = error,
+                    durationMs = elapsedMillis(startedAt),
+                    requestHeaders = requestHeaders,
+                    requestBody = requestBody,
+                    responseHeaders = responseHeaders,
+                    responseBody = responseBody,
+                )
+            }
         return try {
             chain.proceed(request).also { response ->
-                logger("$prefix status=${response.code} durationMs=${elapsedMillis(startedAt)}")
-                if (verbose) {
-                    logger(
-                        "$prefix responseHeaders=${response.headers.sanitized()} " +
-                            "responseBody=${RestLogRedactor.redact(response.peekBody(MAX_LOG_BODY_BYTES).string())}",
-                    )
+                if (verbose || alwaysLogStatus) {
+                    logger("$prefix status=${response.code} durationMs=${elapsedMillis(startedAt)}")
                 }
+                val responseHeaders = if (verbose) response.headers.sanitized() else null
+                val responseBody = if (verbose) RestLogRedactor.redact(response.peekBody(MAX_LOG_BODY_BYTES).string()) else null
+                if (verbose) logger("$prefix responseHeaders=$responseHeaders responseBody=$responseBody")
+                record(response.code, null, responseHeaders, responseBody)
             }
         } catch (failure: Exception) {
-            logger("$prefix status=failed durationMs=${elapsedMillis(startedAt)} error=${failure.javaClass.simpleName}")
+            if (verbose || alwaysLogStatus) {
+                logger("$prefix status=failed durationMs=${elapsedMillis(startedAt)} error=${failure.javaClass.simpleName}")
+            }
+            record(null, failure.javaClass.simpleName, null, null)
             throw failure
         }
     }
+
+    /** `?key=value` with the redactor's sensitive keys (`content`, `token`, ...) blanked. */
+    private fun okhttp3.HttpUrl.sanitizedQuery(): String =
+        if (querySize == 0) "" else (0 until querySize).joinToString("&", prefix = "?") { index ->
+            val name = queryParameterName(index)
+            "$name=${if (RestLogRedactor.isSensitive(name)) "<redacted>" else queryParameterValue(index).orEmpty()}"
+        }
 
     private fun elapsedMillis(startedAt: Long) =
         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
@@ -101,6 +127,8 @@ internal object RestLogRedactor {
         "author_summary", "channel_summary", "message_summary", "notes",
         "settings",
     )
+
+    fun isSensitive(key: String): Boolean = key.lowercase() in sensitiveKeys
 
     fun redact(raw: String): String = runCatching {
         JsonParser.parseString(raw).also(::redact).toString()

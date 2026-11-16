@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <LinearLayout android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <com.discord.views.CheckedSetting android:id="@+id/rest_log_verbose" app:cs_text="@string/rest_log_verbose" app:cs_subtext="@string/rest_log_verbose_description" app:cs_view_type="switchview" style="@style/UiKit.CheckedSetting.Themed"/>
+        <com.discord.views.SearchInputView android:id="@+id/rest_log_filter" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginHorizontal="12dp" android:layout_marginVertical="8dp" app:siv_hint="@string/rest_log_filter" app:siv_search_content_description="@string/rest_log_filter"/>
+        <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/rest_log_list" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="8dp"/>
+            <TextView android:id="@+id/rest_log_empty" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:padding="16dp" android:gravity="center" android:text="@string/rest_log_empty" android:textColor="?attr/colorTextMuted" android:textSize="14sp"/>
+        </FrameLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/rest_log_clear" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginBottom="16dp" android:text="@string/rest_log_clear" style="@style/UiKit.Material.Button"/>
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
