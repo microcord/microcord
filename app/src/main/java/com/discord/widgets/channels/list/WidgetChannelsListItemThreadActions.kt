@@ -4,8 +4,12 @@ import com.discord.utilities.rest.ClientBackend
 import android.content.Context
 import android.os.Bundle
 import android.view.View
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.view.ViewGroup
+import androidx.core.view.children
+import androidx.core.view.isVisible
+import com.discord.databinding.WidgetChannelsListItemThreadActionsBinding
+import com.discord.utilities.feature.FeatureFlags
+import com.discord.widgets.chat.list.actions.MessageMenuGroup
 import androidx.annotation.DrawableRes
 import androidx.fragment.app.FragmentManager
 import com.discord.R
@@ -36,7 +40,6 @@ import com.discord.utilities.rx.ui
 import com.discord.utilities.threads.ThreadUtils
 import com.discord.widgets.settings.SettingsStrings
 import com.discord.widgets.settings.WidgetMuteSettingsSheet
-import com.discord.views.VitoImageView
 import java.util.Locale
 import rx.Observable
 import rx.subscriptions.CompositeSubscription
@@ -53,52 +56,23 @@ import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
  */
 class WidgetChannelsListItemThreadActions : AppBottomSheet() {
 
-    override fun getContentViewResId(): Int = R.layout.widget_channels_list_item_thread_actions
+    override fun getContentViewResId(): Int =
+        if (modern) R.layout.widget_channels_list_item_thread_actions_modern else R.layout.widget_channels_list_item_thread_actions
 
-    private lateinit var icon: VitoImageView
-    private lateinit var title: TextView
-    private lateinit var markAsRead: TextView
-    private lateinit var mute: TextView
-    private lateinit var notifications: TextView
-    private lateinit var divider: View
-    private lateinit var edit: TextView
-    private lateinit var archiveSettings: LinearLayout
-    private lateinit var archiveSettingsSubheader: TextView
-    private lateinit var join: TextView
-    private lateinit var archive: TextView
-    private lateinit var lock: TextView
-    private lateinit var copyLink: TextView
-    private lateinit var unarchive: TextView
-    private lateinit var leave: TextView
-    private lateinit var developerDivider: View
-    private lateinit var copyId: TextView
-    private lateinit var editTags: TextView
-    private lateinit var pin: TextView
-    private lateinit var delete: TextView
+    /** The modern sheet is the default; the legacy one follows the legacy UI flag. Both share view ids. */
+    private val modern by lazy { !FeatureFlags.legacyUiEnabled() }
+
+    private var _binding: WidgetChannelsListItemThreadActionsBinding? = null
+    private val binding get() = checkNotNull(_binding)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        icon = view.findViewById(R.id.channels_list_item_thread_actions_icon)
-        title = view.findViewById(R.id.channels_list_item_thread_actions_title)
-        markAsRead = view.findViewById(R.id.channels_list_item_thread_actions_mark_as_read)
-        mute = view.findViewById(R.id.channels_list_item_thread_actions_mute)
-        notifications = view.findViewById(R.id.channels_list_item_thread_actions_channel_notifications)
-        divider = view.findViewById(R.id.channels_list_item_thread_actions_divider)
-        edit = view.findViewById(R.id.channels_list_item_thread_actions_edit)
-        archiveSettings = view.findViewById(R.id.channels_list_item_thread_actions_archive_settings)
-        archiveSettingsSubheader =
-            view.findViewById(R.id.channels_list_item_thread_actions_archive_settings_subheader)
-        join = view.findViewById(R.id.channels_list_item_thread_actions_join)
-        archive = view.findViewById(R.id.channels_list_item_thread_actions_archive)
-        lock = view.findViewById(R.id.channels_list_item_thread_actions_lock)
-        editTags = view.findViewById(R.id.channels_list_item_thread_actions_edit_tags)
-        pin = view.findViewById(R.id.channels_list_item_thread_actions_pin)
-        delete = view.findViewById(R.id.channels_list_item_thread_actions_delete)
-        copyLink = view.findViewById(R.id.channels_list_item_thread_actions_copy_link)
-        unarchive = view.findViewById(R.id.channels_list_item_thread_actions_unarchive)
-        leave = view.findViewById(R.id.channels_list_item_thread_actions_leave)
-        developerDivider = view.findViewById(R.id.channels_list_item_thread_actions_developer_divider)
-        copyId = view.findViewById(R.id.channels_list_item_thread_actions_copy_id)
+        _binding = WidgetChannelsListItemThreadActionsBinding.bind(view)
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
     }
 
     override fun bindSubscriptions(compositeSubscription: CompositeSubscription) {
@@ -121,7 +95,7 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         }
         val channel = model.channel
         PluginContextMenuHost.bind(
-            requireView().findViewById(R.id.plugin_context_menu_items),
+            binding.pluginContextMenuItems,
             pluginContextMenuContext(
                 PluginContextMenuSurface.THREAD,
                 channel.guildId.takeIf { it > 0L },
@@ -129,26 +103,29 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
                 targetId = channel.id,
             ),
             ::dismiss,
+            modern,
         )
+        // An empty container would otherwise keep its card on screen with nothing in it.
+        binding.pluginContextMenuItems.isVisible = binding.pluginContextMenuItems.childCount > 0
         val metadata = channel.threadMetadata
 
-        if (model.guild != null) IconUtils.setIcon(icon, model.guild) else IconUtils.setIcon(icon, channel)
-        title.text = channel.getDisplayNameOrDefault(requireContext())
+        if (model.guild != null) IconUtils.setIcon(binding.channelsListItemThreadActionsIcon, model.guild) else IconUtils.setIcon(binding.channelsListItemThreadActionsIcon, channel)
+        binding.channelsListItemThreadActionsTitle.text = channel.getDisplayNameOrDefault(requireContext())
         configureForumPostLabels(model)
         configureForumPostActions(model)
 
-        markAsRead.setOnClickAndDismissListener {
+        binding.channelsListItemThreadActionsMarkAsRead.setOnClickAndDismissListener {
             StoreStream.getMessageAck().ack(channel.id, isLockedAck = false, clearLock = true)
         }
 
-        mute.text = muteThreadText(channel, model.isMuted, requireContext())
-        mute.setCompoundDrawablesWithIntrinsicBounds(
+        binding.channelsListItemThreadActionsMute.text = muteThreadText(channel, model.isMuted, requireContext())
+        binding.channelsListItemThreadActionsMute.setCompoundDrawablesWithIntrinsicBounds(
             muteIconResId(model.isMuted, requireContext()),
             0,
             0,
             0,
         )
-        mute.setOnClickAndDismissListener {
+        binding.channelsListItemThreadActionsMute.setOnClickAndDismissListener {
             if (model.isMuted) {
                 StoreStream.getUserGuildSettings()
                     .setChannelMuted(requireContext(), channel.id, muted = false)
@@ -157,56 +134,56 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             }
         }
 
-        notifications.setOnClickListener {
+        binding.channelsListItemThreadActionsChannelNotifications.setOnClickListener {
             ChannelListNavigation.showChannelNotificationSettings(this, channel.id)
         }
 
         // The divider only earns its space when the structural actions below it can appear.
-        divider.visibility = if (model.isActiveThread) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsDivider.visibility = if (model.isActiveThread) View.VISIBLE else View.GONE
 
-        edit.visibility = if (model.canManageThread) View.VISIBLE else View.GONE
-        edit.setOnClickAndDismissListener {
+        binding.channelsListItemThreadActionsEdit.visibility = if (model.canManageThread) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsEdit.setOnClickAndDismissListener {
             ChannelListNavigation.showThreadSettings(this, channel.id)
         }
 
         val canChangeArchiveDuration = model.canManageThread && metadata?.archived == false
-        archiveSettings.visibility = if (canChangeArchiveDuration) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsArchiveSettings.visibility = if (canChangeArchiveDuration) View.VISIBLE else View.GONE
         if (canChangeArchiveDuration && metadata != null) {
-            archiveSettingsSubheader.text = archiveSettingsSubheader.i18nFormat(
+            binding.channelsListItemThreadActionsArchiveSettingsSubheader.text = binding.channelsListItemThreadActionsArchiveSettingsSubheader.i18nFormat(
                 R.string.auto_archive_thread_after,
                 "duration" to autoArchiveDurationName(requireContext(), metadata.autoArchiveDuration)
                     .lowercase(Locale.getDefault()),
             )
         }
-        archiveSettings.setOnClickAndDismissListener {
+        binding.channelsListItemThreadActionsArchiveSettings.setOnClickAndDismissListener {
             WidgetThreadArchiveActions.show(parentFragmentManager, channel.id, channel.guildId)
         }
 
-        join.visibility = if (model.joinedThread == null) View.VISIBLE else View.GONE
-        join.setOnClickListener { joinThread(channel) }
+        binding.channelsListItemThreadActionsJoin.visibility = if (model.joinedThread == null) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsJoin.setOnClickListener { joinThread(channel) }
 
-        unarchive.visibility =
+        binding.channelsListItemThreadActionsUnarchive.visibility =
             if (model.canUnarchiveThread && metadata?.archived == true) View.VISIBLE else View.GONE
-        unarchive.setOnClickListener { unarchiveThread(channel, model.isModerator) }
+        binding.channelsListItemThreadActionsUnarchive.setOnClickListener { unarchiveThread(channel, model.isModerator) }
 
         // The reference offers closing only while the thread is still open, and only to a manager.
-        archive.visibility =
+        binding.channelsListItemThreadActionsArchive.visibility =
             if (model.canManageThread && metadata?.archived == false) View.VISIBLE else View.GONE
-        archive.setOnClickListener { setThreadSettings(channel, RestAPIParams.ThreadSettings(archived = true)) }
+        binding.channelsListItemThreadActionsArchive.setOnClickListener { setThreadSettings(channel, RestAPIParams.ThreadSettings(archived = true)) }
 
-        lock.visibility = if (model.isModerator) View.VISIBLE else View.GONE
-        lock.setText(
+        binding.channelsListItemThreadActionsLock.visibility = if (model.isModerator) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsLock.setText(
             if (isForumPost(model)) {
                 if (metadata?.locked == true) R.string.unlock_forum_post else R.string.lock_forum_post
             } else {
                 if (metadata?.locked == true) R.string.unlock_thread else R.string.lock_thread
             },
         )
-        lock.setOnClickListener {
+        binding.channelsListItemThreadActionsLock.setOnClickListener {
             setThreadSettings(channel, RestAPIParams.ThreadSettings(locked = metadata?.locked != true))
         }
 
-        copyLink.setOnClickAndDismissListener {
+        binding.channelsListItemThreadActionsCopyLink.setOnClickAndDismissListener {
             val guildSegment = channel.guildId.takeIf { it != 0L }?.toString() ?: "@me"
             AppToast.copyToClipboard(
                 requireContext(),
@@ -215,14 +192,18 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             )
         }
 
-        leave.visibility = if (model.joinedThread != null) View.VISIBLE else View.GONE
-        leave.setOnClickListener { leaveThread(channel) }
+        binding.channelsListItemThreadActionsLeave.visibility = if (model.joinedThread != null) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsLeave.setOnClickListener { leaveThread(channel) }
 
-        developerDivider.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
-        copyId.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
-        copyId.setOnClickAndDismissListener {
+        binding.channelsListItemThreadActionsDeveloperDivider.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsCopyId.visibility = if (model.isDeveloper) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsCopyId.setOnClickAndDismissListener {
             ChannelListNavigation.copyToClipboard(requireContext(), channel.id.toString())
         }
+        // Each modern card hides itself once none of its rows apply.
+        (binding.root.getChildAt(0) as ViewGroup).children
+            .filterIsInstance<MessageMenuGroup>()
+            .forEach(MessageMenuGroup::refresh)
     }
 
     /**
@@ -231,11 +212,11 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
      */
     private fun configureForumPostLabels(model: Model) {
         if (!isForumPost(model)) return
-        edit.setText(R.string.edit_forum_post)
-        join.setText(R.string.join_forum_post)
-        leave.setText(R.string.leave_forum_post)
-        archive.setText(R.string.archive_forum_post)
-        unarchive.setText(R.string.unarchive_forum_post)
+        binding.channelsListItemThreadActionsEdit.setText(R.string.edit_forum_post)
+        binding.channelsListItemThreadActionsJoin.setText(R.string.join_forum_post)
+        binding.channelsListItemThreadActionsLeave.setText(R.string.leave_forum_post)
+        binding.channelsListItemThreadActionsArchive.setText(R.string.archive_forum_post)
+        binding.channelsListItemThreadActionsUnarchive.setText(R.string.unarchive_forum_post)
     }
 
     private fun isForumPost(model: Model): Boolean =
@@ -249,10 +230,13 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             "name" to channel.getDisplayNameOrDefault(context),
         )
 
+    /** The themed icons carry a 60% alpha that tinting keeps, so the modern rows use opaque copies. */
     @DrawableRes
-    private fun muteIconResId(isMuted: Boolean, context: Context): Int = context.getThemedDrawableRes(
-        if (isMuted) R.attr.ic_channel_muted else R.attr.ic_channel_mute,
-    )
+    private fun muteIconResId(isMuted: Boolean, context: Context): Int = when {
+        !modern -> context.getThemedDrawableRes(if (isMuted) R.attr.ic_channel_muted else R.attr.ic_channel_mute)
+        isMuted -> R.drawable.ic_menu_muted
+        else -> R.drawable.ic_menu_mute
+    }
 
     /**
      * [unlockThread] is only sent by a moderator; a thread owner reopening their own thread must
@@ -306,8 +290,8 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         val parent = StoreStream.getChannels().getChannel(channel.parentId)
         val hasTags = !parent?.availableTags.isNullOrEmpty()
 
-        editTags.visibility = if (isPost && model.canManageThread && hasTags) View.VISIBLE else View.GONE
-        editTags.setOnClickListener {
+        binding.channelsListItemThreadActionsEditTags.visibility = if (isPost && model.canManageThread && hasTags) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsEditTags.setOnClickListener {
             WidgetForumPostTagsSheet.show(
                 parentFragmentManager,
                 channel.parentId,
@@ -320,9 +304,9 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
         }
 
         val isPinned = channel.flags?.and(Channel.FLAG_PINNED) == Channel.FLAG_PINNED
-        pin.visibility = if (isPost && model.isModerator) View.VISIBLE else View.GONE
-        pin.setText(if (isPinned) R.string.unpin_post else R.string.pin_post)
-        pin.setOnClickListener {
+        binding.channelsListItemThreadActionsPin.visibility = if (isPost && model.isModerator) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsPin.setText(if (isPinned) R.string.unpin_post else R.string.pin_post)
+        binding.channelsListItemThreadActionsPin.setOnClickListener {
             val flags = channel.flags ?: 0L
             setThreadSettings(
                 channel,
@@ -332,8 +316,8 @@ class WidgetChannelsListItemThreadActions : AppBottomSheet() {
             )
         }
 
-        delete.visibility = if (isPost && model.canManageThread) View.VISIBLE else View.GONE
-        delete.setOnClickListener {
+        binding.channelsListItemThreadActionsDelete.visibility = if (isPost && model.canManageThread) View.VISIBLE else View.GONE
+        binding.channelsListItemThreadActionsDelete.setOnClickListener {
             ThreadDeleteDialog.show(
                 parentFragmentManager,
                 channel.id,

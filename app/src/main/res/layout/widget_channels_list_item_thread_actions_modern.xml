@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern thread / forum post long-press sheet: same ids as widget_channels_list_item_thread_actions (the legacy one), so one view binding serves both. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:background="?attr/colorBackgroundPrimary" android:overScrollMode="never" style="@style/UiKit.ViewGroup.NestedScrollView">
+    <LinearLayout android:paddingBottom="24dp" style="@style/UiKit.ViewGroup.LinearLayout">
+        <View android:layout_gravity="center_horizontal" android:layout_width="36dp" android:layout_height="4dp" android:layout_marginTop="8dp" android:background="@drawable/drawable_app_launcher_handle" android:importantForAccessibility="no"/>
+        <LinearLayout android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp">
+            <com.discord.views.VitoImageView android:id="@+id/channels_list_item_thread_actions_icon" android:layout_width="64dp" android:layout_height="64dp" style="@style/Avatar.Large"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_title" android:textSize="20sp" android:ellipsize="end" android:maxLines="2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="16dp" style="@style/UiKit.TextView.H1.Bold"/>
+        </LinearLayout>
+        <!-- The legacy sheet's divider between its two blocks; the cards here separate them already. -->
+        <View android:id="@+id/channels_list_item_thread_actions_divider" android:visibility="gone" android:layout_width="0dp" android:layout_height="0dp"/>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/channels_list_item_thread_actions_mark_as_read" android:text="@string/mark_as_read" app:drawableStartCompat="@drawable/ic_menu_mark_read" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_mute" app:drawableStartCompat="@drawable/ic_menu_mute" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_channel_notifications" android:text="@string/notification_settings" app:drawableStartCompat="@drawable/ic_menu_notification_settings" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/channels_list_item_thread_actions_join" android:text="@string/join_thread" app:drawableStartCompat="@drawable/ic_person_add_new_primary_500_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_edit" android:text="@string/edit_thread" app:drawableStartCompat="@drawable/ic_menu_edit" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_edit_tags" android:text="@string/forum_tag_post_edit" app:drawableStartCompat="@drawable/ic_tag_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_pin" android:text="@string/pin_post" app:drawableStartCompat="@drawable/ic_menu_pin" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <LinearLayout android:id="@+id/channels_list_item_thread_actions_archive_settings" android:orientation="horizontal" android:gravity="center_vertical" android:minHeight="52dp" android:paddingTop="12dp" android:paddingBottom="12dp" android:paddingStart="16dp" android:paddingEnd="16dp" android:background="?attr/selectableItemBackground" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <ImageView android:layout_width="24dp" android:layout_height="24dp" android:layout_marginEnd="16dp" android:importantForAccessibility="no" app:srcCompat="@drawable/ic_clock_24dp" app:tint="?attr/colorInteractiveNormal"/>
+                <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1">
+                    <TextView android:id="@+id/channels_list_item_thread_actions_archive_settings_header" android:text="@string/archive_settings" android:textSize="17sp" android:padding="0dp" android:background="@color/transparent" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.Settings.Item.Label"/>
+                    <TextView android:id="@+id/channels_list_item_thread_actions_archive_settings_subheader" android:padding="0dp" android:background="@color/transparent" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.Settings.Item.Addition"/>
+                </LinearLayout>
+            </LinearLayout>
+            <TextView android:id="@+id/channels_list_item_thread_actions_archive" android:text="@string/archive_thread" app:drawableStartCompat="@drawable/ic_close_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_unarchive" android:text="@string/unarchive_thread" app:drawableStartCompat="@drawable/ic_clock_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_lock" android:text="@string/lock_thread" app:drawableStartCompat="@drawable/ic_lock_24dp" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/channels_list_item_thread_actions_copy_link" android:text="@string/copy_link" app:drawableStartCompat="@drawable/ic_menu_link" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+            <LinearLayout android:id="@+id/plugin_context_menu_items" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:id="@+id/channels_list_item_thread_actions_developer_divider" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/channels_list_item_thread_actions_copy_id" android:text="@string/copy_id" app:drawableStartCompat="@drawable/ic_menu_id" app:drawableTint="?attr/colorInteractiveNormal" style="@style/MessageMenu.Row"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+        <com.discord.widgets.chat.list.actions.MessageMenuGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:layout_marginTop="16dp">
+            <TextView android:id="@+id/channels_list_item_thread_actions_delete" android:text="@string/delete_forum_post" app:drawableStartCompat="@drawable/ic_menu_delete" app:drawableTint="@color/status_red" style="@style/MessageMenu.Row.Danger"/>
+            <TextView android:id="@+id/channels_list_item_thread_actions_leave" android:text="@string/leave_thread" app:drawableStartCompat="@drawable/ic_remove_friend_red_24dp" app:drawableTint="@color/status_red" style="@style/MessageMenu.Row.Danger"/>
+        </com.discord.widgets.chat.list.actions.MessageMenuGroup>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

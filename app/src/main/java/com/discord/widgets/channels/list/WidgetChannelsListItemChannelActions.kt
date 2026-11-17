@@ -70,7 +70,7 @@ import dev.mantikafasi.manticord.plugins.api.pluginContextMenuContext
  */
 class WidgetChannelsListItemChannelActions : AppBottomSheet() {
 
-    /** The modern sheet is the default; the legacy one shares the long-press menu flag. Both share view ids. */
+    /** The modern sheet is the default; the legacy one follows the legacy UI flag. Both share view ids. */
     private val modern by lazy { !FeatureFlags.legacyUiEnabled() }
 
     override fun getContentViewResId(): Int =
