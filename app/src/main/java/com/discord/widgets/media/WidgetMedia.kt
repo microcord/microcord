@@ -167,17 +167,22 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
 
         // The video surface swallows touches, so it needs the same tap handler as the container.
         binding.mediaPlayerView.videoSurfaceView?.setOnClickListener { onMediaClick() }
-        // Touches outside the surface (the letterbox bars) go to the gallery page underneath, so
-        // they can swipe; that page's own tap listener toggles the chrome, so toggling here as well
-        // ran it twice and snapped the controls back mid-animation.
-        binding.mediaPlayerView.setOnTouchListener { _, event ->
-            if (gallery.isEmpty()) return@setOnTouchListener false
+        // In a gallery, touches on the video and its letterbox bars go to the page underneath, so a
+        // swipe moves to the next item. That page's own tap listener toggles the chrome, so the
+        // surface's click must not run as well: toggling twice snapped the controls back.
+        val forwardToGallery = View.OnTouchListener { source, event ->
+            if (gallery.isEmpty()) return@OnTouchListener false
+            val from = IntArray(2).also(source::getLocationOnScreen)
+            val to = IntArray(2).also(binding.mediaGallery::getLocationOnScreen)
             MotionEvent.obtain(event).also { forwarded ->
+                forwarded.offsetLocation((from[0] - to[0]).toFloat(), (from[1] - to[1]).toFloat())
                 binding.mediaGallery.dispatchTouchEvent(forwarded)
                 forwarded.recycle()
             }
             true
         }
+        binding.mediaPlayerView.videoSurfaceView?.setOnTouchListener(forwardToGallery)
+        binding.mediaPlayerView.setOnTouchListener(forwardToGallery)
         binding.mediaContainer.canStartGesture = { !isImageZoomed() }
         binding.mediaContainer.onVerticalDrag = ::dragToDismiss
         binding.mediaContainer.onVerticalRelease = ::releaseToDismiss
