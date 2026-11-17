@@ -7,6 +7,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.PointF
 import android.graphics.Rect
@@ -38,6 +39,7 @@ import com.discord.app.AppLog
 import com.discord.app.AppScreenRouter
 import com.discord.app.appViewModels
 import com.discord.databinding.WidgetMediaBinding
+import com.discord.databinding.WidgetMediaGalleryStripItemBinding
 import com.discord.databinding.WidgetMediaGalleryPageBinding
 import com.discord.i18n.i18nFormat
 import com.discord.utilities.attachments.AttachmentUrlRefresher
@@ -59,6 +61,7 @@ import com.discord.utilities.view.extensions.addOnHeightChangedListener
 import com.discord.views.ThemedColor
 import com.facebook.drawee.controller.BaseControllerListener
 import com.facebook.drawee.drawable.ScalingUtils
+import com.facebook.drawee.generic.RoundingParams
 import com.facebook.imagepipeline.image.ImageInfo
 import com.facebook.samples.zoomable.ZoomableDraweeView
 import com.google.android.exoplayer2.ExoPlayer
@@ -143,9 +146,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
     private var gallery: List<MediaGalleryItem> = emptyList()
     private var galleryIndex: Int = 0
     private val galleryAdapter = GalleryAdapter()
+    private val stripAdapter = StripAdapter()
     private val galleryPageCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) {
             galleryIndex = position
+            showGalleryPosition()
         }
 
         override fun onPageScrollStateChanged(state: Int) {
@@ -196,6 +201,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         view.post { generateSequence(view.parent as? View) { it.parent as? View }.forEach { it.background = null } }
         binding.mediaGallery.adapter = galleryAdapter
         binding.mediaGallery.registerOnPageChangeCallback(galleryPageCallback)
+        binding.mediaGalleryStrip.adapter = stripAdapter
         binding.mediaContainer.setOnClickListener { onMediaClick() }
         binding.mediaClose.setOnClickListener { activity?.finish() }
 
@@ -220,7 +226,9 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             bound.mediaGallery.visibility = View.VISIBLE
             bound.mediaImage.visibility = View.GONE
             galleryAdapter.notifyDataSetChanged()
+            stripAdapter.notifyDataSetChanged()
             bound.mediaGallery.setCurrentItem(galleryIndex, false)
+            showGalleryPosition()
             bindMedia(item.args, item.viewerContext, galleryPage = true)
         } else {
             bound.mediaGallery.visibility = View.GONE
@@ -283,7 +291,8 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         val video = isVideo()
         bound.mediaVolume.visibility = if (video) View.VISIBLE else View.GONE
         bound.mediaPlayerControlView.visibility = if (video) View.VISIBLE else View.GONE
-        bound.mediaBottomChrome.visibility = if (video || viewerContext != null) View.VISIBLE else View.GONE
+        bound.mediaBottomChrome.visibility =
+            if (video || viewerContext != null || gallery.size > 1) View.VISIBLE else View.GONE
 
         if (!galleryPage && showPreview) configureMediaImage()
         val isVideo = mediaSource != null
@@ -818,6 +827,16 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         }
     }
 
+    /** "2 / 5" up top and the highlighted thumbnail below, for a gallery of more than one item. */
+    private fun showGalleryPosition() {
+        val visibility = if (gallery.size > 1) View.VISIBLE else View.GONE
+        bound.mediaGalleryCounter.visibility = visibility
+        bound.mediaGalleryStrip.visibility = visibility
+        bound.mediaGalleryCounter.text = getString(R.string.media_viewer_position, galleryIndex + 1, gallery.size)
+        stripAdapter.select(galleryIndex)
+        bound.mediaGalleryStrip.smoothScrollToPosition(galleryIndex)
+    }
+
     private fun isImageZoomed(): Boolean = if (gallery.isNotEmpty()) galleryAdapter.isZoomed(galleryIndex)
     else bound.mediaImage.visibility == View.VISIBLE && bound.mediaImage.getZoomableController().getScale() > 1.01f
 
@@ -862,6 +881,55 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
                 MGImages.setImage(image, item.args.previewImageUri)
             }
         }
+    }
+
+    /** The gallery's thumbnails along the bottom; tapping one jumps to it. */
+    private inner class StripAdapter : RecyclerView.Adapter<StripAdapter.Holder>() {
+        private var selected = -1
+        private val selectionChanged = Any()
+        private val density get() = resources.displayMetrics.density
+
+        fun select(position: Int) {
+            val previous = selected
+            selected = position
+            // Only the highlight changes; rebinding the whole row reloaded the picture, which blanked
+            // and faded back in with every swipe.
+            if (previous >= 0) notifyItemChanged(previous, selectionChanged)
+            notifyItemChanged(position, selectionChanged)
+        }
+
+        override fun getItemCount() = gallery.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(
+            WidgetMediaGalleryStripItemBinding.inflate(LayoutInflater.from(parent.context), parent, false),
+        )
+
+        override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
+            if (payloads.isEmpty()) onBindViewHolder(holder, position) else bindSelection(holder, position)
+        }
+
+        private fun bindSelection(holder: Holder, position: Int) {
+            val current = position == selected
+            holder.binding.root.alpha = if (current) 1f else 0.5f
+            holder.binding.mediaStripImage.hierarchy.roundingParams = RoundingParams.fromCornersRadius(6 * density)
+                .setBorder(Color.WHITE, if (current) 2 * density else 0f)
+        }
+
+        override fun onBindViewHolder(holder: Holder, position: Int) {
+            val item = gallery[position]
+            val image = holder.binding.mediaStripImage
+            bindSelection(holder, position)
+            val size = holder.binding.root.layoutParams.width
+            MGImages.setImage(image, item.args.previewImageUri, size, size)
+            holder.binding.mediaStripPlay.visibility = if (item.args.mediaType == MediaType.VIDEO) View.VISIBLE else View.GONE
+            holder.binding.mediaStripGif.visibility = if (item.args.mediaType == MediaType.GIFV) View.VISIBLE else View.GONE
+            holder.binding.root.contentDescription = getString(R.string.media_viewer_position, position + 1, gallery.size)
+            holder.binding.root.setOnClickListener {
+                holder.bindingAdapterPosition.takeIf { it >= 0 }?.let { bound.mediaGallery.setCurrentItem(it, true) }
+            }
+        }
+
+        inner class Holder(val binding: WidgetMediaGalleryStripItemBinding) : RecyclerView.ViewHolder(binding.root)
     }
 
     companion object {

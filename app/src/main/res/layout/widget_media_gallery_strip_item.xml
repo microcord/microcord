@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One thumbnail in the media viewer's gallery strip, badged by what it is. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="44dp"
+    android:layout_height="44dp"
+    android:layout_marginStart="3dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginEnd="3dp">
+
+    <com.facebook.drawee.view.SimpleDraweeView
+        android:id="@+id/media_strip_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:actualImageScaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/media_strip_play"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_gravity="center"
+        android:background="@drawable/drawable_circle_black"
+        android:backgroundTint="#99000000"
+        android:importantForAccessibility="no"
+        android:padding="2dp"
+        android:src="@drawable/ic_play_arrow_24dp"
+        android:visibility="gone"
+        app:tint="@color/white" />
+
+    <TextView
+        android:id="@+id/media_strip_gif"
+        style="@style/UiKit.TextView.Bold"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="3dp"
+        android:background="#99000000"
+        android:importantForAccessibility="no"
+        android:paddingStart="2dp"
+        android:paddingEnd="2dp"
+        android:text="@string/gif"
+        android:textColor="@color/white"
+        android:textSize="8sp"
+        android:visibility="gone" />
+</FrameLayout>
