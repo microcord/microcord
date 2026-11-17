@@ -195,7 +195,7 @@ class ThumbnailComponentView @JvmOverloads constructor(
         val entry = componentActionListener.componentEntry ?: return
         configureMedia(
             component, entry.message.id, entry.messageState, null, entry.toMediaViewerContext(),
-            componentActionListener::onMediaLongClicked,
+            onMediaLongClick = componentActionListener::onMediaLongClicked,
         )
     }
 
@@ -204,7 +204,8 @@ class ThumbnailComponentView @JvmOverloads constructor(
      * media gallery.
      *
      * [key] separates gallery cells that share the component's spoiler id; a thumbnail, which owns
-     * its id outright, passes null.
+     * its id outright, passes null. A gallery cell also passes the gallery's openable media in
+     * [gallery], so the viewer can swipe through the rest.
      */
     internal fun configureMedia(
         component: ThumbnailMessageComponent,
@@ -212,6 +213,7 @@ class ThumbnailComponentView @JvmOverloads constructor(
         state: StoreMessageState.State?,
         key: String?,
         viewerContext: MediaViewerContext?,
+        gallery: List<MessageAttachment> = emptyList(),
         onMediaLongClick: (String) -> Unit = {},
     ) {
         val binding = WidgetBotUiThumbnailComponentBinding.bind(this)
@@ -258,6 +260,12 @@ class ThumbnailComponentView @JvmOverloads constructor(
                 hidden -> binding.mediaSpoiler.performClick()
                 // Nothing to open yet: the tile is holding a place for media that has not resolved.
                 isPlaceholder -> Unit
+                gallery.size > 1 -> WidgetMedia.launchGallery(
+                    context,
+                    gallery,
+                    gallery.indexOf(attachment).coerceAtLeast(0),
+                    List(gallery.size) { viewerContext },
+                )
                 viewerContext == null -> WidgetMedia.launch(context, attachment)
                 else -> WidgetMedia.launch(context, attachment, viewerContext)
             }
@@ -335,6 +343,11 @@ class MediaGalleryComponentView @JvmOverloads constructor(
             width = availableWidth
             height = grid.height
         }
+        val viewerContext = entry.toMediaViewerContext()
+        // Unresolved cells have nothing to show, so the viewer skips them.
+        val gallery = component.items.map { it.media }
+            .filter { it.mediaType != MediaItemType.PLACEHOLDER }
+            .map { it.toAttachment((component.id ?: component.index).toLong()) }
         val views = grid.cells.mapIndexed { index, cell ->
             val item = component.items[index]
             val view = (getChildAt(index) as? ThumbnailComponentView)
@@ -355,7 +368,8 @@ class MediaGalleryComponentView @JvmOverloads constructor(
                 entry.message.id,
                 entry.messageState,
                 "$GALLERY_KEY_PREFIX$index",
-                entry.toMediaViewerContext(),
+                viewerContext,
+                gallery,
             ) { boundListener?.onMediaLongClicked(it) }
             view
         }
