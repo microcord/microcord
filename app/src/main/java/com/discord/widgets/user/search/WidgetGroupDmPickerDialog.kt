@@ -1,5 +1,6 @@
 package com.discord.widgets.user.search
 
+import com.discord.utilities.display.drawUnderSystemBars
 import com.discord.utilities.rest.ClientBackend
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -65,6 +66,8 @@ class WidgetGroupDmPickerDialog : DialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        // A full-screen window, edge to edge like every other; keep the toolbar and button off the bars.
+        drawUnderSystemBars(view)
         view.findToolbar()?.apply {
             title = getString(R.string.new_group_dm)
             setNavigationIcon(R.drawable.ic_close_grey_24dp)

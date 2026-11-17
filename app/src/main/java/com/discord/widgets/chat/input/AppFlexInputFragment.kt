@@ -16,6 +16,7 @@ import android.widget.ImageView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.viewpager.widget.ViewPager
@@ -55,6 +56,11 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
             // event pipeline), which the composer's smooth-keyboard tracking can't always follow
             // through to its settled state once this dialog's own window steals focus.
             (parentFragment as? WidgetChatInput)?.forceKeyboardClosed()
+            // The window is edge to edge, so the tabs would sit under a button navigation bar.
+            ViewCompat.setOnApplyWindowInsetsListener(view) { root, insets ->
+                root.updatePadding(bottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
+                insets
+            }
             view.post {
                 val tabs = view.findViewById<TabLayout>(com.lytefast.flexinput.R.id.content_tabs) ?: return@post
                 val pager = view.findViewById<ViewPager>(com.lytefast.flexinput.R.id.content_pager) ?: return@post
@@ -89,7 +95,7 @@ class AppFlexInputFragment : FlexInputFragmentCompat() {
         val handle = root.findViewById<View>(R.id.content_drag_handle) ?: return
         val collapsed = pager.height.takeIf { it > 0 } ?: return
         val statusBar = ViewCompat.getRootWindowInsets(root)?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
-        val expanded = root.height - statusBar - resources.getDimensionPixelSize(R.dimen.tab_height)
+        val expanded = root.height - root.paddingBottom - statusBar - resources.getDimensionPixelSize(R.dimen.tab_height)
         if (expanded <= collapsed) {
             handle.visibility = View.GONE
             return
