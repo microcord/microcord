@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.discord.R
 import com.discord.app.AppScreenRouter
-import com.discord.app.AppViewFlipper
+import com.discord.databinding.WidgetAuthLandingBinding
 import com.discord.widgets.settings.WidgetSettingsBackend
 import com.discord.widgets.settings.WidgetSettingsProxy
 import com.discord.stores.StoreInviteSettings
@@ -17,12 +17,12 @@ import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.intent.LinkParseResult
 import com.discord.utilities.rx.ui
 import com.discord.widgets.multiaccount.WidgetSwitchAccounts
-import com.google.android.material.button.MaterialButton
 import rx.Subscription
 
 class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.LANDING) {
     private var landingSubscription: Subscription? = null
     private var oneTimeLoginRedeemed = false
+    private var binding: WidgetAuthLandingBinding? = null
 
     private val landingModel: WidgetAuthLandingViewModel by viewModels {
         val route = (DeepLinkParser.parse(mostRecentIntent.dataString) as? LinkParseResult.Internal)?.route
@@ -64,7 +64,9 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        view.findViewById<MaterialButton>(R.id.auth_landing_login).setOnClickListener {
+        // A binding, so a button missing from one of the layout variants fails the build, not a device.
+        val binding = WidgetAuthLandingBinding.bind(view).also { this.binding = it }
+        binding.authLandingLogin.setOnClickListener {
             actions.navigate(AuthRoute.LOGIN)
         }
         // Signing out leaves the other accounts on this device stored but unreachable — the
@@ -73,7 +75,7 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
         // Bound to the list rather than read once: the account being signed out is dropped by a
         // dispatch that can land after this screen is shown, which would leave an empty switcher
         // reachable behind a button offering accounts that are no longer there.
-        val chooseAccount = view.findViewById<MaterialButton>(R.id.auth_landing_choose_account)
+        val chooseAccount = binding.authLandingChooseAccount
         chooseAccount.setOnClickListener { WidgetSwitchAccounts.show(parentFragmentManager) }
         StoreStream.getMultiAccount().observeAccounts()
             .ui(this)
@@ -81,10 +83,10 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
                 chooseAccount.visibility = if (accounts.isEmpty()) View.GONE else View.VISIBLE
             }
         // A network that blocks Discord blocks signing in too, so the proxy has to be set from here.
-        view.findViewById<MaterialButton>(R.id.auth_landing_proxy).setOnClickListener {
+        binding.authLandingProxy.setOnClickListener {
             AppScreenRouter.launch(it.context, WidgetSettingsProxy::class.java)
         }
-        view.findViewById<MaterialButton>(R.id.auth_landing_backend).setOnClickListener {
+        binding.authLandingBackend.setOnClickListener {
             AppScreenRouter.launch(it.context, WidgetSettingsBackend::class.java)
         }
         redeemOneTimeLogin()
@@ -109,6 +111,11 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
         landingSubscription = landingModel.observeViewState().subscribe(::renderLanding)
     }
 
+    override fun onDestroyView() {
+        binding = null
+        super.onDestroyView()
+    }
+
     override fun onStop() {
         landingSubscription?.unsubscribe()
         landingSubscription = null
@@ -116,18 +123,16 @@ class WidgetAuthLanding : AuthFragment(R.layout.widget_auth_landing, AuthRoute.L
     }
 
     private fun renderLanding(state: WidgetAuthLandingViewModel.ViewState) {
-        val flipper = view?.findViewById<AppViewFlipper>(R.id.auth_landing_switch_flipper) ?: return
-        flipper.displayedChild = if (state is WidgetAuthLandingViewModel.ViewState.Empty) 0 else 1
+        val binding = binding ?: return
+        binding.authLandingSwitchFlipper.displayedChild = if (state is WidgetAuthLandingViewModel.ViewState.Empty) 0 else 1
         when (state) {
             is WidgetAuthLandingViewModel.ViewState.Empty -> Unit
             is WidgetAuthLandingViewModel.ViewState.Invite ->
-                requireView().findViewById<AuthInviteInfoView>(R.id.auth_landing_invite_info)
-                    .configureInvite(state.invite)
+                binding.authLandingInviteInfo.configureInvite(state.invite)
             is WidgetAuthLandingViewModel.ViewState.GuildTemplate ->
-                requireView().findViewById<AuthInviteInfoView>(R.id.auth_landing_invite_info)
-                    .configureGuildTemplate(state.guildTemplate)
+                binding.authLandingInviteInfo.configureGuildTemplate(state.guildTemplate)
         }
-        requireView().findViewById<MaterialButton>(R.id.auth_landing_register).setOnClickListener {
+        binding.authLandingRegister.setOnClickListener {
             val error = state.ageGateError
             if (error == null) actions.navigate(AuthRoute.REGISTER_IDENTITY)
             else actions.navigate(
