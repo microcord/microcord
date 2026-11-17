@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list.adapter
 
+import com.discord.widgets.media.toMediaViewerContext
 import android.graphics.Color
 import android.net.Uri
 import android.text.format.Formatter
@@ -226,7 +227,9 @@ class WidgetChatListAdapterItemForwardedMessage(
             addMedia(scaledWidth, scaledHeight) { media ->
                 media.contentDescription = attachment.filename
                 media.updateUIWithAttachment(attachment, scaledWidth, scaledHeight, entry.autoPlayGifs)
-                media.setOnClickListener { WidgetMedia.launch(itemView.context, attachment, media.currentPositionMs) }
+                media.setOnClickListener {
+                    WidgetMedia.launch(itemView.context, attachment, media.currentPositionMs, entry.message.toMediaViewerContext())
+                }
             }
             return
         }

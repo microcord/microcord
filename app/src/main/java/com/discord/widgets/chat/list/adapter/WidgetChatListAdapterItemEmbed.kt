@@ -1,5 +1,7 @@
 package com.discord.widgets.chat.list.adapter
 
+import com.discord.widgets.media.MediaViewerContext
+import com.discord.widgets.media.toMediaViewerContext
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -195,7 +197,7 @@ class WidgetChatListAdapterItemEmbed(
                 binding.chatListItemEmbedDivider.visibility = View.GONE
                 binding.chatListItemEmbedImageThumbnail.visibility = View.GONE
                 binding.embedInlineMedia.visibility = View.VISIBLE
-                configureInlineEmbed(embed, entry.autoPlayGifs)
+                configureInlineEmbed(embed, entry.autoPlayGifs, entry.message.toMediaViewerContext())
                 binding.chatListItemEmbedContainerCard.setCardBackgroundColor(
                     androidx.core.content.ContextCompat.getColor(itemView.context, R.color.transparent),
                 )
@@ -231,7 +233,7 @@ class WidgetChatListAdapterItemEmbed(
         }
     }
 
-    private fun configureInlineEmbed(embed: MessageEmbed, autoPlayGifs: Boolean) {
+    private fun configureInlineEmbed(embed: MessageEmbed, autoPlayGifs: Boolean, viewerContext: MediaViewerContext) {
         val preview = with(EmbedResourceUtils) { embed.getPreviewImage() }
         val width = preview?.width ?: 0
         val height = preview?.height ?: 0
@@ -250,7 +252,7 @@ class WidgetChatListAdapterItemEmbed(
         // An inline embed is nothing but its media, so tapping it opens the fullscreen viewer —
         // unlike the carded embed's picture below, which follows the embed's own link.
         binding.embedInlineMedia.setOnClickListener { view ->
-            WidgetMedia.launch(view.context, embed, binding.embedInlineMedia.currentPositionMs)
+            WidgetMedia.launch(view.context, embed, binding.embedInlineMedia.currentPositionMs, viewerContext)
         }
     }
 
@@ -468,12 +470,12 @@ class WidgetChatListAdapterItemEmbed(
             if (externalUrl != null) {
                 UriHandler.handleOrUntrusted(view.context, externalUrl, embed.title)
             } else if (images.size == 1 && images[0] != embed.image) {
-                WidgetMedia.launchEmbedGallery(view.context, embed, images, 0)
+                WidgetMedia.launchEmbedGallery(view.context, embed, images, 0, model.embedEntry.message.toMediaViewerContext())
             } else {
                 // getExternalOpenUrl is non-null only for VIDEO and FILE embeds, so without this
                 // branch every actual image — a pasted image link, GIFV, RICH, LINK, ARTICLE —
                 // fell through to an empty lambda and tapping it did nothing at all.
-                WidgetMedia.launch(view.context, embed)
+                WidgetMedia.launch(view.context, embed, viewerContext = model.embedEntry.message.toMediaViewerContext())
             }
         }
     }
@@ -512,7 +514,7 @@ class WidgetChatListAdapterItemEmbed(
                 width = tileWidth, height = cell, changeDetector = imageChangeDetector,
                 autoPlayAnimations = model.embedEntry.autoPlayGifs)
             tile.setOnClickListener {
-                if (!model.isSpoilerHidden) WidgetMedia.launchEmbedGallery(it.context, model.embedEntry.embed, images, index)
+                if (!model.isSpoilerHidden) WidgetMedia.launchEmbedGallery(it.context, model.embedEntry.embed, images, index, model.embedEntry.message.toMediaViewerContext())
             }
             tile.setMediaLongClick {
                 adapter.eventHandler.onMediaLongClicked(

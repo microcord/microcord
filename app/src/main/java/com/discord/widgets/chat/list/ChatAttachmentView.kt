@@ -1,5 +1,6 @@
 package com.discord.widgets.chat.list
 
+import com.discord.widgets.media.toMediaViewerContext
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -444,8 +445,9 @@ class ChatAttachmentView @JvmOverloads constructor(
                 val media = entry.message.attachments.orEmpty().filter {
                     it.type == MessageAttachmentType.IMAGE || it.type == MessageAttachmentType.VIDEO
                 }
+                val viewerContext = entry.message.toMediaViewerContext()
                 WidgetMedia.launchGallery(context, media, media.indexOfFirst { it.id == attachment.id }.coerceAtLeast(0),
-                    initialPositionMs = inlineMedia.currentPositionMs)
+                    List(media.size) { viewerContext }, inlineMedia.currentPositionMs)
             }
             MessageAttachmentType.FILE -> UriHandler.handleOrUntrusted(context, attachment.url)
         }

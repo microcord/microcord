@@ -1,5 +1,6 @@
 package com.discord.widgets.media
 
+import com.discord.models.message.Message
 import com.discord.utilities.rest.ClientBackend
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -273,7 +274,11 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             bound.mediaAuthorAvatar.setImageURI(context.avatarUrl)
         }
         bound.mediaVolume.setOnClickListener { toggleMute(bound.mediaVolume) }
-        bound.mediaBottomChrome.visibility = if (isVideo()) View.VISIBLE else View.GONE
+        // The bar carries who posted the media as well as the transport, so a still keeps it for that.
+        val video = isVideo()
+        bound.mediaVolume.visibility = if (video) View.VISIBLE else View.GONE
+        bound.mediaPlayerControlView.visibility = if (video) View.VISIBLE else View.GONE
+        bound.mediaBottomChrome.visibility = if (video || viewerContext != null) View.VISIBLE else View.GONE
 
         if (!galleryPage && showPreview) configureMediaImage()
         val isVideo = mediaSource != null
@@ -569,7 +574,7 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
             bound.actionBarToolbarLayout.translationY = translationY
             // toolbarHeight is guarded as well as the reference's playerControlsHeight: it is only
             // known after layout, and a zero would make the ratio below a division by zero.
-            if (isVideo() && playerControlsHeight > 0 && toolbarHeight > 0) {
+            if (bound.mediaBottomChrome.visibility == View.VISIBLE && playerControlsHeight > 0 && toolbarHeight > 0) {
                 bound.mediaBottomChrome.translationY =
                     -translationY / (toolbarHeight.toFloat() / playerControlsHeight)
             }
@@ -891,12 +896,12 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         /** Opens [attachment] fullscreen. Only images and videos belong here. */
         @JvmStatic
         @JvmOverloads
-        fun launch(context: Context, attachment: MessageAttachment, initialPositionMs: Long = 0L) =
-            launch(context, launchArgs(attachment), null, initialPositionMs)
-
-        @JvmStatic
-        fun launch(context: Context, attachment: MessageAttachment, viewerContext: MediaViewerContext) =
-            launch(context, launchArgs(attachment), viewerContext)
+        fun launch(
+            context: Context,
+            attachment: MessageAttachment,
+            initialPositionMs: Long = 0L,
+            viewerContext: MediaViewerContext? = null,
+        ) = launch(context, launchArgs(attachment), viewerContext, initialPositionMs)
 
         @JvmStatic
         fun launchImage(context: Context, url: String, title: String?) =
@@ -905,14 +910,25 @@ class WidgetMedia : AppFragment(R.layout.widget_media) {
         /** Opens [embed]'s media fullscreen. */
         @JvmStatic
         @JvmOverloads
-        fun launch(context: Context, embed: MessageEmbed, initialPositionMs: Long = 0L) =
-            launch(context, launchArgs(embed), null, initialPositionMs)
+        fun launch(
+            context: Context,
+            embed: MessageEmbed,
+            initialPositionMs: Long = 0L,
+            viewerContext: MediaViewerContext? = null,
+        ) = launch(context, launchArgs(embed), viewerContext, initialPositionMs)
 
         /** Opens ordered embed images as stills, sharing the embed's source page. */
         @JvmStatic
-        fun launchEmbedGallery(context: Context, embed: MessageEmbed, images: List<EmbedImage>, selectedIndex: Int) {
+        @JvmOverloads
+        fun launchEmbedGallery(
+            context: Context,
+            embed: MessageEmbed,
+            images: List<EmbedImage>,
+            selectedIndex: Int,
+            viewerContext: MediaViewerContext? = null,
+        ) {
             val (items, selected) = embedGalleryArgs(embed, images, selectedIndex)
-            launchGalleryItems(context, items, selected)
+            launchGalleryItems(context, items.map { it.copy(viewerContext = viewerContext) }, selected)
         }
 
         @JvmStatic
@@ -978,6 +994,13 @@ data class MediaViewerContext(
     val avatarUrl: String?,
     val timestampMs: Long?,
 ) : Serializable
+
+/** Who posted this message's media and when, for the header the viewer shows above it. */
+fun Message.toMediaViewerContext() = MediaViewerContext(
+    authorName = author?.globalName ?: author?.username,
+    avatarUrl = IconUtils.getForUser(author?.id, author?.avatar?.value, author?.discriminator?.toIntOrNull(), size = 96),
+    timestampMs = timestamp?.dateTimeMillis,
+)
 
 /**
  * The slice of [items] the viewer is handed, and the selected item's index within it.

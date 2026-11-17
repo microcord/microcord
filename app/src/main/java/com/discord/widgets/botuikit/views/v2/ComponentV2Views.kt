@@ -1,5 +1,6 @@
 package com.discord.widgets.botuikit.views.v2
 
+import com.discord.widgets.media.toMediaViewerContext
 import android.content.Context
 import android.graphics.Color
 import android.net.Uri
@@ -37,7 +38,6 @@ import com.discord.models.botuikit.childError
 import com.discord.stores.StoreMessageState
 import com.discord.stores.StoreStream
 import com.discord.utilities.dimen.dpToPixels
-import com.discord.utilities.icon.IconUtils
 import com.discord.utilities.images.MediaProxyUrl
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageTextRenderer
@@ -194,7 +194,7 @@ class ThumbnailComponentView @JvmOverloads constructor(
     ) {
         val entry = componentActionListener.componentEntry ?: return
         configureMedia(
-            component, entry.message.id, entry.messageState, null, entry.toMediaViewerContext(),
+            component, entry.message.id, entry.messageState, null, entry.message.toMediaViewerContext(),
             onMediaLongClick = componentActionListener::onMediaLongClicked,
         )
     }
@@ -266,8 +266,7 @@ class ThumbnailComponentView @JvmOverloads constructor(
                     gallery.indexOf(attachment).coerceAtLeast(0),
                     List(gallery.size) { viewerContext },
                 )
-                viewerContext == null -> WidgetMedia.launch(context, attachment)
-                else -> WidgetMedia.launch(context, attachment, viewerContext)
+                else -> WidgetMedia.launch(context, attachment, viewerContext = viewerContext)
             }
         }
         binding.image.setOnClickListener(openMedia)
@@ -343,7 +342,7 @@ class MediaGalleryComponentView @JvmOverloads constructor(
             width = availableWidth
             height = grid.height
         }
-        val viewerContext = entry.toMediaViewerContext()
+        val viewerContext = entry.message.toMediaViewerContext()
         // Unresolved cells have nothing to show, so the viewer skips them.
         val gallery = component.items.map { it.media }
             .filter { it.mediaType != MediaItemType.PLACEHOLDER }
@@ -522,15 +521,3 @@ private fun UnfurledMediaItem.toAttachment(id: Long): MessageAttachment {
         contentType = contentType,
     )
 }
-
-private fun BotUiComponentEntry.toMediaViewerContext() =
-    MediaViewerContext(
-        authorName = message.author?.globalName ?: message.author?.username,
-        avatarUrl = IconUtils.getForUser(
-            message.author?.id,
-            message.author?.avatar?.value,
-            message.author?.discriminator?.toIntOrNull(),
-            size = 96,
-        ),
-        timestampMs = message.timestamp?.dateTimeMillis,
-    )
