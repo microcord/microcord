@@ -49,7 +49,7 @@ abstract class AppDialog : DialogFragment, AppComponent {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog =
         super.onCreateDialog(savedInstanceState).apply {
             // The dialog theme redefines surface colors, so the custom theme goes on top of it too.
-            ThemeRuntime.applyOverlay(context.theme)
+            ThemeRuntime.applyDialogOverlay(context.theme)
             requestWindowFeature(Window.FEATURE_NO_TITLE)
             // The dialog's own background is drawn by its content layout. Set before the first
             // frame: the theme's background carries side insets, and swapping it once the dialog

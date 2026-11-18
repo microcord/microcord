@@ -4,11 +4,19 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.edit
+import com.discord.app.AppActivity
+import com.discord.app.AppLog
+import com.discord.app.AppScreenRouter
 import com.discord.models.domain.ModelUserSettings
 import com.discord.models.domain.auth.ModelLoginResult
 import com.discord.stores.updates.ObservationDeck
 import com.discord.utilities.cache.SharedPreferencesProvider
+import com.discord.utilities.lifecycle.ActivityProvider
+import com.discord.utilities.lifecycle.ApplicationProvider
+import com.discord.utilities.theme.ClientTheme
 import com.discord.utilities.theme.ThemeRuntime
 import discord_protos.discord_users.v1.PreloadedUserSettingsOuterClass.PreloadedUserSettings
 import rx.Observable
@@ -196,6 +204,7 @@ class StoreUserSettingsSystem(
         var updated = settings
         if (acceptsSyncedTheme()) {
             UserSettings.theme.get(proto)?.let { updated = updated.copy(theme = it) }
+            if (ThemeRuntime.isSupported) syncClientTheme(UserSettings.clientTheme.get(proto))
         }
         if (getIsLocaleSyncEnabled()) UserSettings.locale.get(proto)?.let { updated = updated.copy(_locale = it) }
         if (updated != settings) {
@@ -203,6 +212,28 @@ class StoreUserSettingsSystem(
             sessionDurablePreferences.edit { putString(KEY_THEME, updated.theme) }
             preferences.edit { putString(KEY_LOCALE, updated._locale) }
             markChanged()
+        }
+    }
+
+    /**
+     * Follows the Nitro theme another client picked, or dropped. A theme picked here without Nitro
+     * never reached the account, so the account having none leaves it alone.
+     */
+    private fun syncClientTheme(incoming: ClientTheme?) {
+        val context = ApplicationProvider.get()
+        val current = ThemeRuntime.store(context).clientTheme
+        val next = when {
+            incoming != null -> incoming.takeUnless { it.sameAs(current) } ?: return
+            current?.synced == true -> null
+            else -> return
+        }
+        Handler(Looper.getMainLooper()).post {
+            try {
+                ThemeRuntime.setClientTheme(context, next)
+            } catch (e: Exception) {
+                AppLog.w("StoreUserSettingsSystem", "Could not apply the synced Nitro theme", e)
+            }
+            (ActivityProvider.getActivity() as? AppActivity)?.let(AppScreenRouter::recreate)
         }
     }
 

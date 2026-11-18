@@ -33,6 +33,7 @@ import java.security.MessageDigest
  *   over each base theme.
  *
  * Several themes can be enabled at once. They layer like Aliucord's: later ones win key by key.
+ * A Nitro client theme ([ClientTheme]) is generated into the lowest layer, under them all.
  *
  * Views that already exist keep their colors, so a change recreates the activity ([generation]).
  *
@@ -94,12 +95,13 @@ object ThemeRuntime {
         try {
             // Without an enabled theme nothing else runs: no loader, no guard file.
             val ids = store.activeIds
-            if (ids.isEmpty()) return
+            if (ids.isEmpty() && store.clientTheme == null) return
             val unconfirmed = store.unconfirmedLaunches
             if (unconfirmed >= MAX_UNCONFIRMED_LAUNCHES) {
                 // The last themed launches never got as far as confirmHealthy.
                 store.unconfirmedLaunches = 0
                 store.activeIds = emptyList()
+                store.clientTheme = null
                 store.markDisabledByGuard()
                 AppLog.w("ThemeRuntime", "Previous launches with a custom theme did not survive; themes disabled")
                 return
@@ -108,6 +110,7 @@ object ThemeRuntime {
         } catch (e: Throwable) {
             AppLog.e("ThemeRuntime", "Could not apply the custom theme at startup", e)
             store.activeIds = emptyList()
+            store.clientTheme = null
             deactivate()
         }
     }
@@ -123,7 +126,7 @@ object ThemeRuntime {
     fun enable(context: Context, ids: List<String>) {
         if (!isSupported) throw IllegalStateException("Custom themes need Android 11")
         val store = store(context)
-        if (ids.isEmpty()) {
+        if (ids.isEmpty() && store.clientTheme == null) {
             store.activeIds = emptyList()
             deactivate()
         } else {
@@ -142,6 +145,25 @@ object ThemeRuntime {
     }
 
     /**
+     * Puts [theme] under the enabled themes, or takes the Nitro theme away with `null`. Throws like
+     * [enable], with the Nitro theme off again; the caller recreates the visible activity.
+     */
+    @MainThread
+    fun setClientTheme(context: Context, theme: ClientTheme?) {
+        if (!isSupported) throw IllegalStateException("Custom themes need Android 11")
+        val store = store(context)
+        val previous = store.clientTheme
+        store.clientTheme = theme
+        try {
+            enable(context, store.activeIds)
+        } catch (e: Exception) {
+            store.clientTheme = null
+            if (previous != null) runCatching { enable(context, store.activeIds) }
+            throw e
+        }
+    }
+
+    /**
      * Builds the tables for [ids] ahead of [enable], off the main thread, so turning themes on only
      * maps finished files. Skipped when this process cannot see the APK's resources without the
      * active theme in them; [enable] then builds.
@@ -152,7 +174,7 @@ object ThemeRuntime {
         val clean = context.createPackageContext(context.packageName, 0)
         if (clean.resources.getColor(R.color.theme_runtime_sentinel, null) == ThemeTableBuilder.SENTINEL) return
         val store = store(context)
-        val texts = ids.map { id -> store.readText(id) ?: return }
+        val texts = clientTexts(context, store) + ids.map { id -> store.readText(id) ?: return }
         val dir = File(cacheDir(context), cacheKey(context, texts))
         if (!File(dir, META).isFile) build(clean, texts, dir)
     }
@@ -173,6 +195,12 @@ object ThemeRuntime {
     /** Layers the enabled themes' attributes over [theme]. A no-op when no theme is enabled. */
     fun applyOverlay(theme: Resources.Theme) {
         if (overlayActive) theme.applyStyle(R.style.ThemeOverlay_Microcord_Runtime, true)
+    }
+
+    /** [applyOverlay] for a dialog; under a see-through theme its surfaces are made solid as well. */
+    fun applyDialogOverlay(theme: Resources.Theme) {
+        applyOverlay(theme)
+        if (ThemeWallpaper.mode == ThemeDefinition.Transparency.FULL) theme.applyStyle(R.style.ThemeOverlay_Microcord_OpaqueSurfaces, true)
     }
 
     /** Called when an activity resumes; ends the probation of a themed launch once it has stayed up. */
@@ -212,7 +240,7 @@ object ThemeRuntime {
         // Added on first use: activities created afterwards inherit it, and the ones already open
         // recreate on the generation change.
         val backend = backend ?: Backend(checkNotNull(app) { "ThemeRuntime is not installed" }).also { backend = it }
-        val texts = ids.map { id -> requireNotNull(store.readText(id)) { "Theme $id could not be read" } }
+        val texts = clientTexts(context, store) + ids.map { id -> requireNotNull(store.readText(id)) { "Theme $id could not be read" } }
         val key = cacheKey(context, texts)
         val dir = File(cacheDir(context), key)
         val meta = File(dir, META).takeIf { it.isFile }?.readText()?.let(Meta::decode) ?: run {
@@ -244,6 +272,25 @@ object ThemeRuntime {
     }
 
     private fun cacheDir(context: Context) = File(context.codeCacheDir, DIR)
+
+    /**
+     * The Nitro theme as the lowest layer's text, its gradient drawn into the asset folder once.
+     * Drawn at half the screen's size: the wallpaper scales it up, and a gradient has no detail.
+     */
+    private fun clientTexts(context: Context, store: ThemeStore): List<String> {
+        val theme = store.clientTheme ?: return emptyList()
+        val name = CLIENT_GRADIENT + CLIENT_GRADIENT_VERSION + "-" + Integer.toHexString(theme.withSynced(false).toJson().hashCode()) + ".png"
+        val file = File(ThemeAssets.dir(context), name)
+        if (!file.isFile) {
+            val metrics = context.resources.displayMetrics
+            val bitmap = theme.render(metrics.widthPixels / 2, metrics.heightPixels / 2, scrim = true)
+            file.parentFile?.mkdirs()
+            ThemeAssets.dir(context).listFiles()?.filter { it.name.startsWith(CLIENT_GRADIENT) }?.forEach { it.delete() }
+            file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+        }
+        return listOf(ThemeJson.toJson(theme.definition("file://" + file.absolutePath)))
+    }
 
     /**
      * Resource ids change with every APK, so the installed APK is part of the key. So are:
@@ -354,5 +401,8 @@ object ThemeRuntime {
     private const val META = "meta"
     private const val FILES = "files"
     private const val WALLPAPER = "wallpaper.jpg"
+    private const val CLIENT_GRADIENT = "client-gradient-"
+    /** Bumped when [ClientTheme.render] draws differently, so a stored gradient is drawn again. */
+    private const val CLIENT_GRADIENT_VERSION = 3
     private const val LINE = "\n"
 }

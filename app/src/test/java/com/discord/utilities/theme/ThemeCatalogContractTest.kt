@@ -55,6 +55,11 @@ class ThemeCatalogContractTest {
     }
 
     @Test
+    fun clientThemeAttributesExist() {
+        ClientTheme.ATTRIBUTES.forEach { assertTrue("attr $it", it in darkThemeAttrs) }
+    }
+
+    @Test
     fun selectorLeavesAreTheEnabledOrCheckedColor() {
         AliucordMapping.SELECTOR_LEAVES.forEach { (selector, leaf) ->
             val items = elements("color/$selector.xml", "item")

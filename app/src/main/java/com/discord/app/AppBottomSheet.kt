@@ -19,6 +19,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
 import com.discord.utilities.theme.ThemeRuntime
+import com.discord.utilities.theme.ThemeWallpaper
 import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.google.android.material.R as MaterialR
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -297,13 +298,15 @@ abstract class AppBottomSheet(
     private fun applyBottomEdgeBackground() {
         val content = view ?: return
         val sheet = content.rootView.findViewById<View>(MaterialR.id.design_bottom_sheet) ?: return
-        val background = content.bottomEdgeBackground() ?: return
+        val background = content.bottomEdgeBackground()
         // The content's own background fills its padding, so painting it there covers the strip.
-        // The container gets it too, for the gap the sheet leaves while it settles.
-        if (content.background == null) {
+        // The container gets it too, for the gap the sheet leaves while it settles, unless a
+        // see-through theme's image has to go there.
+        if (background != null && content.background == null) {
             content.background = background.constantState?.newDrawable()?.mutate() ?: background
         }
-        sheet.background = background.constantState?.newDrawable()?.mutate() ?: background
+        if (ThemeWallpaper.decorateSheet(sheet)) return
+        if (background != null) sheet.background = background.constantState?.newDrawable()?.mutate() ?: background
     }
 
     // endregion

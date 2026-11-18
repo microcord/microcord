@@ -81,6 +81,16 @@ object ThemeWallpaper {
         activity.window.setBackgroundDrawable(null)
     }
 
+    /**
+     * Puts the image behind a bottom sheet in [Transparency.FULL]. Only the dimmed app shows through
+     * a sheet, so its see-through surfaces need the image of their own. Returns whether it did.
+     */
+    fun decorateSheet(sheet: View): Boolean {
+        if (mode != Transparency.FULL) return false
+        sheet.background = drawable(sheet.resources) ?: return false
+        return true
+    }
+
     /** Puts the image behind the chat, or behind a settings page, as the mode asks. */
     fun decorate(fragment: Fragment, view: View) {
         when (mode) {

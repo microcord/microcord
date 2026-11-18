@@ -237,4 +237,33 @@
     <string name="voice_channel_status_hint">What\'s happening?</string>
     <!-- RN's opt-in Recents section header. -->
     <string name="manticord_channel_list_suggested">Suggested</string>
+    <!-- Discord's Nitro client themes (RN ClientThemesConstants). -->
+    <string name="manticord_nitro_themes">Nitro themes</string>
+    <string name="manticord_nitro_themes_help">Synced to your account with Nitro. Without Nitro, the theme stays on this device.</string>
+    <string name="manticord_nitro_theme_custom">Custom</string>
+    <string name="manticord_local_themes">Local themes</string>
+    <string name="manticord_local_themes_manage">Manage local themes</string>
+    <string name="client_theme_mint_apple">Mint Apple</string>
+    <string name="client_theme_citrus_sherbert">Citrus Sherbert</string>
+    <string name="client_theme_retro_raincloud">Retro Raincloud</string>
+    <string name="client_theme_hanami">Hanami</string>
+    <string name="client_theme_sunrise">Sunrise</string>
+    <string name="client_theme_cotton_candy">Cotton Candy</string>
+    <string name="client_theme_lofi_vibes">Lofi Vibes</string>
+    <string name="client_theme_desert_khaki">Desert Khaki</string>
+    <string name="client_theme_sunset">Sunset</string>
+    <string name="client_theme_chroma_glow">Chroma Glow</string>
+    <string name="client_theme_forest">Forest</string>
+    <string name="client_theme_crimson_moon">Crimson Moon</string>
+    <string name="client_theme_midnight_blurple">Midnight Blurple</string>
+    <string name="client_theme_mars">Mars</string>
+    <string name="client_theme_dusk">Dusk</string>
+    <string name="client_theme_under_the_sea">Under the Sea</string>
+    <string name="client_theme_easter_egg">Easter Egg</string>
+    <string name="client_theme_retro_storm">Retro Storm</string>
+    <string name="client_theme_neon_nights">Neon Nights</string>
+    <string name="client_theme_sepia">Sepia</string>
+    <string name="client_theme_strawberry_lemonade">Strawberry Lemonade</string>
+    <string name="client_theme_aurora">Aurora</string>
+    <string name="client_theme_blurple_twilight">Blurple Twilight</string>
 </resources>

@@ -50,6 +50,16 @@ Places that apply the overlay today:
 
 Without a mode, a theme whose main background is see-through gets `full`, otherwise `chat`. The image only shows where the theme's own colors are see-through. Animated images keep their first frame.
 
+## Nitro themes
+
+Discord's client themes live in `ClientTheme`: the 23 gradient presets and custom themes made on another client (`appearance.client_theme_settings` in the settings proto). Appearance lists them under the built-in themes, with the local themes in their own section below.
+
+- **Layering.** The chosen one is stored in `filesDir/themes/client` and generated into the lowest layer, under the local themes. Its gradient is drawn into the asset folder and becomes the background image in `full` mode.
+- **Colors.** RN's numbers: the canvas surfaces become 70% black (80% white on light) so the gradient shows, while popups, the tab bar and the chat input take solid colors sampled from the gradient. `ThemeCatalogContractTest` pins the attribute names.
+- **Sheets.** In `full` mode a bottom sheet draws the image behind itself (`ThemeWallpaper.decorateSheet`), since only the dimmed app is behind it.
+- **Sync.** Anyone can pick one. With Nitro (tier 2) and theme sync on, it is written to the account with the built-in theme it sits on, as RN's `saveClientTheme` does. Without Nitro it stays on this device, and an account without one leaves it alone. A theme picked on another client is applied when the settings arrive. Picking a built-in theme clears both.
+- **Not yet.** Making a custom theme here (the color creator), and guild themes.
+
 ## File format
 
 Themes are stored as `filesDir/themes/<id>.json`; the enabled ids are in `filesDir/themes/active`, one per line. Downloaded and picked files are in `filesDir/themes/assets`. They live in files rather than preferences so they survive logout and account switches.

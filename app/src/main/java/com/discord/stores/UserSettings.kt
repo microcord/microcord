@@ -8,6 +8,7 @@ import com.discord.utilities.media.Redaction
 import com.discord.utilities.media.SensitiveContentSetting
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
+import com.discord.utilities.theme.ClientTheme
 import com.google.protobuf.BoolValue
 import com.google.protobuf.Int64Value
 import com.google.protobuf.StringValue
@@ -235,6 +236,57 @@ object UserSettings {
     /** Null until picked, leaving the device on the system theme. `materialYou` stays device-local. */
     val theme = setting({ THEMES[it.appearance.theme] }) { name ->
         appearanceBuilder.theme = THEMES.entries.firstOrNull { it.value == name }?.key ?: Theme.THEME_DARK
+    }
+
+    /**
+     * The Nitro client theme the account holds, or `null`. Writing one also writes the built-in
+     * theme it sits on, and writing `null` clears both kinds, as RN's `saveClientTheme` does.
+     */
+    val clientTheme = UserSettingsProtoSetting(
+        store, writer, ::clientThemeOf,
+        areEqual = { a: ClientTheme?, b: ClientTheme? -> if (a == null) b == null else a.sameAs(b) },
+    ) { theme: ClientTheme? ->
+        appearanceBuilder.clearClientThemeSettings()
+        when (theme) {
+            null -> Unit
+            is ClientTheme.Preset -> {
+                appearanceBuilder.clientThemeSettingsBuilder.backgroundGradientPresetId = UInt32Value.of(theme.id)
+                appearanceBuilder.theme = if (theme.isDark) Theme.THEME_DARKER else Theme.THEME_LIGHT
+            }
+            is ClientTheme.Custom -> {
+                appearanceBuilder.clientThemeSettingsBuilder.customUserThemeSettingsBuilder
+                    .addAllColors(theme.colors.map { String.format("#%06x", it and 0xFFFFFF) })
+                    .addAllGradientColorStops(theme.gradientStops)
+                    .setGradientAngle(theme.angle.toInt())
+                    .setBaseMix(theme.baseMix)
+                appearanceBuilder.theme = if (theme.isDark) Theme.THEME_DARK else Theme.THEME_LIGHT
+            }
+        }
+    }
+
+    /** RN's `PROTO_THEME_MAP_MOBILE` picks a custom theme's base: anything dark but Midnight is Darker. */
+    private fun clientThemeOf(proto: PreloadedUserSettings): ClientTheme? {
+        if (!proto.appearance.hasClientThemeSettings()) return null
+        val settings = proto.appearance.clientThemeSettings
+        if (settings.hasBackgroundGradientPresetId()) {
+            return ClientTheme.PRESETS[settings.backgroundGradientPresetId.value]?.copy(synced = true)
+        }
+        if (!settings.hasCustomUserThemeSettings()) return null
+        val custom = settings.customUserThemeSettings
+        return ClientTheme.custom(
+            base = when (proto.appearance.theme) {
+                Theme.THEME_LIGHT -> ModelUserSettings.THEME_LIGHT
+                Theme.THEME_MIDNIGHT -> ModelUserSettings.THEME_MIDNIGHT
+                else -> ModelUserSettings.THEME_DARKER
+            },
+            colors = custom.colorsList.mapNotNull { hex ->
+                hex.removePrefix("#").takeIf { it.length == 6 }?.toLongOrNull(16)?.let { (it or 0xFF000000).toInt() }
+            },
+            stops = custom.gradientColorStopsList,
+            angle = custom.gradientAngle.toFloat(),
+            baseMix = custom.baseMix,
+            synced = true,
+        )
     }
 
     val locale = setting({ it.localization.locale.value.takeIf(String::isNotEmpty) }) { value ->

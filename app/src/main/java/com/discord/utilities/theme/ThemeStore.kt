@@ -60,6 +60,13 @@ class ThemeStore(val dir: File) {
             if (value.isEmpty()) File(dir, ACTIVE).delete() else write(File(dir, ACTIVE), value.distinct().joinToString(LINE))
         }
 
+    /** The Nitro client theme under the enabled ones, or `null`; kept apart from the local themes. */
+    var clientTheme: ClientTheme?
+        get() = File(dir, CLIENT).takeIf { it.isFile }?.readText()?.let(ClientTheme::fromJson)
+        set(value) {
+            if (value == null) File(dir, CLIENT).delete() else write(File(dir, CLIENT), value.toJson())
+        }
+
     /**
      * The boot guard: themed launches in a row that never proved healthy.
      *
@@ -93,6 +100,7 @@ class ThemeStore(val dir: File) {
     companion object {
         private const val JSON = ".json"
         private const val ACTIVE = "active"
+        private const val CLIENT = "client"
         private const val LINE = "\n"
         private const val BOOTING = ".booting"
         private const val GUARD_NOTICE = ".guard_notice"

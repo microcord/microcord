@@ -7,4 +7,13 @@
     -->
     <style name="ThemeOverlay.Microcord.Runtime" parent="" />
     <color name="theme_runtime_sentinel">#00000000</color>
+    <!--
+        Dialogs under a see-through theme (ThemeRuntime.applyDialogOverlay): their window has nothing
+        behind it but the dimmed app, so the clear canvas colors take the solid popup color.
+    -->
+    <style name="ThemeOverlay.Microcord.OpaqueSurfaces" parent="">
+        <item name="colorBackgroundPrimary">?attr/colorBackgroundFloating</item>
+        <item name="colorBackgroundSecondary">?attr/colorBackgroundFloating</item>
+        <item name="colorBackgroundTertiary">?attr/colorBackgroundNestedFloating</item>
+    </style>
 </resources>
