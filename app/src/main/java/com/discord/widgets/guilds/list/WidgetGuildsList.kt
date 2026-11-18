@@ -35,7 +35,7 @@ import com.discord.widgets.guilds.create.CreateGuildTrigger
 import com.discord.widgets.guilds.contextmenu.WidgetFolderContextMenu
 import com.discord.widgets.guilds.contextmenu.WidgetGuildContextMenu
 import com.discord.widgets.nux.WidgetGuildTemplates
-import com.discord.widgets.tabs.TabsHostBottomNavigationView
+import com.discord.widgets.tabs.BottomNavViewObserver
 
 /**
  * The guild sidebar.
@@ -68,13 +68,22 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
             mentionResId = R.string._new,
             unreadsEnabled = false,
         )
-
-        configureBottomNavSpace()
     }
 
     override fun onViewBoundOrOnResume() {
         super.onViewBoundOrOnResume()
-        configureBottomNavSpace()
+        // Pads the end of the list by the tab bar's height so the last guild stays reachable. Kept
+        // live: a height sampled once went stale whenever the bar changed size afterwards, leaving
+        // the list scrollable to mid-screen with the "new" pill floating there.
+        BottomNavViewObserver.INSTANCE.observeHeight()
+            .bindToComponentLifecycle(this)
+            .appSubscribe(WidgetGuildsList::class.java) { height ->
+                adapter.handleBottomNavHeight(height)
+                // The stub replaces itself with the pill on first use, as in WidgetChannelsList.
+                val unreads = view?.findViewById(R.id.guild_list_unreads_stub)
+                    ?: view?.findViewById<View>(R.id.channels_list_unreads_background)?.parent as? View
+                unreads?.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = height }
+            }
         viewModel.observeViewState()
             .bindToComponentLifecycle(this)
             .appSubscribe(WidgetGuildsList::class.java) { configureUI(it) }
@@ -174,25 +183,6 @@ class WidgetGuildsList : AppFragment(R.layout.widget_guilds_list), WidgetGuildLi
             "count" to unavailableGuildCount,
         )
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-    }
-
-    /**
-     * Pads the end of the list by the tab bar's height so the last guild stays reachable.
-     *
-     * The reference observes the bar through `BottomNavViewObserver` and reacts to every height
-     * change. `TabsHostBottomNavigationView` here only offers `addHeightChangedListener` with no
-     * matching remove, so registering one from a fragment would leak it; the height is sampled on
-     * each resume instead. **Switch to the observer once it exists in `widgets/tabs`.**
-     */
-    private fun configureBottomNavSpace() {
-        val navView: TabsHostBottomNavigationView =
-            activity?.findViewById(R.id.widget_tabs_host_bottom_navigation_view) ?: return
-        navView.post {
-            if (!::adapter.isInitialized) return@post
-            val height = navView.height
-            adapter.handleBottomNavHeight(height)
-            unreadsStub?.updateLayoutParams<ViewGroup.MarginLayoutParams> { bottomMargin = height }
-        }
     }
 
     override fun onDestroyView() {
