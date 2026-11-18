@@ -38,6 +38,7 @@ import com.discord.widgets.botuikit.ComponentProvider
 import com.discord.widgets.chat.list.FragmentLifecycleListener
 import com.discord.widgets.chat.list.entries.ChatListEntry
 import com.discord.widgets.chat.list.entries.ForwardedMessageEntry
+import com.discord.widgets.chat.list.entries.LoadingEntry
 import com.discord.widgets.chat.list.entries.MessageEntry
 import com.discord.widgets.chat.list.entries.NewMessagesEntry
 import com.discord.widgets.chat.list.model.WidgetChatListModel
@@ -86,20 +87,27 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             } else {
                 emptySet()
             }
+            val newestGrew = field.channelId == value.channelId &&
+                (value.list.newestMessage()?.id ?: 0L) > (field.list.newestMessage()?.id ?: 0L)
+            // A spinner at the bottom means the list is paging back up to the present, not live.
+            val pagingNewer = field.list.lastOrNull() is LoadingEntry
             if (field.channelId == value.channelId &&
                 StoreStream.getMessagesLoader().hasTopPageUpdate(value.channelId)
             ) {
-                captureVisibleMessageAnchor(field.list, value.list)
+                captureVisibleMessageAnchor(field.list, value.list, evenIfUnmoved = false)
+            } else if (newestGrew && pagingNewer) {
+                // The list holds its place by the bottom row, here the spinner, which the new page
+                // goes in above — it would follow the spinner down, land at the bottom again and
+                // fetch the next page, over and over until the present. Hold a message instead.
+                captureVisibleMessageAnchor(field.list, value.list, evenIfUnmoved = true)
             }
-            val newestGrew = field.channelId == value.channelId &&
-                (value.list.newestMessage()?.id ?: 0L) > (field.list.newestMessage()?.id ?: 0L)
             val atBottom = StoreChat.InteractionState.getScrollState(layoutManager)
                 .and(StoreChat.InteractionState.SCROLLED_BOTTOM) != 0
             // Several updates often land before the posted HandlerOfUpdates runs (a send's pending
             // row then its ack, a new message then the typing/unread churn behind it). The later
             // ones read a layout not yet redone for the earlier growth, so they see "not at bottom";
             // overwriting would cancel the stick, so the decision only latches on until it runs.
-            if (stickToBottom && newestGrew && atBottom) pendingStickToBottom = true
+            if (stickToBottom && newestGrew && atBottom && !pagingNewer) pendingStickToBottom = true
             field = value
             setData(value.list)
             if (viewerChanged && itemCount > 0) {
@@ -154,7 +162,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         resizeSettleHandler.postDelayed(resizeSettle, RESIZE_SETTLE_DELAY_MS)
     }
 
-    private data class ScrollAnchor(val messageId: Long, val offset: Int)
+    private data class ScrollAnchor(val key: String, val offset: Int)
 
     private fun List<ChatListEntry>.newestMessage(): Message? {
         for (i in lastIndex downTo 0) {
@@ -279,19 +287,25 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         }
     }
 
-    private fun captureVisibleMessageAnchor(oldList: List<ChatListEntry>, newList: List<ChatListEntry>) {
+    private fun captureVisibleMessageAnchor(
+        oldList: List<ChatListEntry>,
+        newList: List<ChatListEntry>,
+        evenIfUnmoved: Boolean,
+    ) {
         val layout = layoutManager ?: return
         val first = layout.findFirstVisibleItemPosition()
         val last = layout.findLastVisibleItemPosition()
         if (first < 0) return
+        // Anchored on the row rather than its message: one message spans several rows (text,
+        // attachments, reactions), and restoring to its first row jumped by the rows above.
         for (position in first..last) {
-            val messageId = oldList.getOrNull(position)?.highlightMessage?.id ?: continue
-            if (messageId <= 0L) continue
-            val newPosition = newList.indexOfFirst { it.highlightMessage?.id == messageId }
-            if (newPosition < 0 || newPosition == position) continue
+            val entry = oldList.getOrNull(position) ?: continue
+            if ((entry.highlightMessage?.id ?: 0L) <= 0L) continue
+            val newPosition = newList.indexOfFirst { it.key == entry.key }
+            if (newPosition < 0 || (newPosition == position && !evenIfUnmoved)) continue
             val view = layout.findViewByPosition(position) ?: continue
             pendingScrollAnchor = ScrollAnchor(
-                messageId,
+                entry.key,
                 layout.getDecoratedTop(view) - recycler.paddingTop,
             )
             if (pausedItemAnimator == null) {
@@ -305,7 +319,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
     private fun restorePendingScrollAnchor() {
         val anchor = pendingScrollAnchor ?: return
         pendingScrollAnchor = null
-        val position = data.list.indexOfFirst { it.highlightMessage?.id == anchor.messageId }
+        val position = data.list.indexOfFirst { it.key == anchor.key }
         if (position >= 0) {
             layoutManager?.scrollToPositionWithOffset(position, anchor.offset)
         }
