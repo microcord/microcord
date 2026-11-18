@@ -279,9 +279,7 @@ object UserSettings {
                 Theme.THEME_MIDNIGHT -> ModelUserSettings.THEME_MIDNIGHT
                 else -> ModelUserSettings.THEME_DARKER
             },
-            colors = custom.colorsList.mapNotNull { hex ->
-                hex.removePrefix("#").takeIf { it.length == 6 }?.toLongOrNull(16)?.let { (it or 0xFF000000).toInt() }
-            },
+            colors = custom.colorsList.mapNotNull(ClientTheme::parseHex),
             stops = custom.gradientColorStopsList,
             angle = custom.gradientAngle.toFloat(),
             baseMix = custom.baseMix,

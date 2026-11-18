@@ -221,7 +221,10 @@ class StoreUserSettingsSystem(
      */
     private fun syncClientTheme(incoming: ClientTheme?) {
         val context = ApplicationProvider.get()
-        val current = ThemeRuntime.store(context).clientTheme
+        val store = ThemeRuntime.store(context)
+        // A preview is the user's to end; the account's theme comes back when it does.
+        if (store.previewRestore != null) return
+        val current = store.clientTheme
         val next = when {
             incoming != null -> incoming.takeUnless { it.sameAs(current) } ?: return
             current?.synced == true -> null

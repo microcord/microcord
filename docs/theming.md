@@ -58,7 +58,8 @@ Discord's client themes live in `ClientTheme`: the 23 gradient presets and custo
 - **Colors.** RN's numbers: the canvas surfaces become 70% black (80% white on light) so the gradient shows, while popups, the tab bar and the chat input take solid colors sampled from the gradient. `ThemeCatalogContractTest` pins the attribute names.
 - **Sheets.** In `full` mode a bottom sheet draws the image behind itself (`ThemeWallpaper.decorateSheet`), since only the dimmed app is behind it.
 - **Sync.** Anyone can pick one. With Nitro (tier 2) and theme sync on, it is written to the account with the built-in theme it sits on, as RN's `saveClientTheme` does. Without Nitro it stays on this device, and an account without one leaves it alone. A theme picked on another client is applied when the settings arrive. Picking a built-in theme clears both.
-- **Not yet.** Making a custom theme here (the color creator), and guild themes.
+- **Custom themes.** Appearance's Create opens `WidgetSettingsCustomClientTheme`: up to five colors, the angle, the color strength (`base_mix`) and the base, applied like a preset. The account's saved themes (`GET users/@me/custom-themes`) join the row, and a message's `shared_client_theme` gets a card with Preview and Apply. A preview applies the theme on this device only, keeps the theme to go back to in `filesDir/themes/preview`, pauses account sync, and ends with Revert, Apply, another pick or the next start.
+- **Not yet.** Guild themes, and saving a made theme to the account's saved list.
 
 ## File format
 

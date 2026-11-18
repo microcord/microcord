@@ -448,6 +448,7 @@ data class WidgetChatListModelMessages(
             rows += ChatListEntry.createInviteEntries(message, inviteResolver)
             rows += ChatListEntry.createGuildTemplateEntries(message)
             rows += ChatListEntry.createApplicationLinkEntries(message)
+            rows += ChatListEntry.createSharedClientThemeEntries(message)
             rows += ChatListEntry.createGiftEntries(message)
             if (isThreadStarterMessage) {
                 rows += ThreadStarterDividerEntry(channel.id, message.id)

@@ -287,6 +287,30 @@ sealed class ClientTheme {
         fun custom(base: String, colors: List<Int>, stops: List<Float>, angle: Float, baseMix: Int, synced: Boolean): Custom? =
             if (colors.isEmpty()) null else Custom(base, colors, stops, angle, baseMix.coerceIn(0, 100), synced)
 
+        /**
+         * A saved (`/users/@me/custom-themes`) or shared (`message.shared_client_theme`) custom theme:
+         * hex colors with or without `#`, and its base as the settings proto's theme number.
+         */
+        fun fromApi(colors: List<String>?, angle: Int?, baseMix: Int?, baseTheme: Int?): Custom? {
+            if (angle == null || baseMix == null) return null
+            val base = when (baseTheme) {
+                PROTO_LIGHT -> LIGHT
+                PROTO_MIDNIGHT -> ModelUserSettings.THEME_MIDNIGHT
+                else -> DARKER
+            }
+            return custom(base, colors.orEmpty().mapNotNull(::parseHex), emptyList(), angle.toFloat(), baseMix, synced = false)
+        }
+
+        fun parseHex(hex: String): Int? =
+            hex.removePrefix("#").takeIf { it.length == 6 }?.toLongOrNull(16)?.let { (it or 0xFF000000).toInt() }
+
+        /** The settings proto's `Theme` numbers. */
+        private const val PROTO_LIGHT = 2
+        private const val PROTO_MIDNIGHT = 4
+
+        /** The creator's limits; RN puts none on the count, desktop offers up to five. */
+        const val MAX_COLORS = 5
+
         private fun evenStops(count: Int) = if (count < 2) listOf(0f, 100f) else List(count) { it * 100f / (count - 1) }
 
         /** chroma's scale: linear RGB between the stops on either side, flat past the ends. */

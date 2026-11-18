@@ -23,6 +23,7 @@ import com.discord.widgets.botuikit.ComponentChatListState.ComponentStoreState
 import com.discord.widgets.botuikit.ComponentStateMapper
 import com.discord.api.message.attachment.MessageAttachmentType
 import com.discord.api.message.attachment.MessageAttachment
+import com.discord.utilities.theme.ClientTheme
 
 /**
  * One row of the chat list.
@@ -107,6 +108,7 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
         const val SEARCH_SPOILER_RESULT = 49
         const val MEDIA_MOSAIC = 50
         const val APPLICATION_LINK = 51
+        const val SHARED_CLIENT_THEME = 52
 
         /** `MessageTypes.AUTO_MODERATION_ACTION`; its single embed gets a dedicated row. */
         private const val AUTO_MOD_SYSTEM_MESSAGE_TYPE = 24
@@ -281,6 +283,13 @@ abstract class ChatListEntry : MGRecyclerDataPayload {
                 .take(MAX_APPLICATION_LINKS)
                 .map { ApplicationLinkEntry(it, message) }
                 .toList()
+        }
+
+        /** The card for a Nitro custom theme shared in the message, which RN lets anyone apply. */
+        fun createSharedClientThemeEntries(message: Message): Collection<ChatListEntry> {
+            val shared = message.sharedClientTheme ?: return emptyList()
+            val theme = ClientTheme.fromApi(shared.colors, shared.gradientAngle, shared.baseMix, shared.baseTheme) ?: return emptyList()
+            return listOf(SharedClientThemeEntry(theme, message))
         }
 
         internal fun applicationLinkId(query: String): Long? {

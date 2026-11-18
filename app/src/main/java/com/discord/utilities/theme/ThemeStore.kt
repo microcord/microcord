@@ -68,6 +68,18 @@ class ThemeStore(val dir: File) {
         }
 
     /**
+     * While a shared theme is previewed: the Nitro theme to go back to, `null` inside meaning none.
+     * Not previewing when the outer value is `null`.
+     */
+    var previewRestore: Restore?
+        get() = File(dir, PREVIEW).takeIf { it.isFile }?.readText()?.let { Restore(ClientTheme.fromJson(it)) }
+        set(value) {
+            if (value == null) File(dir, PREVIEW).delete() else write(File(dir, PREVIEW), value.theme?.toJson().orEmpty())
+        }
+
+    class Restore(val theme: ClientTheme?)
+
+    /**
      * The boot guard: themed launches in a row that never proved healthy.
      *
      * One is not enough to blame the theme; the app may simply have been swiped away early.
@@ -101,6 +113,7 @@ class ThemeStore(val dir: File) {
         private const val JSON = ".json"
         private const val ACTIVE = "active"
         private const val CLIENT = "client"
+        private const val PREVIEW = "preview"
         private const val LINE = "\n"
         private const val BOOTING = ".booting"
         private const val GUARD_NOTICE = ".guard_notice"

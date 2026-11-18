@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.view.View
+import android.widget.ImageView
 import android.widget.SeekBar
 import android.widget.Toast
 import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory
@@ -25,16 +26,18 @@ import com.discord.stores.UserSettings
 import com.discord.utilities.feature.RoleColorMode
 import com.discord.utilities.feature.RoleColors
 import com.discord.utilities.icon.IconUtils
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.ui
 import com.discord.utilities.theme.ClientTheme
 import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.time.TimeUtils
-import com.discord.utilities.user.UserUtils.isPremiumTier2
 import com.discord.views.RadioManager
 import com.discord.views.ThemedColor
 import com.discord.widgets.settings.themes.ThemeActions
 import com.discord.widgets.settings.themes.ThemePreviewDrawable
+import com.discord.widgets.settings.themes.WidgetSettingsCustomClientTheme
 import com.discord.widgets.settings.themes.WidgetSettingsThemes
 import java.util.concurrent.TimeUnit
 import rx.Observable
@@ -61,6 +64,9 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
     private var _binding: WidgetSettingsAppearanceBinding? = null
     private val binding get() = requireNotNull(_binding)
     private lateinit var themeRadioManager: RadioManager
+
+    /** The custom themes saved to the account, as `/users/@me/custom-themes` last returned them. */
+    private var savedThemes: List<ClientTheme.Custom> = emptyList()
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
@@ -116,6 +122,18 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         viewModel.observeEvents().ui(this).subscribe { handleEvent(it) }
         configureNitroThemes()
         configureLocalThemes()
+        if (ThemeRuntime.isSupported) {
+            // Best effort: without the list the row still has the presets.
+            RestAPI.api.getSavedCustomThemes()
+                .restSubscribeOn()
+                .ui(this)
+                .subscribe({ response ->
+                    savedThemes = response.customThemes.orEmpty().mapNotNull {
+                        ClientTheme.fromApi(it.colors, it.gradientAngle, it.baseMix, it.baseTheme)
+                    }
+                    configureNitroThemes()
+                }, { })
+        }
     }
 
     /** RN's mobile picker order; a synced custom theme leads, and Easter Egg shows only while in use. */
@@ -125,11 +143,25 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         val current = ThemeRuntime.store(requireContext()).clientTheme
         val themes = buildList {
             (current as? ClientTheme.Custom)?.let(::add)
+            savedThemes.filterNot { saved -> any(saved::sameAs) }.forEach(::add)
             ClientTheme.PICKER_ORDER.mapTo(this) { ClientTheme.PRESETS.getValue(it) }
             if ((current as? ClientTheme.Preset)?.id == ClientTheme.EASTER_EGG) add(ClientTheme.PRESETS.getValue(ClientTheme.EASTER_EGG))
         }
         val list = binding.settingsAppearanceNitroThemesList
         list.removeAllViews()
+        WidgetSettingsAppearanceNitroThemeItemBinding.inflate(layoutInflater, list, true).apply {
+            val name = getString(R.string.manticord_custom_theme_create)
+            nitroThemeItemName.text = name
+            nitroThemeItemSwatch.scaleType = ImageView.ScaleType.CENTER
+            nitroThemeItemSwatch.setImageResource(R.drawable.ic_add_24dp)
+            nitroThemeItemSwatch.setColorFilter(ThemedColor.resolve(requireContext(), R.attr.colorInteractiveNormal))
+            nitroThemeItemSwatch.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(ThemedColor.resolve(requireContext(), R.attr.colorBackgroundModifierAccent))
+            }
+            root.contentDescription = name
+            root.setOnClickListener { WidgetSettingsCustomClientTheme.launch(requireContext()) }
+        }
         val size = resources.getDimensionPixelSize(R.dimen.manticord_nitro_theme_swatch)
         themes.forEach { theme ->
             val item = WidgetSettingsAppearanceNitroThemeItemBinding.inflate(layoutInflater, list, true)
@@ -142,31 +174,19 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
             item.nitroThemeItemSwatch.background = if (selected) selectionRing() else null
             item.root.contentDescription = name
             item.root.isSelected = selected
-            item.root.setOnClickListener { if (!selected) pickClientTheme(theme) }
+            item.root.setOnClickListener {
+                when {
+                    // The custom theme in use opens in the creator, to change it.
+                    selected && theme is ClientTheme.Custom -> WidgetSettingsCustomClientTheme.launch(requireContext())
+                    !selected -> ThemeActions.applyClientTheme(appActivity, theme)
+                }
+            }
         }
     }
 
     private fun selectionRing(): Drawable = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
         setStroke(resources.getDimensionPixelSize(R.dimen.manticord_nitro_theme_ring), ThemedColor.resolve(requireContext(), R.attr.colorTextLink))
-    }
-
-    /**
-     * Applies [theme] under the local themes. With Nitro it also goes to the account, as RN saves
-     * it; without, it stays on this device.
-     */
-    private fun pickClientTheme(theme: ClientTheme) {
-        val activity = appActivity ?: return
-        val sync = StoreStream.getUsers().getMe().isPremiumTier2 && StoreStream.getUserSettingsSystem().getIsThemeSyncEnabled()
-        val picked = theme.withSynced(sync)
-        try {
-            ThemeRuntime.setClientTheme(activity, picked)
-        } catch (e: Exception) {
-            toast(getString(R.string.microcord_themes_apply_failed, e.message ?: e.javaClass.simpleName))
-            return
-        }
-        if (sync) UserSettings.clientTheme.set(picked)
-        AppScreenRouter.recreate(activity)
     }
 
     /** The installed local themes with their switches; the full manager is one row below. */
@@ -248,6 +268,7 @@ class WidgetSettingsAppearance : AppFragment(R.layout.widget_settings_appearance
         // With theme sync off the account is left alone, whatever the theme came from.
         val synced = store.clientTheme?.synced == true && StoreStream.getUserSettingsSystem().getIsThemeSyncEnabled()
         store.clientTheme = null
+        store.previewRestore = null
         if (synced) UserSettings.clientTheme.set(null)
         ThemeRuntime.enable(activity, emptyList())
         pick()

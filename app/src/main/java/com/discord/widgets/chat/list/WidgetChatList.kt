@@ -27,6 +27,7 @@ import com.discord.widgets.chat.list.entries.StageInviteEntry
 import com.discord.widgets.chat.list.entries.GameInviteEntry
 import com.discord.widgets.chat.list.entries.SpotifyListenTogetherEntry
 import com.discord.widgets.chat.list.entries.ApplicationLinkEntry
+import com.discord.widgets.chat.list.entries.SharedClientThemeEntry
 import com.discord.widgets.chat.list.entries.UploadProgressEntry
 import com.discord.widgets.chat.list.entries.EphemeralMessageEntry
 import com.discord.widgets.forums.WidgetForumPostTagsSheet
@@ -166,6 +167,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
             is GameInviteEntry -> entry.message
             is SpotifyListenTogetherEntry -> entry.message
             is ApplicationLinkEntry -> entry.message
+            is SharedClientThemeEntry -> entry.message
             is UploadProgressEntry -> entry.message
             is EphemeralMessageEntry -> entry.message
             else -> null

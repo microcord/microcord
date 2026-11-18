@@ -266,4 +266,16 @@
     <string name="client_theme_strawberry_lemonade">Strawberry Lemonade</string>
     <string name="client_theme_aurora">Aurora</string>
     <string name="client_theme_blurple_twilight">Blurple Twilight</string>
+    <string name="manticord_custom_theme_title">Custom theme</string>
+    <string name="manticord_custom_theme_create">Create</string>
+    <string name="manticord_custom_theme_colors">Colors</string>
+    <string name="manticord_custom_theme_add_color">Add a color</string>
+    <string name="manticord_custom_theme_remove_color">Remove the last color</string>
+    <string name="manticord_custom_theme_angle">Angle: %1$d°</string>
+    <string name="manticord_custom_theme_mix">Color strength: %1$d%%</string>
+    <string name="manticord_custom_theme_base">Base</string>
+    <string name="manticord_custom_theme_shared">Custom theme</string>
+    <string name="manticord_custom_theme_shared_apply">Apply theme</string>
+    <string name="manticord_custom_theme_shared_preview">Preview</string>
+    <string name="manticord_custom_theme_shared_revert">Revert</string>
 </resources>

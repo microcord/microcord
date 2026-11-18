@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Nitro custom theme creator: up to five colors, the gradient's angle, how much of the colors comes through, and its base. -->
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/UiKit.ViewGroup.Page">
+    <com.google.android.material.appbar.AppBarLayout style="@style/AppTheme.AppBarLayout.Flat">
+        <androidx.appcompat.widget.Toolbar style="@style/AppTheme.Toolbar"/>
+    </com.google.android.material.appbar.AppBarLayout>
+    <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:paddingBottom="88dp" app:layout_behavior="@string/appbar_scrolling_view_behavior">
+        <LinearLayout style="@style/UiKit.ViewGroup.LinearLayout">
+            <ImageView android:id="@+id/custom_client_theme_preview" android:layout_width="match_parent" android:layout_height="160dp" android:layout_margin="16dp" android:importantForAccessibility="no" android:scaleType="fitXY"/>
+            <TextView android:text="@string/manticord_custom_theme_colors" style="@style/UiKit.Settings.Item.Header"/>
+            <LinearLayout android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="12dp" android:paddingEnd="12dp" android:layout_width="match_parent" android:layout_height="wrap_content">
+                <LinearLayout android:id="@+id/custom_client_theme_colors" android:orientation="horizontal" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"/>
+                <ImageView android:id="@+id/custom_client_theme_remove_color" android:layout_width="48dp" android:layout_height="48dp" android:padding="12dp" android:src="@drawable/ic_delete_24dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/manticord_custom_theme_remove_color" app:tint="?attr/colorInteractiveNormal"/>
+                <ImageView android:id="@+id/custom_client_theme_add_color" android:layout_width="48dp" android:layout_height="48dp" android:padding="12dp" android:src="@drawable/ic_add_24dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="@string/manticord_custom_theme_add_color" app:tint="?attr/colorInteractiveNormal"/>
+            </LinearLayout>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:id="@+id/custom_client_theme_angle_label" style="@style/UiKit.Settings.Item.Header"/>
+            <SeekBar android:id="@+id/custom_client_theme_angle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_marginEnd="12dp" android:max="360" style="@style/UiKit.SeekBar"/>
+            <TextView android:id="@+id/custom_client_theme_mix_label" style="@style/UiKit.Settings.Item.Header"/>
+            <SeekBar android:id="@+id/custom_client_theme_mix" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_marginEnd="12dp" android:max="100" style="@style/UiKit.SeekBar"/>
+            <View style="@style/UiKit.Settings.Divider"/>
+            <TextView android:text="@string/manticord_custom_theme_base" style="@style/UiKit.Settings.Item.Header"/>
+            <com.discord.views.CheckedSetting android:id="@+id/custom_client_theme_base_dark" app:cs_text="@string/theme_dark" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/custom_client_theme_base_onyx" app:cs_text="@string/theme_onyx" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+            <com.discord.views.CheckedSetting android:id="@+id/custom_client_theme_base_light" app:cs_text="@string/theme_light" app:cs_view_type="radio" style="@style/UiKit.CheckedSetting.Themed"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.button.MaterialButton android:id="@+id/custom_client_theme_apply" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:layout_margin="16dp" android:text="@string/microcord_theme_apply" style="@style/UiKit.Material.Button"/>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

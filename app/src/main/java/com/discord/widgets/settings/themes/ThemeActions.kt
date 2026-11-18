@@ -1,11 +1,17 @@
 package com.discord.widgets.settings.themes
 
 import com.discord.R
+import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
 import com.discord.app.AppToast
+import com.discord.stores.StoreStream
+import com.discord.stores.UserSettings
+import com.discord.utilities.theme.ClientTheme
 import com.discord.utilities.theme.ThemeAssets
 import com.discord.utilities.theme.ThemeRuntime
+import com.discord.utilities.theme.ThemeStore
+import com.discord.utilities.user.UserUtils.isPremiumTier2
 import rx.Observable
 import rx.android.schedulers.AndroidSchedulers
 import rx.schedulers.Schedulers
@@ -42,6 +48,58 @@ internal object ThemeActions {
                 },
                 { apply(fragment, ids) },
             )
+    }
+
+    /**
+     * Applies a Nitro [theme] under the local themes and recreates the screen. With Nitro it also
+     * goes to the account, as RN saves it; without, it stays on this device. Returns whether it applied.
+     */
+    fun applyClientTheme(activity: AppActivity?, theme: ClientTheme): Boolean {
+        if (activity == null) return false
+        if (!ThemeRuntime.isSupported) {
+            AppToast.show(activity, R.string.microcord_themes_unsupported)
+            return false
+        }
+        val sync = StoreStream.getUsers().getMe().isPremiumTier2 && StoreStream.getUserSettingsSystem().getIsThemeSyncEnabled()
+        val picked = theme.withSynced(sync)
+        try {
+            ThemeRuntime.setClientTheme(activity, picked)
+        } catch (e: Exception) {
+            AppToast.show(activity, activity.getString(R.string.microcord_themes_apply_failed, e.message ?: e.javaClass.simpleName))
+            return false
+        }
+        ThemeRuntime.store(activity).previewRestore = null
+        if (sync) UserSettings.clientTheme.set(picked)
+        AppScreenRouter.recreate(activity)
+        return true
+    }
+
+    /**
+     * Shows [theme] on this device only, as desktop's Preview does, until [endPreview] or the next
+     * start. Previewing another theme keeps the one to go back to.
+     */
+    fun previewClientTheme(activity: AppActivity?, theme: ClientTheme) {
+        if (activity == null || !ThemeRuntime.isSupported) return
+        val store = ThemeRuntime.store(activity)
+        val restore = store.previewRestore ?: ThemeStore.Restore(store.clientTheme)
+        try {
+            ThemeRuntime.setClientTheme(activity, theme.withSynced(false))
+        } catch (e: Exception) {
+            AppToast.show(activity, activity.getString(R.string.microcord_themes_apply_failed, e.message ?: e.javaClass.simpleName))
+            return
+        }
+        store.previewRestore = restore
+        AppScreenRouter.recreate(activity)
+    }
+
+    /** Goes back to the theme from before the preview. */
+    fun endPreview(activity: AppActivity?) {
+        if (activity == null || !ThemeRuntime.isSupported) return
+        val store = ThemeRuntime.store(activity)
+        val restore = store.previewRestore ?: return
+        store.previewRestore = null
+        runCatching { ThemeRuntime.setClientTheme(activity, restore.theme) }
+        AppScreenRouter.recreate(activity)
     }
 
     private fun apply(fragment: AppFragment, ids: List<String>) {

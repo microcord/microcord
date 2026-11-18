@@ -189,6 +189,7 @@ object ChatListRows {
         rows += ChatListEntry.createInviteEntries(message, state.inviteResolver)
         rows += ChatListEntry.createGuildTemplateEntries(message)
         rows += ChatListEntry.createApplicationLinkEntries(message)
+        rows += ChatListEntry.createSharedClientThemeEntries(message)
         rows += ChatListEntry.createGiftEntries(message)
 
         if (UserSettings.renderReactions.get() && message.getReactionsMap().isNotEmpty()) {

@@ -94,6 +94,11 @@ object ThemeRuntime {
         val store = store(application)
         try {
             // Without an enabled theme nothing else runs: no loader, no guard file.
+            // A preview lasts until the app restarts, as desktop's lasts until a reload.
+            store.previewRestore?.let { restore ->
+                store.clientTheme = restore.theme
+                store.previewRestore = null
+            }
             val ids = store.activeIds
             if (ids.isEmpty() && store.clientTheme == null) return
             val unconfirmed = store.unconfirmedLaunches

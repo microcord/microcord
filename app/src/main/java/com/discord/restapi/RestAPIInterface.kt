@@ -87,6 +87,7 @@ import com.discord.api.soundboard.SoundboardSound
 import com.discord.api.thread.ThreadListing
 import com.discord.api.thread.ThreadMember
 import com.discord.api.user.PatchUserBody
+import com.discord.api.user.SavedCustomThemes
 import com.discord.api.user.PatchUserProfileBody
 import com.discord.api.user.RecentAvatars
 import com.discord.api.user.User
@@ -437,6 +438,9 @@ interface RestAPIInterface {
 
     @GET("users/@me/avatars")
     fun getRecentAvatars(): Observable<RecentAvatars>
+
+    @GET("users/@me/custom-themes")
+    fun getSavedCustomThemes(): Observable<SavedCustomThemes>
 
     @PATCH("users/@me/profile")
     fun patchUserProfile(@Body body: PatchUserProfileBody): Observable<UserProfile.ProfileMetadata>
