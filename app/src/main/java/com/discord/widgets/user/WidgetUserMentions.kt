@@ -93,12 +93,16 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         viewModel.model?.let { mentionsAdapter.data = it }
         load()
         // The tab lives for the whole session and `load` only pages backwards from the oldest
-        // mention held, so mentions received after the first fetch never appeared.
+        // mention held, so mentions received after the first fetch never appeared. Refetch on
+        // opening the tab, and on every reconnect: a fetch made while offline failed, and mentions
+        // received while away never arrive over the gateway.
         if (!isEmbedded) {
             StoreStream.getTabsNavigation().observeSelectedTab().distinctUntilChanged().ui(this)
                 .appSubscribe(WidgetUserMentions::class.java) { selected ->
                     if (selected == NavigationTab.MENTIONS) reloadFromTop()
                 }
+            StoreStream.getConnectionOpen().observeConnectionOpen().distinctUntilChanged().filter { it }.ui(this)
+                .appSubscribe(WidgetUserMentions::class.java) { reloadFromTop() }
         }
     }
 
@@ -122,9 +126,9 @@ class WidgetUserMentions : AppFragment(R.layout.widget_user_mentions) {
         super.onDestroyView()
     }
 
-    /** Starts over from the newest page. The first fetch is `load`'s job, so skip an empty list. */
+    /** Starts over from the newest page, unless the first fetch is still on its way. */
     private fun reloadFromTop() {
-        if (messages.isEmpty()) return
+        if (loading && messages.isEmpty()) return
         request?.unsubscribe()
         messages.clear()
         allLoaded = false
