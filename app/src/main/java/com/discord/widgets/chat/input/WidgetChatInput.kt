@@ -136,6 +136,19 @@ import dev.mantikafasi.manticord.plugins.api.PluginRegistration
 
 internal fun FlexInputWidgetBinding.renderSendPermission(ableToSendMessages: Boolean) {
     cannotSendText.visibility = if (ableToSendMessages) View.GONE else View.VISIBLE
+    hideComposerUnder(!ableToSendMessages, includingRightButtons = true)
+}
+
+/**
+ * Hides the composer row under a banner laid over it. A banner's surface can be see-through (a
+ * Nitro theme clears them for its gradient), so covering the row is not enough. Alpha rather than
+ * visibility: the row's own layout code rewrites its visibility.
+ */
+internal fun FlexInputWidgetBinding.hideComposerUnder(hidden: Boolean, includingRightButtons: Boolean) {
+    val alpha = if (hidden) 0f else 1f
+    leftBtnsContainer.alpha = alpha
+    mainInputContainer.alpha = alpha
+    if (includingRightButtons) rightBtnsContainer.alpha = alpha
 }
 
 internal fun messageLimitText(length: Int, limit: Int) = "$length/$limit"
@@ -1068,6 +1081,8 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             visibility = View.GONE
         }.also(bar::addView)
         container.addView(bar)
+        // The mic stays: the gesture that is recording is still on it.
+        flexInputBinding?.hideComposerUnder(true, includingRightButtons = false)
         voiceRecordingUi = VoiceRecordingUi(bar, hint, waveform, cancel, send)
         updateVoiceGestureState(voiceGestureState, haptic = false)
     }
@@ -1160,6 +1175,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     private fun hideVoiceRecordingBar() {
         voiceRecordingUi?.root?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        if (voiceRecordingUi != null) flexInputBinding?.hideComposerUnder(false, includingRightButtons = false)
         voiceRecordingUi = null
         pendingVoiceFinish = null
         voiceGestureActive = false
