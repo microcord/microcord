@@ -13,6 +13,7 @@ import com.discord.app.appViewModels
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.recycler.GridColumnSpaceItemDecoration
 import com.discord.utilities.rx.ui
+import com.discord.views.SearchInputView
 import com.discord.widgets.chat.input.expression.ExpressionTrayViewModel
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.GifItem
 
@@ -57,6 +58,7 @@ class WidgetGifCategory : AppFragment(R.layout.widget_gif_category) {
         setUpTitle()
         setUpBackBehavior()
         setUpGifRecycler(columns)
+        setUpFavoritesSearch(view.findViewById(R.id.gif_category_search))
         loadingView.updateView(columns)
         setWindowInsetsListeners()
     }
@@ -81,6 +83,13 @@ class WidgetGifCategory : AppFragment(R.layout.widget_gif_category) {
             is GifCategoryItem.Frequent -> getString(R.string.frequently_used)
             is GifCategoryItem.Trending -> getString(R.string.gif_picker_result_type_trending_gifs)
         }
+    }
+
+    /** Favorites can run to hundreds, so that page alone gets a filter over its own list. */
+    private fun setUpFavoritesSearch(search: SearchInputView) {
+        if (gifCategory !is GifCategoryItem.Favorite) return
+        search.visibility = View.VISIBLE
+        search.bindTextWatcher(this) { gifCategoryViewModel.setFilter(it) }
     }
 
     private fun setUpBackBehavior() {

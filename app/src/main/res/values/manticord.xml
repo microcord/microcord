@@ -278,4 +278,5 @@
     <string name="manticord_custom_theme_shared_apply">Apply theme</string>
     <string name="manticord_custom_theme_shared_preview">Preview</string>
     <string name="manticord_custom_theme_shared_revert">Revert</string>
+    <string name="manticord_search_favorite_gifs">Search favorites</string>
 </resources>

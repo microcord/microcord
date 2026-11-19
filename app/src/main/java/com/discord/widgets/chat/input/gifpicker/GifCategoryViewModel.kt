@@ -46,9 +46,20 @@ class GifCategoryViewModel(
             .subscribe({ handleStoreState(it) }, { /* the loading grid stays; the store retries */ })
     }
 
+    private var storeState: StoreState? = null
+    private var filter = ""
+
+    /** Narrows the grid to GIFs whose links name every word of [filter]. */
+    fun setFilter(filter: String) {
+        if (this.filter == filter) return
+        this.filter = filter
+        storeState?.let(::handleStoreState)
+    }
+
     private fun handleStoreState(storeState: StoreState) {
+        this.storeState = storeState
         val viewState = ViewState(
-            storeState.gifs.map { gif ->
+            storeState.gifs.filter { matchesFilter(it, filter) }.map { gif ->
                 GifItem(
                     gif,
                     isFavorite = StoreMediaFavorites.canonicalGifKey(gif.tenorGifUrl) in storeState.favoriteKeys,
@@ -74,6 +85,21 @@ class GifCategoryViewModel(
         storeGifPicker.setFavoriteGif(gifItem.gif, !gifItem.isFavorite)
 
     companion object {
+        /**
+         * A favorite has no title, only its links: the page link names it for Tenor and Giphy
+         * (`tenor.com/view/man-asleep-gif-26417244`) and the file name does for an upload.
+         */
+        fun matchesFilter(gif: ModelGif, filter: String): Boolean {
+            val words = filter.lowercase().split(' ').filter(String::isNotBlank)
+            if (words.isEmpty()) return true
+            val names = listOf(gif.tenorGifUrl, gif.gifImageUrl).joinToString(" ") { url ->
+                url.substringBefore('?').trimEnd('/').substringAfterLast('/').substringBeforeLast('.')
+            }.lowercase().replace(SEPARATORS, " ")
+            return words.all { it in names }
+        }
+
+        private val SEPARATORS = Regex("[-_+%.]")
+
         fun observeStoreState(
             gifCategoryItem: GifCategoryItem,
             storeGifPicker: GifPickerStore = GifPickerStores.gifPicker,
