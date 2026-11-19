@@ -15,6 +15,8 @@ import com.discord.utilities.feature.GifProviderSettings
 import com.discord.utilities.analytics.ChatInputComponentTypes
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
+import com.discord.utilities.view.HeightDragHandle
+import com.discord.utilities.view.PullToShrinkLayout
 import com.discord.utilities.view.extensions.setForwardingWindowInsetsListener
 import com.discord.views.segmentedcontrol.SegmentedControlContainer
 import com.discord.widgets.chat.input.AppFlexInputViewModel
@@ -86,6 +88,10 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
 
     private var wasActive = false
 
+    /** Resizes the composer's panel this tray fills, between the keyboard's height and most of the screen. */
+    private var sizeHandle: HeightDragHandle? = null
+    private var shownDetailPage: ExpressionDetailPage? = null
+
     fun setEmojiPickerListener(emojiPickerListener: EmojiPickerListener) {
         this.emojiPickerListener = emojiPickerListener
     }
@@ -133,6 +139,13 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
             expressionTrayViewModel.clickSearch(searchButton.text.toString())
         }
         setWindowInsetsListeners(view)
+        (view.parent as? View)?.let { panel ->
+            sizeHandle = HeightDragHandle(panel, view.findViewById(R.id.expression_tray_drag_handle)) {
+                // Room the chat list gives up, so the composer stops just under the toolbar.
+                panel.height + (view.rootView.findViewById<View>(R.id.widget_chat_list)?.height ?: 0)
+            }
+            (view as? PullToShrinkLayout)?.sizeHandle = sizeHandle
+        }
         appBarLayout.addOnOffsetChangedListener(
             AppBarLayout.OnOffsetChangedListener { _, verticalOffset ->
                 isAtInitialScrollPositionSubject.onNext(verticalOffset == 0)
@@ -226,7 +239,12 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
     }
 
     private fun configureDetailPage(viewState: ExpressionTrayViewModel.ViewState) {
-        when (val page = viewState.expressionDetailPage) {
+        val page = viewState.expressionDetailPage
+        // A category is a grid worth the room, as on RN; only its opening grows the tray, so a
+        // shrink while inside it sticks.
+        if (page != null && page != shownDetailPage) sizeHandle?.settle(expand = true)
+        shownDetailPage = page
+        when (page) {
             is ExpressionDetailPage.GifCategoryPage -> {
                 val fragment = WidgetGifCategory.newInstance(page.gifCategoryItem)
                 fragment.setOnGifSelected(::onGifSelected)
@@ -359,6 +377,8 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
         isExpressionTrayActiveSubject.onNext(isActive)
 
         if (isActive && !wasActive) {
+            // The composer opens the panel at the keyboard's height, whatever it was left at.
+            sizeHandle?.reset()
             appBarLayout.setExpanded(true)
             // The emoji picker has no scrollToTop() yet — its grid keeps its position across opens.
             gifPickerFragment?.scrollToTop()
