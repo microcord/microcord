@@ -6,6 +6,7 @@ import android.widget.TextView
 import androidx.core.content.res.ResourcesCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.chat.input.gifpicker.GifCategoryItem.Standard
 import com.discord.widgets.chat.input.gifpicker.GifCategoryItem.Trending
@@ -75,7 +76,7 @@ class GifCategoryViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) 
      */
     private fun setPreviewImage(imageUrl: String) {
         val params = preview.layoutParams
-        MGImages.setImage(preview, imageUrl, params.width, params.height)
+        MGImages.setImage(preview, ModelGif.previewUrls(imageUrl, params.width, params.height), params.width, params.height)
     }
 
     private companion object {

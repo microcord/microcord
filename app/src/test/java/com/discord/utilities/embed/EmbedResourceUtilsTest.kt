@@ -208,10 +208,10 @@ class EmbedResourceUtilsTest {
     }
 
     @Test
-    fun `an animating gif is requested as-is, with no still fallback`() {
+    fun `an animating gif is requested at 30 percent as animated webp, with the gif as fallback`() {
         assertEquals(
-            listOf("https://cdn/a.gif?width=10&height=20"),
-            EmbedResourceUtils.getPreviewUrls("https://cdn/a.gif", 10, 20),
+            listOf("https://cdn/a.gif?width=30&height=60&format=webp&animated=true", "https://cdn/a.gif?width=30&height=60"),
+            EmbedResourceUtils.getPreviewUrls("https://cdn/a.gif", 100, 201),
         )
         assertEquals(
             listOf("res:///1234?width=10&height=20"),
@@ -225,7 +225,7 @@ class EmbedResourceUtilsTest {
             "https://example.com/image.jpg?name=orig&width=10&height=20&format=webp",
             "https://example.com/image.jpg?name=orig&width=10&height=20",
         ), EmbedResourceUtils.getPreviewUrls("https://example.com/image.jpg?name=orig", 10, 20))
-        assertEquals(listOf("https://example.com/image.gif?ex=1&is=2&width=10&height=20"),
+        assertEquals(listOf("https://example.com/image.gif?ex=1&is=2&width=3&height=6&format=webp&animated=true", "https://example.com/image.gif?ex=1&is=2&width=3&height=6"),
             EmbedResourceUtils.getPreviewUrls("https://example.com/image.gif?ex=1&is=2", 10, 20))
     }
 

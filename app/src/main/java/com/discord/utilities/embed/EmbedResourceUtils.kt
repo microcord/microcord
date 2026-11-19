@@ -43,6 +43,8 @@ object EmbedResourceUtils {
      */
     val MAX_IMAGE_VIEW_HEIGHT_PX: Int by lazy { dpToPixels(320) }
 
+    private const val GIF_SCALE = 0.3
+
     private val PLAYABLE_EMBED_TYPES: List<EmbedType> = listOf(EmbedType.VIDEO, EmbedType.GIFV)
 
     /** Modern multi-image unfurls arrive as a rich card followed by image-only same-URL embeds. */
@@ -137,7 +139,7 @@ object EmbedResourceUtils {
      * The CDN variants to try for a preview, best first.
      *
      * A still request is preferred because it is far smaller, but a URL that is already a local
-     * resource or an animating `.gif` is requested as-is when [shouldAnimate]. The unsized original
+     * resource or an animating `.gif` stays animated when [shouldAnimate], at reduced size. The unsized original
      * is always kept as the fallback, in case the media proxy declines to resize it.
      */
     @JvmOverloads
@@ -152,9 +154,17 @@ object EmbedResourceUtils {
         // read from the path alone — an endsWith on the full URL never matched, every animated GIF
         // was downgraded to a still, and only the fullscreen viewer animated them.
         val barePath = originalUrl.substringBefore('?').lowercase(Locale.ROOT)
-        val keepAnimated = shouldAnimate &&
-            (originalUrl.startsWith(FILE_SCHEME) || barePath.endsWith(".gif"))
-        return if (keepAnimated) {
+        val animatedGif = shouldAnimate && barePath.endsWith(".gif")
+        return if (animatedGif) {
+            // A GIF resized by the proxy is still a GIF, every frame at full colour: RN asks for 30%
+            // of the size it draws (ImageUtils.getMobileOptimizedSrc) and lets the view upscale. The
+            // proxy also transcodes it to animated WebP, every frame kept at a third to half the
+            // bytes; the GIF stays as the fallback.
+            val w = (width * GIF_SCALE).roundToInt().coerceAtLeast(1)
+            val h = (height * GIF_SCALE).roundToInt().coerceAtLeast(1)
+            val small = "$originalUrl${if ('?' in originalUrl) '&' else '?'}width=$w&height=$h"
+            listOf("$small&format=webp&animated=true", small)
+        } else if (shouldAnimate && originalUrl.startsWith(FILE_SCHEME)) {
             listOf(sized)
         } else {
             listOf("$sized&format=$STATIC_IMAGE_EXTENSION", sized)

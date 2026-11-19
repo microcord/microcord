@@ -14,6 +14,7 @@ import com.discord.i18n.i18nFormat
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.drawable.getThemedDrawableRes
 import com.discord.utilities.drawable.setCompoundDrawablesCompat
+import com.discord.models.gifpicker.dto.ModelGif
 import com.discord.utilities.images.MGImages
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.GifItem
 import com.discord.widgets.chat.input.gifpicker.GifAdapterItem.SuggestedTermsItem
@@ -51,7 +52,7 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             itemView.layoutParams.height = heightPx
             MGImages.setImage(
                 image,
-                listOf(gif.gifImageUrl),
+                ModelGif.previewUrls(gif.gifImageUrl, columnWidthPx, heightPx),
                 width = columnWidthPx,
                 height = heightPx,
                 changeDetector = changeDetector,
