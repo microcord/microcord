@@ -55,7 +55,10 @@ class ToolbarTitleLayout @JvmOverloads constructor(
         hasIcon = true
         binding.toolbarIcon.visibility = View.GONE
         binding.toolbarAvatar.hierarchy.roundingParams = RoundingParams.asCircle()
-        MGImages.setImage(binding.toolbarAvatar, url, width = 24, height = 24, useSmallCache = true)
+        // Decoded at the view's pixel size: a bare 24 is pixels, a third of the 24dp circle on a
+        // 3x screen, which drew the avatar as visible blocks.
+        val sizePx = binding.toolbarAvatar.layoutParams.width
+        MGImages.setImage(binding.toolbarAvatar, url, width = sizePx, height = sizePx, useSmallCache = true)
         binding.toolbarAvatar.visibility = View.VISIBLE
         updateIdentityVisibility()
     }
