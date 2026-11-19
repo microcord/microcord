@@ -69,6 +69,7 @@ import com.discord.widgets.guilds.profile.WidgetGuildProfileSheet
 import com.discord.widgets.stickers.StickerSheets
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.views.ReactionView
+import com.discord.utilities.user.UserUtils.isPremiumTier2
 import java.lang.ref.WeakReference
 
 /** Routes every live-chat row event to its 126.21 store or navigation owner. */
@@ -257,8 +258,8 @@ class WidgetChatListAdapterEventsHandler(
         messageId: Long,
     ) {
         val message = StoreStream.getMessages().getMessage(channelId, messageId) ?: return
-        WidgetEmojiPickerSheet.show(fragmentManager) { emoji ->
-            messageActionCoordinator.toggleReaction(message, emoji)
+        WidgetEmojiPickerSheet.showForReaction(fragmentManager) { emoji, burst ->
+            messageActionCoordinator.toggleReaction(message, emoji, burst)
         }
     }
 
@@ -274,6 +275,7 @@ class WidgetChatListAdapterEventsHandler(
         messageId: Long,
         reaction: MessageReaction,
         canAddReactions: Boolean,
+        burst: Boolean,
     ) {
         if (!canAddReactions) {
             Toast.makeText(
@@ -283,8 +285,11 @@ class WidgetChatListAdapterEventsHandler(
             ).show()
             return
         }
+        // A super reaction chip takes back the user's own, or adds one when they can send them;
+        // without Nitro, tapping it reacts normally, as desktop does once its free ones run out.
+        val asBurst = burst && (reaction.meBurst || StoreStream.getUsers().getMe().isPremiumTier2)
         StoreStream.getMessages().getMessage(channelId, messageId)?.let {
-            messageActionCoordinator.toggleReaction(it, reaction.emoji)
+            messageActionCoordinator.toggleReaction(it, reaction.emoji, burst = asBurst)
         }
     }
 

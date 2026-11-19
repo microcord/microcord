@@ -399,7 +399,8 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         eventHandler.onQuickAddReactionClicked(data.guildId, data.userId, data.channelId, messageId)
     }
 
-    fun onReactionClicked(messageId: Long, reaction: MessageReaction, canAddReactions: Boolean) {
+    /** [burst]: the chip tapped is the emoji's super reactions. */
+    fun onReactionClicked(messageId: Long, reaction: MessageReaction, canAddReactions: Boolean, burst: Boolean = false) {
         eventHandler.onReactionClicked(
             data.guildId,
             data.userId,
@@ -407,6 +408,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             messageId,
             reaction,
             canAddReactions,
+            burst,
         )
     }
 
@@ -600,6 +602,7 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             messageId: Long,
             reaction: MessageReaction,
             canAddReactions: Boolean,
+            burst: Boolean = false,
         ) = Unit
 
         fun onReactionLongClicked(guildId: Long, channelId: Long, messageId: Long, reaction: MessageReaction) = Unit

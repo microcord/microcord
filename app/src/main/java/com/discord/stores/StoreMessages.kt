@@ -263,7 +263,8 @@ class StoreMessagesHolder @JvmOverloads constructor(
             val message = channelMessages[update.messageId] ?: return@forEach
             val isMe = update.userId == myUserId
             channelMessages[update.messageId] =
-                if (add) addReaction(message, update.emoji, isMe) else removeReaction(message, update.emoji, isMe)
+                if (add) addReaction(message, update.emoji, isMe, update.isBurst, update.burstColors)
+                else removeReaction(message, update.emoji, isMe, update.isBurst)
             updatedChannels += update.channelId
         }
         publishIfUpdated()
@@ -459,24 +460,41 @@ class StoreMessagesHolder @JvmOverloads constructor(
         private const val CACHE_OTHER_MESSAGES = 10
 
         /**
-         * Adds one reaction, preserving emoji order.
+         * Adds one reaction, preserving emoji order. A super ([burst]) reaction counts apart from
+         * normal ones on the same emoji, and brings the colours its pill is drawn with.
          *
          * The early return is the fix for double-counted own reactions: adding a reaction
          * optimistically and then receiving the gateway echo of the same reaction would otherwise
-         * increment twice. If this emoji is already flagged `me`, the echo is a no-op.
+         * increment twice. If this emoji is already flagged `me` (or `me_burst`), the echo is a no-op.
          */
-        internal fun addReaction(message: Message, emoji: MessageReactionEmoji, isMe: Boolean): Message {
+        internal fun addReaction(
+            message: Message,
+            emoji: MessageReactionEmoji,
+            isMe: Boolean,
+            burst: Boolean = false,
+            burstColors: List<String>? = null,
+        ): Message {
             val reactions = message.getReactionsMap()
             val key = emoji.reactionKey
-            if (isMe && reactions[key]?.me == true) return message
-
             val existing = reactions[key]
-            val updated = LinkedHashMap(reactions)
-            updated[key] = if (existing != null) {
-                MessageReaction(existing.count + 1, existing.emoji, existing.me || isMe)
-            } else {
-                MessageReaction(1, emoji, isMe)
+            if (isMe && existing != null && (if (burst) existing.meBurst else existing.me)) {
+                // Still takes the echo's colours: a super reaction added here has none until the
+                // server sends them, and without them the pill stays in the fallback colour.
+                val colors = burstColors?.takeIf { it.isNotEmpty() && it != existing.burstColors } ?: return message
+                return withReactions(message, LinkedHashMap(reactions).apply { this[key] = existing.copy(burstColors = colors) })
             }
+
+            val normal = (existing?.normalCount ?: 0) + if (burst) 0 else 1
+            val bursts = (existing?.burstCount ?: 0) + if (burst) 1 else 0
+            val updated = LinkedHashMap(reactions)
+            updated[key] = MessageReaction(
+                count = normal + bursts,
+                emoji = existing?.emoji ?: emoji,
+                me = existing?.me == true || (isMe && !burst),
+                countDetails = MessageReaction.CountDetails(normal, bursts),
+                meBurst = existing?.meBurst == true || (isMe && burst),
+                burstColors = burstColors?.takeIf { it.isNotEmpty() } ?: existing?.burstColors,
+            )
             return withReactions(message, updated)
         }
 
@@ -484,20 +502,33 @@ class StoreMessagesHolder @JvmOverloads constructor(
          * Removes one reaction, preserving emoji order and collapsing to `null` when empty.
          *
          * The `me` guard mirrors [addReaction]: a removal attributed to the current user is
-         * ignored when the current user is not flagged on that emoji, so an echoed removal cannot
-         * decrement a count the local state never incremented.
+         * ignored when the current user is not flagged on that emoji (for that type), so an echoed
+         * removal cannot decrement a count the local state never incremented.
          */
-        internal fun removeReaction(message: Message, emoji: MessageReactionEmoji, isMe: Boolean): Message {
+        internal fun removeReaction(
+            message: Message,
+            emoji: MessageReactionEmoji,
+            isMe: Boolean,
+            burst: Boolean = false,
+        ): Message {
             val reactions = message.getReactionsMap()
             val key = emoji.reactionKey
             val existing = reactions[key] ?: return message
-            if (isMe && !existing.me) return message
+            if (isMe && !(if (burst) existing.meBurst else existing.me)) return message
+            if ((if (burst) existing.burstCount else existing.normalCount) <= 0) return message
 
+            val normal = existing.normalCount - if (burst) 0 else 1
+            val bursts = existing.burstCount - if (burst) 1 else 0
             val updated = LinkedHashMap(reactions)
-            if (existing.count == 1) {
+            if (normal + bursts <= 0) {
                 updated.remove(key)
             } else {
-                updated[key] = MessageReaction(existing.count - 1, existing.emoji, existing.me && !isMe)
+                updated[key] = existing.copy(
+                    count = normal + bursts,
+                    me = existing.me && !(isMe && !burst),
+                    countDetails = MessageReaction.CountDetails(normal, bursts),
+                    meBurst = existing.meBurst && !(isMe && burst),
+                )
             }
             return withReactions(message, updated)
         }

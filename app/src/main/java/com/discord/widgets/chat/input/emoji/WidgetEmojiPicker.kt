@@ -1,5 +1,8 @@
 package com.discord.widgets.chat.input.emoji
 
+import android.content.res.ColorStateList
+import android.graphics.Color
+import com.discord.utilities.color.ColorCompat
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -50,6 +53,13 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
 
     /** Set when the picker is embedded in a sheet that wants the selection itself. */
     internal var onPicked: ((Emoji) -> Unit)? = null
+
+    /**
+     * Set by the reaction sheet when the user can send super reactions: shows the toggle beside the
+     * search bar and is told each time it flips.
+     */
+    internal var onSuperReactionToggled: ((Boolean) -> Unit)? = null
+    private var superReaction = false
 
     /** Whether this picker's server rail claims horizontal drags from the home panels. */
 
@@ -121,6 +131,7 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
         setUpEmojiRecycler()
         setUpCategoryRecycler()
         initializeSearchBar()
+        configureSuperReactionToggle()
 
         binding.emojiPickerBackspaceIcon.apply {
             setOnClickListener { host()?.onEmojiBackspace() }
@@ -250,7 +261,35 @@ class WidgetEmojiPicker : AppFragment(R.layout.widget_emoji_picker) {
             ?: parentFragment?.parentFragment as? Host
             ?: activity as? Host
 
+    /** RN's toggle: brand-filled and spun round when on, the search bar's colour when off. */
+    private fun configureSuperReactionToggle() {
+        val toggle = binding.emojiSuperReactionToggle
+        val onToggled = onSuperReactionToggled
+        toggle.visibility = if (onToggled == null) View.GONE else View.VISIBLE
+        if (onToggled == null) return
+        fun render() {
+            val context = toggle.context
+            toggle.backgroundTintList = ColorStateList.valueOf(
+                ColorCompat.getThemedColor(context, if (superReaction) R.attr.color_brand_500 else R.attr.colorBackgroundTertiary),
+            )
+            toggle.imageTintList = ColorStateList.valueOf(
+                if (superReaction) Color.WHITE else ColorCompat.getThemedColor(context, R.attr.colorInteractiveNormal),
+            )
+            toggle.isSelected = superReaction
+        }
+        toggle.setOnClickListener {
+            superReaction = !superReaction
+            render()
+            if (superReaction) toggle.animate().rotationBy(FULL_TURN).setDuration(TOGGLE_SPIN_MS).start()
+            onToggled(superReaction)
+        }
+        render()
+    }
+
     companion object {
+        private const val FULL_TURN = 360f
+        private const val TOGGLE_SPIN_MS = 450L
+
         private const val ARG_CONTEXT_TYPE = "emoji_picker_context_type"
         private const val ARG_MODE = "emoji_picker_mode"
         private const val ARG_FOR_REACTION = "emoji_picker_for_reaction"

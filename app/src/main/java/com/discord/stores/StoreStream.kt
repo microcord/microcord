@@ -45,6 +45,7 @@ import com.discord.api.thread.ThreadListing
 import com.discord.api.user.User
 import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.api.user.TypingUser
+import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionUpdate
 import com.discord.models.authentication.AuthState
 import com.discord.models.domain.ModelChannelUnreadUpdate
@@ -1415,9 +1416,10 @@ class StoreStream private constructor(
                         { completed(Result.success(Unit)) }, { completed(Result.failure(it)) },
                     )
                 },
-                toggleReactionRemote = { channelId, messageId, reaction, removing, completed ->
-                    val call = if (removing) api.removeSelfReaction(channelId, messageId, reaction)
-                    else api.addReaction(channelId, messageId, reaction)
+                toggleReactionRemote = { channelId, messageId, reaction, removing, burst, completed ->
+                    val type = if (burst) MessageReaction.TYPE_BURST else MessageReaction.TYPE_NORMAL
+                    val call = if (removing) api.removeSelfReaction(channelId, messageId, reaction, type)
+                    else api.addReaction(channelId, messageId, reaction, type.takeIf { burst })
                     call.subscribeOn(Schedulers.io()).subscribe(
                         {}, { completed(Result.failure(it)) }, { completed(Result.success(Unit)) },
                     )

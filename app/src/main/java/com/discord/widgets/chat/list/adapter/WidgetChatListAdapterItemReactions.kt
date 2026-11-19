@@ -55,33 +55,42 @@ class WidgetChatListAdapterItemReactions(
         reactorSubscription?.unsubscribe()
         reactorSubscription = null
         configureCellHighlight(entry.message, highlightBackground, gutterBackground, entry.isPendingReply)
+        val chips = chipsOf(entry.message.getReactionsMap().values)
         displayReactions(
-            reactions = entry.message.getReactionsMap().values,
+            chips = chips,
             messageId = entry.message.id,
             canAddReactions = entry.canAddReactions,
             canCreateReactions = entry.canCreateReactions,
             animateEmojis = entry.animateEmojis,
         )
-        bindReactors(entry)
+        bindReactors(entry, chips)
     }
+
+    /** One chip per kind of reaction an emoji has; super reactions lead, as on desktop. */
+    private data class Chip(val reaction: MessageReaction, val burst: Boolean)
+
+    private fun chipsOf(reactions: Collection<MessageReaction>): List<Chip> =
+        reactions.filter { it.burstCount > 0 }.map { Chip(it, burst = true) } +
+            reactions.filter { it.normalCount > 0 }.map { Chip(it, burst = false) }
 
     /**
      * Fills each chip with the people who reacted, from the same per-emoji user list the reactions
      * sheet uses, so each emoji is fetched once and then kept current by gateway reaction events.
      */
-    private fun bindReactors(entry: ReactionsEntry) {
-        val reactions = entry.message.getReactionsMap().values.toList()
+    private fun bindReactors(entry: ReactionsEntry, chips: List<Chip>) {
         // Like Vencord's WhoReacted, a message this busy is left alone: it is a request per emoji.
-        if (!FeatureFlags.whoReactedEnabled() || reactions.size > MAX_WHO_REACTED_REACTIONS) {
-            reactions.indices.forEach { reactionView(it).setReactors(emptyList()) {} }
+        if (!FeatureFlags.whoReactedEnabled() || chips.size > MAX_WHO_REACTED_REACTIONS) {
+            chips.indices.forEach { reactionView(it).setReactors(emptyList()) {} }
             return
         }
         val message = entry.message
         val subscriptions = CompositeSubscription()
         reactorSubscription = subscriptions
-        reactions.forEachIndexed { index, reaction ->
+        chips.forEachIndexed { index, (reaction, burst) ->
             val view = reactionView(index)
             view.setReactors(emptyList()) {}
+            // The user lists are of normal reactions; a super reaction's are not fetched.
+            if (burst) return@forEachIndexed
             StoreStream.getMessageReactions()
                 .observeMessageReactions(message.channelId, message.id, reaction.emoji, queued = true)
                 .map { (it as? StoreMessageReactions.EmojiResults.Users)?.users?.values?.toList() }
@@ -102,7 +111,7 @@ class WidgetChatListAdapterItemReactions(
     private fun reactionView(index: Int) = reactionsContainer.getChildAt(index) as ReactionView
 
     private fun displayReactions(
-        reactions: Collection<MessageReaction>,
+        chips: List<Chip>,
         messageId: Long,
         canAddReactions: Boolean,
         canCreateReactions: Boolean,
@@ -110,12 +119,12 @@ class WidgetChatListAdapterItemReactions(
     ) {
         removeQuickAddReactionView()
 
-        for (index in reactions.size until reactionsContainer.childCount) {
+        for (index in chips.size until reactionsContainer.childCount) {
             reactionsContainer.getChildAt(index).visibility = View.GONE
         }
 
         val recyclableCount = reactionsContainer.childCount
-        reactions.forEachIndexed { index, reaction ->
+        chips.forEachIndexed { index, (reaction, burst) ->
             val view = if (index < recyclableCount) {
                 (reactionsContainer.getChildAt(index) as ReactionView).apply {
                     visibility = View.VISIBLE
@@ -124,15 +133,15 @@ class WidgetChatListAdapterItemReactions(
                 createReactionView()
             }
             view.setOnClickListener {
-                adapter.onReactionClicked(messageId, reaction, canAddReactions)
+                adapter.onReactionClicked(messageId, reaction, canAddReactions, burst)
             }
             view.setOnLongClickListenerConsumeClick {
                 adapter.onReactionLongClicked(messageId, reaction)
             }
-            view.configure(reaction, messageId, animateEmojis)
+            view.configure(reaction, messageId, animateEmojis, burst)
         }
 
-        if (reactions.size < REACTION_LIMIT && canCreateReactions) {
+        if (chips.distinctBy { it.reaction.emoji.reactionKey }.size < REACTION_LIMIT && canCreateReactions) {
             quickAddReactionView.setOnClickListener { adapter.onQuickAddReactionClicked(messageId) }
             reactionsContainer.addView(quickAddReactionView)
         }

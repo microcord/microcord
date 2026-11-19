@@ -1037,18 +1037,22 @@ interface RestAPIInterface {
         @Path("messageId") messageId: Long,
     ): Observable<Void>
 
+    /** [type] 1 makes it a super reaction; left out, it is a normal one. */
     @PUT("channels/{channelId}/messages/{messageId}/reactions/{reaction}/@me")
     fun addReaction(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
         @Path(value = "reaction", encoded = true) reaction: String,
+        @Query("type") type: Int? = null,
     ): Observable<Void?>
 
-    @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/@me")
+    /** A normal reaction and a super one are taken back separately, by [type]. */
+    @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/{type}/@me")
     fun removeSelfReaction(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
         @Path(value = "reaction", encoded = true) reaction: String,
+        @Path("type") type: Int = 0,
     ): Observable<Void?>
 
     @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/{userId}")

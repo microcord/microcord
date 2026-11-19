@@ -89,8 +89,16 @@ class MessageRestContractTest {
         assertRequest("PUT", "/api/v9/channels/42/messages/8/reactions/$reaction/@me")
 
         enqueueEmpty()
+        api.addReaction(42, 8, reaction, type = 1).toBlocking().subscribe()
+        assertRequest("PUT", "/api/v9/channels/42/messages/8/reactions/$reaction/@me?type=1")
+
+        enqueueEmpty()
         api.removeSelfReaction(42, 8, reaction).toBlocking().subscribe()
-        assertRequest("DELETE", "/api/v9/channels/42/messages/8/reactions/$reaction/@me")
+        assertRequest("DELETE", "/api/v9/channels/42/messages/8/reactions/$reaction/0/@me")
+
+        enqueueEmpty()
+        api.removeSelfReaction(42, 8, reaction, type = 1).toBlocking().subscribe()
+        assertRequest("DELETE", "/api/v9/channels/42/messages/8/reactions/$reaction/1/@me")
 
         enqueueEmpty()
         api.removeReaction(42, 8, reaction, 9).toBlocking().subscribe()

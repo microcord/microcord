@@ -39,6 +39,59 @@ class MessageReactionStoresTest {
         assertTrue(reactions.single().me)
     }
 
+    /**
+     * A super reaction counts apart from normal ones on the same emoji, keeps the server's colours,
+     * and the echo of your own is not counted twice.
+     */
+    @Test
+    fun superReactionsCountApartAndEchoOnce() {
+        val holder = holder()
+        holder.updateReactions(listOf(update(OTHER, THUMBS_UP)), add = true)
+        holder.updateReactions(listOf(update(ME, THUMBS_UP, burst = true)), add = true)
+        holder.updateReactions(listOf(update(ME, THUMBS_UP, burst = true)), add = true)
+
+        val reaction = holder.getMessages(CHANNEL).single().reactions.orEmpty().single()
+        assertEquals(2, reaction.count)
+        assertEquals(1, reaction.normalCount)
+        assertEquals(1, reaction.burstCount)
+        assertTrue(reaction.meBurst)
+        assertFalse(reaction.me)
+        assertEquals(listOf("#f0ca59"), reaction.burstColors)
+    }
+
+    /** Your own super reaction starts without colours; the gateway echo brings them without counting twice. */
+    @Test
+    fun ownSuperReactionEchoBringsColours() {
+        val holder = holder(
+            listOf(
+                MessageReaction(
+                    1, THUMBS_UP, false,
+                    countDetails = MessageReaction.CountDetails(0, 1),
+                    meBurst = true,
+                ),
+            ),
+        )
+        holder.updateReactions(listOf(update(ME, THUMBS_UP, burst = true)), add = true)
+
+        val reaction = holder.getMessages(CHANNEL).single().reactions.orEmpty().single()
+        assertEquals(1, reaction.burstCount)
+        assertEquals(listOf("#f0ca59"), reaction.burstColors)
+    }
+
+    /** Taking back a super reaction leaves the normal ones on the same emoji alone. */
+    @Test
+    fun removingSuperReactionKeepsNormalOnes() {
+        val holder = holder()
+        holder.updateReactions(listOf(update(OTHER, THUMBS_UP)), add = true)
+        holder.updateReactions(listOf(update(ME, THUMBS_UP, burst = true)), add = true)
+        holder.updateReactions(listOf(update(ME, THUMBS_UP, burst = true)), add = false)
+
+        val reaction = holder.getMessages(CHANNEL).single().reactions.orEmpty().single()
+        assertEquals(1, reaction.count)
+        assertEquals(0, reaction.burstCount)
+        assertFalse(reaction.meBurst)
+    }
+
     /** Another user's reaction on the same emoji still counts, and does not clear the `me` flag. */
     @Test
     fun otherUserReactionAddsToOwnReaction() {
@@ -145,8 +198,9 @@ class MessageReactionStoresTest {
         return ReactionsFixture(scheduler, dispatcher, store)
     }
 
-    private fun update(userId: Long, emoji: MessageReactionEmoji) =
-        MessageReactionUpdate(userId, CHANNEL, MESSAGE, emoji)
+    private fun update(userId: Long, emoji: MessageReactionEmoji, burst: Boolean = false) =
+        if (!burst) MessageReactionUpdate(userId, CHANNEL, MESSAGE, emoji)
+        else MessageReactionUpdate(userId, CHANNEL, MESSAGE, emoji, MessageReaction.TYPE_BURST, listOf("#f0ca59"))
 
     private data class ReactionsFixture(
         val scheduler: TestScheduler,

@@ -256,7 +256,7 @@ class WidgetChatList : AppFragment(R.layout.widget_chat_list), WidgetChatListAct
     }
 
     override fun requestMessageReaction(message: Message, coordinator: MessageActionCoordinator) {
-        WidgetEmojiPickerSheet.show(childFragmentManager) { emoji -> coordinator.toggleReaction(message, emoji) }
+        WidgetEmojiPickerSheet.showForReaction(childFragmentManager) { emoji, burst -> coordinator.toggleReaction(message, emoji, burst) }
     }
 
     companion object {

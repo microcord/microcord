@@ -177,7 +177,7 @@ class WidgetChannelPinnedMessages : AppFragment(R.layout.widget_channel_pinned_m
     override fun requestMessageEdit(message: Message, coordinator: MessageActionCoordinator) = Unit
 
     override fun requestMessageReaction(message: Message, coordinator: MessageActionCoordinator) {
-        WidgetEmojiPickerSheet.show(childFragmentManager) { emoji -> coordinator.toggleReaction(message, emoji) }
+        WidgetEmojiPickerSheet.showForReaction(childFragmentManager) { emoji, burst -> coordinator.toggleReaction(message, emoji, burst) }
     }
 
     private fun actionInput(message: Message, channelId: Long): MessageActions.Input {

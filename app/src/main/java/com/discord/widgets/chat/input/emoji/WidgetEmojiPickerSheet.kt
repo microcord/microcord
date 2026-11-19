@@ -8,6 +8,8 @@ import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.app.AppBottomSheet
 import com.discord.models.domain.emoji.Emoji
 import com.discord.models.domain.emoji.ModelEmojiCustom
+import com.discord.stores.StoreStream
+import com.discord.utilities.user.UserUtils.isPremiumTier2
 
 /**
  * The emoji picker presented over the current screen, e.g. for choosing a reaction.
@@ -19,6 +21,9 @@ import com.discord.models.domain.emoji.ModelEmojiCustom
 class WidgetEmojiPickerSheet : AppBottomSheet() {
 
     private var listener: ((MessageReactionEmoji) -> Unit)? = null
+    /** Whether the picker offers the super reaction toggle; see [showForReaction]. */
+    private var superReactions = false
+    private var burst = false
     /** False for the pickers that borrow this sheet to choose an emoji that is not a reaction. */
     private var forReaction = true
 
@@ -35,6 +40,7 @@ class WidgetEmojiPickerSheet : AppBottomSheet() {
                 listener?.invoke(emoji.toReactionEmoji())
                 dismiss()
             }
+            if (superReactions) onSuperReactionToggled = { burst = it }
         }
         childFragmentManager.beginTransaction()
             .replace(R.id.emoji_sheet_emoji_picker_content, picker)
@@ -67,6 +73,18 @@ class WidgetEmojiPickerSheet : AppBottomSheet() {
             WidgetEmojiPickerSheet().apply {
                 this.listener = listener
                 this.forReaction = forReaction
+            }
+                .show(manager, WidgetEmojiPickerSheet::class.java.simpleName)
+        }
+
+        /**
+         * The picker for reacting to a message. With Nitro it carries RN's super reaction toggle,
+         * and [listener] is told whether the emoji was picked as one.
+         */
+        fun showForReaction(manager: FragmentManager, listener: (MessageReactionEmoji, Boolean) -> Unit) {
+            WidgetEmojiPickerSheet().apply {
+                superReactions = StoreStream.getUsers().getMe().isPremiumTier2
+                this.listener = { emoji -> listener(emoji, burst) }
             }
                 .show(manager, WidgetEmojiPickerSheet::class.java.simpleName)
         }
