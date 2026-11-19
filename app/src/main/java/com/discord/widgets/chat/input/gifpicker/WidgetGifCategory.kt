@@ -111,6 +111,7 @@ class WidgetGifCategory : AppFragment(R.layout.widget_gif_category) {
             appComponent = this,
             onSelectGif = ::selectGif,
             onToggleFavorite = gifCategoryViewModel::toggleFavorite,
+            onPreviewGif = { GifPreviewDialog.show(childFragmentManager, it.gif)::dismissAllowingStateLoss },
             columnWidthPx = GifAdapter.calculateColumnWidth(gifRecycler, categoryColumnsCount, columnSpacePx),
         )
         gifRecycler.adapter = gifAdapter

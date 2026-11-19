@@ -19,6 +19,8 @@ class GifAdapter(
     appComponent: AppComponent,
     private val onSelectGif: ((GifItem) -> Unit)? = null,
     private val onToggleFavorite: ((GifItem) -> Unit)? = null,
+    /** Opens a peek at the held GIF and answers how to close it. */
+    private val onPreviewGif: ((GifItem) -> () -> Unit)? = null,
     private val columnWidthPx: Int,
     private val onSelectSuggestedTerm: ((String) -> Unit)? = null,
     private val diffCreator: DiffCreator<List<GifAdapterItem>, GifViewHolder> = DiffCreator(appComponent),
@@ -50,6 +52,7 @@ class GifAdapter(
                 columnWidthPx,
                 onSelectGif,
                 onToggleFavorite,
+                onPreviewGif,
             )
 
             is GifAdapterItem.SuggestedTermsItem.SuggestedTermsEmptyResults ->

@@ -1,6 +1,7 @@
 package com.discord.widgets.chat.input.gifpicker
 
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -36,8 +37,18 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val favorite: ImageView = itemView.findViewById(R.id.gif_item_favorite)
         private val changeDetector = MGImages.DistinctChangeDetector()
 
+        /** Closes a peek opened by a long press; the finger lifting, or the list taking over, ends it. */
+        private var endPreview: (() -> Unit)? = null
+
         init {
-            itemView.setOnTouchListener(ViewScalingOnTouchListener(PRESS_SCALE))
+            val scaling = ViewScalingOnTouchListener(PRESS_SCALE)
+            itemView.setOnTouchListener { view, event ->
+                if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    endPreview?.invoke()
+                    endPreview = null
+                }
+                scaling.onTouch(view, event)
+            }
         }
 
         fun configure(
@@ -45,6 +56,7 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             columnWidthPx: Int,
             onSelectGif: ((GifItem) -> Unit)? = null,
             onToggleFavorite: ((GifItem) -> Unit)? = null,
+            onPreviewGif: ((GifItem) -> () -> Unit)? = null,
         ) {
             val gif = gifItem.gif
             val aspect = if (gif.width == 0) 1f else gif.height.toFloat() / gif.width
@@ -79,7 +91,9 @@ sealed class GifViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
                 ).show()
             }
             itemView.setOnClickListener { onSelectGif?.invoke(gifItem) }
-            itemView.setOnLongClickListener(null)
+            itemView.setOnLongClickListener(
+                onPreviewGif?.let { preview -> View.OnLongClickListener { endPreview = preview(gifItem); true } },
+            )
         }
 
         private companion object {

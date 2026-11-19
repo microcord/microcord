@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A held picker GIF on a card: the GIF large in a filled frame (so the card keeps its shape while it
+  loads), and under it the link picking it sends. The window is the whole screen so nothing squeezes
+  the card; the code sizes the frame and the link row to the GIF.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<androidx.cardview.widget.CardView
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center"
+    app:cardBackgroundColor="?attr/colorBackgroundSecondary"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="8dp"
+    app:cardPreventCornerOverlap="false"
+    app:contentPadding="12dp">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="?attr/colorBackgroundModifierAccent"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="0dp"
+            app:cardPreventCornerOverlap="false">
+
+            <com.discord.views.VitoImageView
+                android:id="@+id/gif_preview_image"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:importantForAccessibility="no" />
+        </androidx.cardview.widget.CardView>
+
+        <LinearLayout
+            android:id="@+id/gif_preview_link"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginEnd="6dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_link_white_24dp"
+                app:tint="?attr/colorTextMuted" />
+
+            <TextView
+                android:id="@+id/gif_preview_url"
+                style="@style/UiKit.TextView"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="?attr/colorTextMuted"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
+</FrameLayout>
