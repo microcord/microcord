@@ -139,7 +139,8 @@ class SearchGifExpressionStoresTest {
         val values = CopyOnWriteArrayList<List<com.discord.models.gifpicker.dto.ModelGif>>()
 
         store.observeGifsForSearchQuery("none").subscribe(values::add)
-        assertSame(StoreGifPicker.searchResultsLoadingList, values.single())
+        // The sentinel the pickers filter on, or every load reads as "no GIFs found".
+        assertSame(com.discord.widgets.chat.input.gifpicker.GifPickerStore.SEARCH_RESULTS_LOADING, values.single())
         searchResults.onNext(emptyList())
         repeat(100) {
             if (values.size > 1) return@repeat

@@ -125,9 +125,6 @@ class WidgetGifPickerSearch : AppFragment(R.layout.widget_gif_picker_search) {
 
     fun clearSearchBar() = gifPickerViewModel.setSearchText("")
 
-    private val GifProvider.displayName: String
-        get() = name.lowercase().replaceFirstChar(Char::titlecase)
-
 
     private companion object {
         const val FLIPPER_LOADED = 0

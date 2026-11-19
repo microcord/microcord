@@ -11,6 +11,7 @@ import com.discord.app.appActivityViewModels
 import com.discord.models.domain.emoji.Emoji
 import com.discord.stores.StoreStream
 import com.discord.utilities.analytics.AnalyticsTracker
+import com.discord.utilities.feature.GifProviderSettings
 import com.discord.utilities.analytics.ChatInputComponentTypes
 import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.ui
@@ -215,13 +216,11 @@ class WidgetExpressionTray : AppFragment(R.layout.widget_expression_tray), Widge
             contentView.visibility = if (contentTab == tab) View.VISIBLE else View.GONE
         }
 
-        val searchHint = getString(
-            when (tab) {
-                ExpressionTrayTab.EMOJI -> R.string.search_for_emoji
-                ExpressionTrayTab.GIF -> R.string.search_klipy
-                ExpressionTrayTab.STICKER -> R.string.search_for_stickers
-            },
-        )
+        val searchHint = when (tab) {
+            ExpressionTrayTab.EMOJI -> getString(R.string.search_for_emoji)
+            ExpressionTrayTab.GIF -> getString(R.string.search_gif_provider, GifProviderSettings.get().displayName)
+            ExpressionTrayTab.STICKER -> getString(R.string.search_for_stickers)
+        }
         searchButton.hint = searchHint
         searchBar.contentDescription = searchHint
     }

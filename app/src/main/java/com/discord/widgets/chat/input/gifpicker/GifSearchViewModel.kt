@@ -32,7 +32,8 @@ import rx.subjects.BehaviorSubject
  */
 class GifSearchViewModel(
     private val searchSubject: BehaviorSubject<String> = BehaviorSubject.create(""),
-    private val messageSender: GifMessageSender = GifMessageSender(),
+    /** Lazy: it reads the live stores, which a view model test has none of. */
+    private val messageSender: Lazy<GifMessageSender> = lazy { GifMessageSender() },
     private val storeGifPicker: GifPickerStore = GifPickerStores.gifPicker,
     /** See [GifCategoryViewModel]: no `StoreStream` accessor for `StoreAnalytics` exists yet. */
     private val storeAnalytics: StoreAnalytics? = null,
@@ -69,6 +70,9 @@ class GifSearchViewModel(
     }
 
     private fun handleStoreState(storeState: StoreState) {
+        // The throttle searches the first keystroke at once; its results must not replace the
+        // shimmer while the box already holds more text.
+        if (storeState is StoreState.SearchResults && storeState.searchQuery != searchSubject.value) return
         val loaded = ViewState.Loaded(
             buildAdapterItems(storeState, hasQuery = searchSubject.value.orEmpty().isNotEmpty()),
         )
@@ -86,7 +90,7 @@ class GifSearchViewModel(
                 sourceTrait = Traits.Source(_object = Traits.Source.Obj.GIF_PICKER),
             )
         }
-        if (messageSender.send(gifItem.gif.tenorGifUrl)) storeGifPicker.onGifUsed(gifItem.gif)
+        if (messageSender.value.send(gifItem.gif.tenorGifUrl)) storeGifPicker.onGifUsed(gifItem.gif)
     }
 
     fun toggleFavorite(gifItem: GifItem) =
@@ -103,8 +107,12 @@ class GifSearchViewModel(
         searchSubject.onNext(searchText)
     }
 
-    fun setProvider(provider: GifProvider) =
-        storeGifPicker.setProvider(provider, searchSubject.value?.takeIf(String::isNotBlank))
+    /** A query in the box is searched again with [provider], behind the shimmer like a new one. */
+    fun setProvider(provider: GifProvider) {
+        val query = searchSubject.value?.takeIf(String::isNotBlank)
+        if (query != null) updateViewState(ViewState.LoadingSearchResults)
+        storeGifPicker.setProvider(provider, query)
+    }
 
     companion object {
         private const val SEARCH_THROTTLE_MS = 1000L

@@ -2,7 +2,11 @@ package com.discord.utilities.feature
 
 import com.discord.utilities.cache.SharedPreferencesProvider
 
-enum class GifProvider { KLIPY, TENOR, GIPHY }
+enum class GifProvider {
+    KLIPY, TENOR, GIPHY;
+
+    val displayName: String get() = name.lowercase().replaceFirstChar(Char::titlecase)
+}
 
 object GifProviderSettings {
     fun get(): GifProvider {

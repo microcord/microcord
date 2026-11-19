@@ -13,7 +13,6 @@ import com.discord.utilities.persister.Persister
 import com.discord.utilities.rest.RestAPI
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.widgets.chat.input.gifpicker.GifPickerStore
-import java.util.Collections
 import java.util.LinkedHashMap
 import com.google.gson.Gson
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -327,9 +326,10 @@ class StoreGifPicker(
     }
 
     companion object {
-        // ponytail: distinct identity sentinels preserve zero-result states; remove only to reproduce the reference spinner bug.
-        @JvmField val searchResultsLoadingList: List<ModelGif> = Collections.unmodifiableList(ArrayList<ModelGif>(0))
-        @JvmField val searchTermsLoadingList: List<String> = Collections.unmodifiableList(ArrayList<String>(0))
+        // The view models filter by identity against these; a copy of their own let every loading
+        // state through as "no GIFs found".
+        @JvmField val searchResultsLoadingList: List<ModelGif> = GifPickerStore.SEARCH_RESULTS_LOADING
+        @JvmField val searchTermsLoadingList: List<String> = GifPickerStore.SEARCH_TERMS_LOADING
 
         private const val PROVIDER = "klipy"
         private const val MEDIA_FORMAT = "tinygif"
