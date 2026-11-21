@@ -82,7 +82,7 @@ object Rules {
     private val PATTERN_CUSTOM_EMOJI: Pattern = Pattern.compile("^$REGEX_CUSTOM_EMOJI")
     private val PATTERN_NAMED_EMOJI: Pattern = Pattern.compile("^:([^\\s:]+?(?:::skin-tone-\\d)?):")
     private val PATTERN_UNESCAPE_EMOTICON: Pattern = Pattern.compile("^(¯\\\\_\\(ツ\\)_/¯)")
-    private val PATTERN_TIMESTAMP: Pattern = Pattern.compile("^<t:(-?\\d{1,17})(?::(t|T|d|D|f|F|R))?>")
+    private val PATTERN_TIMESTAMP: Pattern = Pattern.compile("^<t:(-?\\d{1,17})(?::(t|T|d|D|f|F|s|S|R))?>")
     private val PATTERN_URL: Pattern = Pattern.compile("^$REGEX_URL")
     private val PATTERN_CHANNEL_LINK: Pattern = Pattern.compile("^$REGEX_CHANNEL_LINK")
     private val PATTERN_USER_LINK: Pattern = Pattern.compile("^$REGEX_USER_LINK")

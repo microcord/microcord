@@ -410,6 +410,27 @@ class DiscordMarkdownRulesTest {
     fun timestampRuleAcceptsTheSuffixLessFormAndRejectsUnknownStyles() {
         assertNotNull(parse("<t:1600000000>").filterIsInstance<TimestampNode<*>>().singleOrNull())
         assertTrue(parse("<t:1600000000:z>").none { it is TimestampNode<*> })
+        assertNotNull(parse("<t:1600000000:s>").filterIsInstance<TimestampNode<*>>().singleOrNull())
+        assertNotNull(parse("<t:1600000000:S>").filterIsInstance<TimestampNode<*>>().singleOrNull())
+    }
+
+    @Test
+    fun relativeTimestampsPickTheUnitAsMomentDoes() {
+        val second = 1000L
+        val minute = 60 * second
+        val hour = 60 * minute
+        val day = 24 * hour
+        fun amount(millis: Long) = TimestampNode.relativeAmount(millis)
+        assertEquals(44L to TimestampNode.Companion.Unit.SECONDS, amount(44 * second))
+        assertEquals(1L to TimestampNode.Companion.Unit.MINUTES, amount(60 * second))
+        assertEquals(45L to TimestampNode.Companion.Unit.MINUTES, amount(45 * minute))
+        assertEquals(2L to TimestampNode.Companion.Unit.HOURS, amount(90 * minute))
+        assertEquals(1L to TimestampNode.Companion.Unit.DAYS, amount(22 * hour))
+        assertEquals(25L to TimestampNode.Companion.Unit.DAYS, amount(25 * day))
+        assertEquals(1L to TimestampNode.Companion.Unit.MONTHS, amount(26 * day))
+        assertEquals(3L to TimestampNode.Companion.Unit.MONTHS, amount(92 * day))
+        assertEquals(1L to TimestampNode.Companion.Unit.YEARS, amount(330 * day))
+        assertEquals(2L to TimestampNode.Companion.Unit.YEARS, amount(700 * day))
     }
 
     @Test

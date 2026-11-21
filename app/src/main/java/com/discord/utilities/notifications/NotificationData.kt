@@ -405,7 +405,7 @@ data class NotificationData(
 
         fun parsePushPayload(data: Map<String, String>): PushPayload = PushPayload.parse(data)
 
-        private val MARKUP = Regex("""<@!?(\d+)>|<@&(\d+)>|<#(\d+)>|<a?:(\w+):\d+>|<t:(-?\d{1,17})(?::[tTdDfFR])?>""")
+        private val MARKUP = Regex("""<@!?(\d+)>|<@&(\d+)>|<#(\d+)>|<a?:(\w+):\d+>|<t:(-?\d{1,17})(?::[tTdDfFsSR])?>""")
 
         /**
          * Message markup as people read it, since a system notification shows raw text: mentions
