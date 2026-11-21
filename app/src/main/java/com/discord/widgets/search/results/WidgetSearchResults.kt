@@ -49,6 +49,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
                     },
                     showUrlActions = { url -> WidgetUrlActions.launch(parentFragmentManager, url) },
                     closeSearch = ::closeForJump,
+                    revealSpoiler = viewModel::revealSpoiler,
                 ),
                 stickToBottom = false,
             ),
@@ -119,6 +120,7 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
         /** Long-press opens the usual message actions (copy text, copy link, ...) instead of jumping. */
         private val showActions: (Message, CharSequence) -> Unit = { _, _ -> },
         private val showUrlActions: (String) -> Unit = {},
+        private val revealSpoiler: (messageId: Long) -> Unit = {},
         private val closeSearch: (channelId: Long) -> Unit,
     ) : WidgetChatListAdapter.EventHandler {
 
@@ -128,6 +130,8 @@ class WidgetSearchResults : AppFragment(R.layout.widget_search_results) {
             StoreStream.getMessagesLoader().jumpToMessage(message.channelId, message.id)
             closeSearch(message.channelId)
         }
+
+        override fun onSearchSpoilerClicked(messageId: Long) = revealSpoiler(messageId)
 
         override fun onOldestMessageId(channelId: Long, oldestMessageId: Long) {
             this.oldestMessageId = oldestMessageId

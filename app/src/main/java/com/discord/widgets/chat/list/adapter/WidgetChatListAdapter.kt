@@ -564,6 +564,9 @@ class WidgetChatListAdapter @JvmOverloads constructor(
 
         fun onListClicked() = Unit
 
+        /** A spoiler-channel search hit, still covered, was tapped to show it. */
+        fun onSearchSpoilerClicked(messageId: Long) = Unit
+
         fun onMessageAuthorAvatarClicked(message: Message, guildId: Long) = Unit
 
         fun onMessageAuthorLongClicked(message: Message, guildId: Long?) = Unit

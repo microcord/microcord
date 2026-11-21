@@ -22,6 +22,7 @@ import com.discord.widgets.chat.list.model.ChatListRows
 import com.discord.widgets.search.SearchStore
 import com.discord.widgets.search.SearchStoreProvider
 import rx.Observable
+import rx.subjects.BehaviorSubject
 
 /**
  * Turns the search state into chat rows.
@@ -53,16 +54,21 @@ class WidgetSearchResultsViewModel(
         override val isSpoilerClickAllowed: Boolean = false
     }
 
+    /** Spoiler-channel hits tapped open here; the rest of their channel stays behind its gate. */
+    private val revealedSpoilers = BehaviorSubject.create(emptySet<Long>())
+
+    fun revealSpoiler(messageId: Long) = revealedSpoilers.onNext(revealedSpoilers.value + messageId)
+
     init {
-        searchStore.storeSearchQuery.state
-            .switchMap(::buildRows)
+        Observable.combineLatest(searchStore.storeSearchQuery.state, revealedSpoilers, ::Pair)
+            .switchMap { (state, revealed) -> buildRows(state, revealed) }
             .distinctUntilChanged()
             .computationLatest()
             .ui(this)
             .subscribe(::updateViewState)
     }
 
-    private fun buildRows(searchState: SearchState): Observable<ViewState> = Observable
+    private fun buildRows(searchState: SearchState, revealed: Set<Long>): Observable<ViewState> = Observable
         .combineLatest(
             StoreStream.getUsers().observeMe().map { it.id },
             StoreStream.getChannels().observeAllChannels(),
@@ -85,9 +91,9 @@ class WidgetSearchResultsViewModel(
 
                 hits.forEach { message ->
                     val channel = channels[message.channelId] ?: return@forEach
-                    // A hit from a channel still behind its spoiler gate names the channel but
-                    // withholds the message that matched.
-                    if (ChannelGating.isChannelSpoilerGated(channel)) {
+                    // A hit from a channel still behind its spoiler gate names the channel and
+                    // covers the message that matched until it is tapped.
+                    if (message.id !in revealed && ChannelGating.isChannelSpoilerGated(channel)) {
                         rows += SearchSpoilerResultEntry(channel.id, message.id)
                         return@forEach
                     }
