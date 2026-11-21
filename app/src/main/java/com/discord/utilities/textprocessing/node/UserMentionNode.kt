@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import com.discord.R
@@ -14,6 +12,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.feature.FeatureFlags
 import com.discord.utilities.spans.ClickableSpan
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * `<@id>` / `<@!id>` user mention plus the two broadcast mentions `@everyone` and `@here`.
@@ -45,7 +44,7 @@ class UserMentionNode<T : UserMentionNode.RenderContext>(
         builder.append(if (type == Type.HERE) HERE_MENTION else EVERYONE_MENTION)
         listOf(
             StyleSpan(Typeface.BOLD),
-            BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_background)),
+            TextBackgroundSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_background)),
             ForegroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_mention_foreground)),
         ).forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
     }
@@ -61,9 +60,9 @@ class UserMentionNode<T : UserMentionNode.RenderContext>(
         val displayName = if (isFetching) null else userNames?.get(userId) ?: cachedName
         val isKnownUser = displayName != null
 
-        val spans = mutableListOf<CharacterStyle>(
+        val spans = mutableListOf<Any>(
             StyleSpan(Typeface.BOLD),
-            BackgroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_background)),
+            TextBackgroundSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_background)),
         )
         val onClick = renderContext.userMentionOnClick
         spans += when {

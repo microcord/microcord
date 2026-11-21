@@ -10,7 +10,7 @@ import androidx.annotation.Px
  * changing the leading of the lines in between.
  */
 class VerticalPaddingSpan(
-    @Px private val paddingTop: Int,
+    @Px val paddingTop: Int,
     @Px val paddingBottom: Int,
 ) : LineHeightSpan {
 

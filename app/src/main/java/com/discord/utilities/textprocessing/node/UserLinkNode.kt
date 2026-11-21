@@ -3,14 +3,13 @@ package com.discord.utilities.textprocessing.node
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * A `discord.com/users/{id}` URL, rendered as an `@username` mention pill (RN parity).
@@ -46,9 +45,9 @@ class UserLinkNode<T : UserLinkNode.RenderContext>(
             LinkIconSpans.appendAvatarIcon(builder, context, avatarUrl, background)
         }
         builder.append(name)
-        val spans = listOf<CharacterStyle>(
+        val spans = listOf<Any>(
             StyleSpan(Typeface.BOLD),
-            BackgroundColorSpan(background),
+            TextBackgroundSpan(background),
             ClickableSpan(
                 foreground,
                 false,

@@ -2,12 +2,11 @@ package com.discord.utilities.textprocessing.node
 
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.CharacterStyle
 import com.discord.R
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * A CDN attachment URL (`cdn.discordapp.com/attachments/...`), rendered as the React Native
@@ -33,13 +32,13 @@ class AttachmentLinkNode<T : AttachmentLinkNode.RenderContext>(
             background,
         )
         builder.append(filename)
-        val spans = listOf<CharacterStyle>(
+        val spans = listOf<Any>(
             ClickableSpan(
                 foreground,
                 false,
                 onLongPress = { renderContext.onLongPressUrl(url) },
             ) { renderContext.onClickUrl(context, url, filename) },
-            BackgroundColorSpan(background),
+            TextBackgroundSpan(background),
         )
         spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
     }

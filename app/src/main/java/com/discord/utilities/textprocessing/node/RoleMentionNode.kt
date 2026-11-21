@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import androidx.core.graphics.ColorUtils
@@ -12,6 +11,7 @@ import com.discord.R
 import com.discord.api.role.GuildRole
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * `<@&id>` role mention.
@@ -52,7 +52,7 @@ class RoleMentionNode<T : RoleMentionNode.RenderContext>(
         listOf(
             StyleSpan(Typeface.BOLD),
             ForegroundColorSpan(foreground),
-            BackgroundColorSpan(background),
+            TextBackgroundSpan(background),
         ).forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
     }
 

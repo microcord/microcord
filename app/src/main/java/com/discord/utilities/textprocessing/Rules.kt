@@ -3,7 +3,6 @@ package com.discord.utilities.textprocessing
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
 import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
@@ -45,6 +44,7 @@ import com.discord.utilities.textprocessing.node.UserMentionNode
 import com.discord.utilities.textprocessing.node.UserLinkNode
 import java.util.regex.Matcher
 import java.util.regex.Pattern
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * The Discord flavoured markdown rule set layered on top of SimpleAST's generic markdown rules.
@@ -317,7 +317,7 @@ object Rules {
                         val start = builder.length
                         super.render(builder, renderContext)
                         builder.setSpan(
-                            BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_code)),
+                            TextBackgroundSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_code)),
                             start,
                             builder.length,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
@@ -333,7 +333,7 @@ object Rules {
         CodeRules.createInlineCodeRule(
             spanProvider { context -> listOf(codeTextAppearance(context), RelativeSizeSpan(CODE_TEXT_SCALE)) },
             spanProvider { renderContext ->
-                listOf(BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_code)))
+                listOf(TextBackgroundSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.theme_chat_code)))
             },
         )
 

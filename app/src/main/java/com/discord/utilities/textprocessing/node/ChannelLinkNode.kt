@@ -3,13 +3,12 @@ package com.discord.utilities.textprocessing.node
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.CharacterStyle
 import android.text.style.StyleSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * A `discord.com/channels/{guild|@me}/{channel}/{message?}` URL, rendered the way the React Native
@@ -81,14 +80,14 @@ class ChannelLinkNode<T : ChannelLinkNode.RenderContext>(
                 background,
             )
         }
-        val spans = listOf<CharacterStyle>(
+        val spans = listOf<Any>(
             StyleSpan(Typeface.BOLD),
             ClickableSpan(
                 foreground,
                 false,
                 onLongPress = { renderContext.onLongPressUrl(url) },
             ) { onClick(channelId, guildId, messageId) },
-            BackgroundColorSpan(background),
+            TextBackgroundSpan(background),
         )
         spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
     }

@@ -3,13 +3,13 @@ package com.discord.utilities.textprocessing.node
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.format.DateUtils
-import android.text.style.BackgroundColorSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
 import java.text.DateFormat
 import java.util.Date
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * `<t:seconds>` and `<t:seconds:style>` timestamps.
@@ -51,7 +51,7 @@ class TimestampNode<T : TimestampNode.RenderContext>(
     override fun render(builder: SpannableStringBuilder, renderContext: T) {
         val styles = listOf(
             ClickableSpan(null, false) { renderContext.onTimestampClicked(full) },
-            BackgroundColorSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.colorBackgroundModifierAccent)),
+            TextBackgroundSpan(ColorCompat.getThemedColor(renderContext.context, R.attr.colorBackgroundModifierAccent)),
         )
         val start = builder.length
         builder.append(formatted)

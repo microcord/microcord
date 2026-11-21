@@ -3,14 +3,13 @@ package com.discord.utilities.textprocessing.node
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import com.discord.R
 import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /** `<#id>` channel link. Falls back to `#deleted-channel` when the channel is not cached. */
 class ChannelMentionNode<T : ChannelMentionNode.RenderContext>(
@@ -27,7 +26,7 @@ class ChannelMentionNode<T : ChannelMentionNode.RenderContext>(
         val start = builder.length
         val channelName = renderContext.channelNames?.get(channelId) ?: DELETED_CHANNEL
 
-        val spans = mutableListOf<CharacterStyle>(StyleSpan(Typeface.BOLD))
+        val spans = mutableListOf<Any>(StyleSpan(Typeface.BOLD))
         val onClick = renderContext.channelMentionOnClick
         spans += if (onClick != null) {
             ClickableSpan(
@@ -37,7 +36,7 @@ class ChannelMentionNode<T : ChannelMentionNode.RenderContext>(
         } else {
             ForegroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_foreground))
         }
-        spans += BackgroundColorSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_background))
+        spans += TextBackgroundSpan(ColorCompat.getThemedColor(context, R.attr.theme_chat_mention_background))
 
         builder.append(CHANNEL_MENTION_PREFIX).append(channelName)
         spans.forEach { builder.setSpan(it, start, builder.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }

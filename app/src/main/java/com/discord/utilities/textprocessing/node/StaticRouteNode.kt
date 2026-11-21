@@ -3,7 +3,6 @@ package com.discord.utilities.textprocessing.node
 import android.graphics.Typeface
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import com.discord.R
@@ -11,6 +10,7 @@ import com.discord.simpleast.core.node.Node
 import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.spans.ClickableSpan
 import com.discord.widgets.guilds.onboarding.WidgetChannelsAndRoles
+import com.discord.utilities.textprocessing.spans.TextBackgroundSpan
 
 /**
  * `<id:route>` and `<id:route:itemId>`: a mention of one of the guild's built-in pages, as the RN
@@ -56,7 +56,7 @@ class StaticRouteNode<T : StaticRouteNode.RenderContext>(
         val guildId = renderContext.viewingGuildId
         val spans = listOf(
             StyleSpan(Typeface.BOLD),
-            BackgroundColorSpan(background),
+            TextBackgroundSpan(background),
             if ((route == "customize" || route == "browse") && guildId != 0L) {
                 ClickableSpan(foreground, false) { WidgetChannelsAndRoles.launch(context, guildId, browse = route == "browse") }
             } else {

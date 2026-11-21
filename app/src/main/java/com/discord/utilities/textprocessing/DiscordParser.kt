@@ -162,8 +162,9 @@ object DiscordParser {
         if (isEdited) {
             ast.add(EditedMessageNode(context))
         }
-        ast.add(ZeroSpaceWidthNode())
-        return AstRenderer.render(ast, messageRenderContext)
+        // Added after rendering, so the message's own trailing line break is trimmed before it
+        // rather than left above it as an empty last line.
+        return AstRenderer.render(ast, messageRenderContext).apply { append(ZeroSpaceWidthNode.ZERO_WIDTH_SPACE) }
     }
 
     /** Parses without rendering, for callers that only need the tree (tests, accessibility). */
