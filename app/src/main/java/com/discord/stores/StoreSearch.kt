@@ -181,9 +181,14 @@ class StoreSearch(
 
     internal fun asWidgetStore(): SearchStore = widgetStore
 
+    /**
+     * As RN asks: unless the account is known to be underage. 126.21 also wanted this device's guild
+     * NSFW gate agreed, but that agreement is local and often never recorded (another client, a
+     * reinstall), and without it the server leaves age-restricted channels out and answers an `in:`
+     * one with 403.
+     */
     private fun SearchTarget.includeNsfw(): Boolean =
-        storeUser.getMe().nsfwAllowance != NsfwAllowance.DISALLOWED &&
-            (type != SearchTarget.Type.GUILD || storeGuildsNsfw.isGuildNsfwGateAgreed(id))
+        storeUser.getMe().nsfwAllowance != NsfwAllowance.DISALLOWED
 
     @Synchronized
     private fun updateTarget(searchTarget: SearchTarget?) {
