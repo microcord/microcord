@@ -196,16 +196,13 @@ object ForumPostCreateManager {
         context: Context,
         channelId: Long,
         firstMessageId: Long,
-        content: String,
         attachments: List<UploadAttachment>,
-        onDone: () -> Unit,
+        onAdded: () -> Unit,
+        onFailed: () -> Unit,
     ) {
-        val message = RestAPIParams.Message(
-            content = content,
-            nonce = NonceGenerator.computeNonce().toString(),
-            stickerIds = emptyList(),
-        )
-        SendUtils.getSendPayload(context.contentResolver, message, attachments, inlineFileBodies = false)
+        // An edit carries only the new attachments: the post keeps its text, and the server refuses
+        // any edit that names stickers ("Cannot edit stickers in this message").
+        SendUtils.getSendPayload(context.contentResolver, RestAPIParams.Message(), attachments, inlineFileBodies = false)
             .filterIs<SendUtils.SendPayload.ReadyToSend>()
             .take(1)
             .flatMap { payload ->
@@ -220,8 +217,8 @@ object ForumPostCreateManager {
             .appSubscribe(
                 errorClass = ForumPostCreateManager::class.java,
                 context = context,
-                onTerminated = onDone,
-            ) { }
+                errorHandler = { onFailed() },
+            ) { onAdded() }
     }
 
     internal fun forumPostBody(

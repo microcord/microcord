@@ -39,8 +39,8 @@ import androidx.core.view.updateLayoutParams
 import androidx.core.widget.ImageViewCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
-import androidx.appcompat.app.AlertDialog
 import com.discord.R
+import com.discord.widgets.forums.WidgetAddMediaToOriginalPostSheet
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
 import com.discord.panels.PanelsChildGestureRegionObserver
@@ -1467,7 +1467,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
         if (uploads.any { it.mimeType.startsWith("image/") || it.mimeType.startsWith("video/") } &&
             shouldOfferMediaForOriginalPost(loaded)
         ) {
-            promptAddMediaToOriginalPost(loaded, content, uploads, attachments)
+            promptAddMediaToOriginalPost(loaded, uploads, attachments)
             return false
         }
         if (loaded.selectedThreadDraft != null && loaded.channel.isThreadOnlyChannel()) {
@@ -2107,49 +2107,50 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
 
     /**
      * A forum row takes its thumbnail from the post's opening message, so media sent afterwards
-     * never reaches the browser unless it is added there — which the reference offers the author.
+     * never reaches the browser unless it is added there. As RN's `shouldShowAddMediaToOriginalPostModal`:
+     * only to the post's owner, only before anyone has replied, and only while the post has no media.
      */
     private fun shouldOfferMediaForOriginalPost(
         loaded: ChatInputViewModel.ViewState.Loaded,
     ): Boolean {
         val channel = loaded.channel
         val parent = StoreStream.getChannels().getChannel(channel.parentId) ?: return false
-        if (!parent.isThreadOnlyChannel()) return false
+        if (!parent.isThreadOnlyChannel() || addMediaPromptShown) return false
+        if (channel.ownerId != StoreStream.getUsers().getMe().id || (channel.messageCount ?: 0) > 0) return false
         val first = StoreStream.getForumPostMessages().getForumPostFirstMessage(channel.id) ?: return false
-        return first.author?.id == StoreStream.getUsers().getMe().id &&
-            first.attachments.isNullOrEmpty() &&
-            !addMediaPromptShown
+        return first.attachments.orEmpty().none {
+            val type = it.contentType.orEmpty()
+            type.startsWith("image/") || type.startsWith("video/")
+        }
     }
 
     private fun promptAddMediaToOriginalPost(
         loaded: ChatInputViewModel.ViewState.Loaded,
-        content: String,
         uploads: List<UploadAttachment>,
         attachments: List<Attachment<*>>,
     ) {
         val first = StoreStream.getForumPostMessages().getForumPostFirstMessage(loaded.channel.id) ?: return
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.forum_add_media_to_original_post_title)
-            .setMessage(R.string.forum_add_media_to_original_post_description)
-            .setPositiveButton(R.string.forum_add_media_to_original_post_add) { _, _ ->
-                ForumPostCreateManager.addMediaToOriginalPost(
-                    requireContext(),
-                    loaded.channel.id,
-                    first.id,
-                    content,
-                    uploads,
-                ) {
-                    input?.setText("")
-                    (childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment)
-                        ?.clearAttachments()
+        WidgetAddMediaToOriginalPostSheet.show(
+            parentFragmentManager,
+            loaded.channel.id,
+            first.id,
+            uploads,
+            onAdded = {
+                // The media went onto the post; the text still goes out as the reply it was written
+                // as, through FlexInput so the composer empties as after any send.
+                val hasText = !input?.text.isNullOrBlank()
+                (childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment)?.run {
+                    clearAttachments()
+                    if (hasText) onSend()
                 }
-            }
-            .setNegativeButton(R.string.forum_add_media_to_original_post_dont_add) { _, _ ->
+            },
+            onDontAdd = {
                 addMediaPromptShown = true
-                submit(attachments)
-            }
-            .setNeutralButton(R.string.cancel, null)
-            .show()
+                // Through FlexInput, which empties the composer once the send is accepted.
+                (childFragmentManager.findFragmentById(R.id.chat_input_widget) as? FlexInputFragment)?.onSend()
+                    ?: submit(attachments)
+            },
+        )
     }
 
     private fun validationMessage(result: MessageResult): String = when (result) {
