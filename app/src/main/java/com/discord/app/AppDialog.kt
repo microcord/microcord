@@ -3,6 +3,7 @@ package com.discord.app
 import android.app.Dialog
 import android.os.Bundle
 import android.view.View
+import android.util.TypedValue
 import android.view.Window
 import androidx.annotation.CallSuper
 import androidx.annotation.LayoutRes
@@ -11,6 +12,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
 import com.discord.utilities.theme.ThemeRuntime
+import com.discord.utilities.theme.ThemeWallpaper
 import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
 import com.discord.utilities.view.text.TextWatcher
 import rx.subjects.PublishSubject
@@ -58,6 +60,16 @@ abstract class AppDialog : DialogFragment, AppComponent {
             applyReducedMotionAnimations()
         }
 
+    /**
+     * Frames the window as the app's dialogs are (width and side insets), as [WidgetNoticeDialog]
+     * does; without it a layout styled as a page fills the screen. Call from `onCreate`.
+     */
+    protected fun useDialogTheme() {
+        val value = TypedValue()
+        requireContext().theme.resolveAttribute(R.attr.dialogTheme, value, true)
+        setStyle(STYLE_NO_TITLE, value.resourceId)
+    }
+
     override fun onStart() {
         try {
             super.onStart()
@@ -71,6 +83,7 @@ abstract class AppDialog : DialogFragment, AppComponent {
         isRecreated = savedInstanceState != null
         drawUnderSystemBars(view)
         onViewBound(view)
+        ThemeWallpaper.decorateDialog(view)
         onViewBoundOrOnResume()
         onViewBoundOrOnResumeInvoked = true
         BounceEdgeEffectFactory.installAll(view)

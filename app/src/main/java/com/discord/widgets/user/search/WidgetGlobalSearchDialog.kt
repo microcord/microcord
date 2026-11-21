@@ -13,6 +13,7 @@ import com.discord.stores.StoreStream
 import com.discord.utilities.intent.DeepLinkRoute
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
+import com.discord.utilities.theme.ThemeWallpaper
 
 /**
  * Modal host for the quick switcher.
@@ -47,7 +48,7 @@ class WidgetGlobalSearchDialog : AppDialog(R.layout.widget_global_search_dialog)
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
             )
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setBackgroundDrawable(ThemeWallpaper.backdrop(resources) ?: ColorDrawable(Color.TRANSPARENT))
             // Resize for the keyboard and show it immediately: the switcher is a typing surface.
             setSoftInputMode(
                 WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or

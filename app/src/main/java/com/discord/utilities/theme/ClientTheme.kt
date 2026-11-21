@@ -111,7 +111,13 @@ sealed class ClientTheme {
             FLOATING.forEach { put(it, floating) }
             put("colorBackgroundNestedFloating", if (dark) hsl(mid, l = 0.12f, sScale = 0.5f) else hsl(mid, l = 0.925f, sScale = 0.8f))
             BARS.forEach { put(it, bar) }
-            put("colorBackgroundAccent", alpha(hsl(mid, lScale = 0.5f, sScale = if (dark) 1.2f else 0.2f), if (dark) 0.8f else 0.9f))
+            // Dark is a grayish tint at stock primary_500's lightness, as RN shows it: halving a dark
+            // gradient's own lightness made every accent pill (the wave button among them) near black.
+            put(
+                "colorBackgroundAccent",
+                if (dark) alpha(hsl(mid, l = 0.34f, sScale = 0.3f), 0.8f)
+                else alpha(hsl(mid, lScale = 0.5f, sScale = 0.2f), 0.9f),
+            )
             MODIFIERS.forEach { (name, a) -> put(name, ColorUtils.setAlphaComponent(modifier, a)) }
             put("colorInputBackground", alpha(BLACK, if (dark) 0.3f else 0.1f))
             put("colorInteractiveMuted", alpha(if (dark) WHITE else BLACK, 0.3f))

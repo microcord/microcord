@@ -11,10 +11,15 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.view.View
+import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import com.google.android.material.appbar.AppBarLayout
 import com.discord.R
+import com.discord.utilities.color.ColorCompat
 import com.discord.utilities.theme.ThemeDefinition.Transparency
 import java.io.File
 import kotlin.math.max
@@ -86,26 +91,62 @@ object ThemeWallpaper {
      * a sheet, so its see-through surfaces need the image of their own. Returns whether it did.
      */
     fun decorateSheet(sheet: View): Boolean {
-        if (mode != Transparency.FULL) return false
-        sheet.background = drawable(sheet.resources) ?: return false
+        sheet.background = backdrop(sheet.resources) ?: return false
         return true
     }
 
-    /** Puts the image behind the chat, or behind a settings page, as the mode asks. */
-    fun decorate(fragment: Fragment, view: View) {
-        when (mode) {
-            Transparency.CHAT, Transparency.CHAT_SETTINGS -> Unit
-            else -> return
+    /**
+     * Frames a dialog filled with the surface colour in [Transparency.FULL]. That colour is a dark
+     * shade of the gradient, which the dim over the app matches closely, so a square dialog melts
+     * into the screen; rounded and outlined, as RN's are, it reads as a dialog again. Dialogs
+     * painted anything else (a media viewer's black, a see-through peek) are left alone.
+     */
+    fun decorateDialog(content: View) {
+        if (mode != Transparency.FULL) return
+        val fill = (content.background as? ColorDrawable)?.color ?: return
+        if (fill != ColorCompat.getThemedColor(content.context, R.attr.colorBackgroundFloating)) return
+        val density = content.resources.displayMetrics.density
+        content.background = GradientDrawable().apply {
+            setColor(fill)
+            cornerRadius = DIALOG_CORNER_DP * density
+            setStroke(density.roundToInt().coerceAtLeast(1), ColorCompat.getThemedColor(content.context, R.attr.colorBackgroundModifierAccent))
         }
+        content.clipToOutline = true
+    }
+
+    /**
+     * The image for a full-screen window over the app in [Transparency.FULL], such as the quick
+     * switcher, whose see-through surfaces would otherwise show the screen under it; else `null`.
+     */
+    fun backdrop(resources: Resources): Drawable? = if (mode == Transparency.FULL) drawable(resources) else null
+
+    /**
+     * Puts the image behind the chat, or behind a settings page, as the mode asks. In
+     * [Transparency.FULL] the chat panel gets its own too: it slides over the channel list, which
+     * would show through it.
+     */
+    fun decorate(fragment: Fragment, view: View) {
+        if (mode == Transparency.NONE) return
+        // A bar lifted over see-through content casts its shadow through itself, which reads as a
+        // grey frame; the image is the backdrop here, so the bars stay flat.
+        if (mode == Transparency.FULL) flattenAppBars(view)
         val name = fragment.javaClass.simpleName
-        if (name == CHAT_FRAGMENT) {
-            val panel = generateSequence(view.parent as? View) { it.parent as? View }.firstOrNull { it.id == R.id.panel_center }
-                ?: return
+        if (name == HOME_FRAGMENT) {
+            val panel = view.findViewById<View>(R.id.panel_center) ?: return
             panel.background = drawable(view.resources) ?: return
             panel.findViewById<View>(R.id.widget_home_panel_center_chat)?.background = null
+        } else if (name == FORUM_FRAGMENT) {
+            // It stands in for the chat in the same panel, so it shows the image as the chat does
+            // rather than through its own darker page color.
+            view.background = null
         } else if (mode == Transparency.CHAT_SETTINGS && name.startsWith(SETTINGS_PREFIX)) {
             view.background = drawable(view.resources) ?: return
         }
+    }
+
+    private fun flattenAppBars(view: View) {
+        if (view is AppBarLayout) view.outlineProvider = null
+        if (view is ViewGroup) for (i in 0 until view.childCount) flattenAppBars(view.getChildAt(i))
     }
 
     private fun drawable(resources: Resources): Drawable? {
@@ -189,6 +230,8 @@ object ThemeWallpaper {
         override fun getOpacity() = PixelFormat.OPAQUE
     }
 
-    private const val CHAT_FRAGMENT = "WidgetChatList"
+    private const val DIALOG_CORNER_DP = 8f
+    private const val HOME_FRAGMENT = "WidgetHome"
+    private const val FORUM_FRAGMENT = "WidgetForumBrowser"
     private const val SETTINGS_PREFIX = "WidgetSettings"
 }
