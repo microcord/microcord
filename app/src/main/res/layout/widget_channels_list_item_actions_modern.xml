@@ -4,7 +4,7 @@
     <LinearLayout android:paddingBottom="24dp" style="@style/UiKit.ViewGroup.LinearLayout">
         <View android:layout_gravity="center_horizontal" android:layout_width="36dp" android:layout_height="4dp" android:layout_marginTop="8dp" android:background="@drawable/drawable_app_launcher_handle" android:importantForAccessibility="no"/>
         <LinearLayout android:orientation="horizontal" android:gravity="center_vertical" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="16dp">
-            <com.discord.views.VitoImageView android:id="@+id/channels_list_item_text_actions_icon" android:layout_width="64dp" android:layout_height="64dp" style="@style/Avatar.Large"/>
+            <com.discord.views.GuildView android:id="@+id/channels_list_item_text_actions_icon" app:gv_text_size="22sp" android:layout_width="64dp" android:layout_height="64dp" style="@style/Avatar.Large"/>
             <LinearLayout android:orientation="vertical" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="16dp">
                 <TextView android:id="@+id/channels_list_item_text_actions_title" android:textSize="20sp" android:ellipsize="end" android:singleLine="true" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.TextView.H1.Bold"/>
                 <TextView android:id="@+id/channels_list_item_text_actions_subtitle" android:visibility="gone" android:textSize="15sp" android:textColor="?attr/colorHeaderSecondary" android:ellipsize="end" android:singleLine="true" android:layout_width="match_parent" android:layout_height="wrap_content" style="@style/UiKit.TextView"/>

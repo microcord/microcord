@@ -178,10 +178,11 @@ class WidgetChannelsListItemChannelActions : AppBottomSheet() {
         // An empty container would otherwise keep its card on screen with nothing in it.
         binding.pluginContextMenuItems.isVisible = binding.pluginContextMenuItems.childCount > 0
 
+        // A server without an icon shows its initials, as the server list does, rather than nothing.
         if (model.guild != null) {
-            IconUtils.setIcon(binding.channelsListItemTextActionsIcon, model.guild)
+            binding.channelsListItemTextActionsIcon.configure(IconUtils.getForGuild(model.guild), model.guild.shortName)
         } else {
-            IconUtils.setIcon(binding.channelsListItemTextActionsIcon, channel)
+            binding.channelsListItemTextActionsIcon.configure(IconUtils.getForChannel(channel))
         }
         binding.channelsListItemTextActionsTitle.text = channel.getDisplayNameOrDefault(requireContext())
         // Like the modern client, a group names its size under the title; the legacy header has no subtitle.
