@@ -33,7 +33,10 @@ class ManageReactionsModelProvider(
         val reactions = StoreStream.getMessages()
             .observeMessagesForChannel(channelId, messageId)
             .map { message ->
-                message?.getReactionsMap()?.values.orEmpty().sortedByDescending(MessageReaction::count)
+                val reactions = message?.getReactionsMap()?.values.orEmpty()
+                // A tab per kind, super reactions first as the chips put them, each by its own count.
+                reactions.filter { it.burstCount > 0 }.sortedByDescending { it.burstCount }.map { Tab(it, burst = true) } +
+                    reactions.filter { it.normalCount > 0 }.sortedByDescending { it.normalCount }.map { Tab(it, burst = false) }
             }
         val guildMembers = observationDeck.connectRx(storeChannels, storeGuilds) {
             storeChannels.getChannel(channelId)?.guildId
@@ -58,7 +61,7 @@ class ManageReactionsModelProvider(
                 canManageMessages,
                 reactions,
                 guildMembers,
-            ) { canManage: Boolean, currentReactions: List<MessageReaction>, members: Map<Long, GuildMember> ->
+            ) { canManage: Boolean, currentReactions: List<Tab>, members: Map<Long, GuildMember> ->
                 Triple(canManage, currentReactions, members)
             }.switchMap { (canManage, currentReactions, members) ->
                 if (currentReactions.isEmpty()) {
@@ -66,12 +69,14 @@ class ManageReactionsModelProvider(
                 } else {
                     targetedEmojiKeySubject.distinctUntilChanged()
                         .map { key ->
-                            currentReactions.firstOrNull { it.emoji.reactionKey == key }?.emoji
-                                ?: currentReactions.first().emoji
+                            // A chip's key without the kind opens that emoji's first tab.
+                            currentReactions.firstOrNull { it.key == key }
+                                ?: currentReactions.firstOrNull { it.reaction.emoji.reactionKey == key }
+                                ?: currentReactions.first()
                         }
-                        .switchMap { emoji ->
-                            getUsersForReaction(emoji).map { results ->
-                                createModel(currentReactions, results, emoji, canManage, me.id, members)
+                        .switchMap { tab ->
+                            getUsersForReaction(tab).map { results ->
+                                createModel(currentReactions, results, tab, canManage, me.id, members)
                             }
                         }
                 }
@@ -83,13 +88,19 @@ class ManageReactionsModelProvider(
         targetedEmojiKeySubject.onNext(emojiKey)
     }
 
-    private fun getUsersForReaction(targetedEmoji: MessageReactionEmoji) =
-        StoreStream.getMessageReactions().observeMessageReactions(channelId, messageId, targetedEmoji)
+    /** One tab of the sheet: an emoji's normal reactions, or with [burst] its super reactions. */
+    data class Tab(val reaction: MessageReaction, val burst: Boolean) {
+        val key: String get() = ManageReactionsEmojisAdapter.ReactionEmojiItem.keyOf(reaction.emoji, burst)
+        val count: Int get() = if (burst) reaction.burstCount else reaction.normalCount
+    }
+
+    private fun getUsersForReaction(tab: Tab) =
+        StoreStream.getMessageReactions().observeMessageReactions(channelId, messageId, tab.reaction.emoji, burst = tab.burst)
 
     private fun createModel(
-        reactions: List<MessageReaction>,
+        reactions: List<Tab>,
         results: StoreMessageReactions.EmojiResults,
-        targetedEmoji: MessageReactionEmoji,
+        targeted: Tab,
         canManageMessages: Boolean,
         myId: Long,
         guildMembers: Map<Long, GuildMember>,
@@ -103,6 +114,7 @@ class ManageReactionsModelProvider(
                     results.emoji,
                     canManageMessages || user.id == myId,
                     guildMembers[user.id],
+                    targeted.burst,
                 )
             }
             StoreMessageReactions.EmojiResults.Loading ->
@@ -116,7 +128,7 @@ class ManageReactionsModelProvider(
             )
         }
         return ManageReactionsModel(
-            reactions.map { ManageReactionsEmojisAdapter.ReactionEmojiItem(it, it.emoji == targetedEmoji) },
+            reactions.map { ManageReactionsEmojisAdapter.ReactionEmojiItem(it.reaction, it.burst, it.count, it.key == targeted.key) },
             users,
         )
     }

@@ -1,5 +1,6 @@
 package com.discord.stores
 
+import com.discord.api.message.reaction.MessageReaction
 import com.discord.api.message.reaction.MessageReactionEmoji
 import com.discord.api.message.reaction.MessageReactionRemoveAll
 import com.discord.api.message.reaction.MessageReactionRemoveEmoji
@@ -77,6 +78,9 @@ class StoreMessageReactions @JvmOverloads constructor(
      */
     private val fetchQueue = ArrayDeque<QueuedFetch>()
     private val queuedKeys = HashSet<String>()
+
+    /** Request keys of user lists kept from before a reconnect, shown until they are fetched again. */
+    private val stale = HashSet<String>()
     private var queueBusy = false
 
     private data class QueuedFetch(
@@ -84,10 +88,12 @@ class StoreMessageReactions @JvmOverloads constructor(
         val channelId: Long,
         val messageId: Long,
         val emoji: MessageReactionEmoji,
+        val burst: Boolean,
     )
 
     /**
-     * The reacting users for one emoji, fetching them on first subscription.
+     * The reacting users for one emoji, fetching them on first subscription. With [burst], the
+     * ones who super reacted with it, which Discord lists apart from the normal reactions.
      *
      * Emits [EmojiResults.Loading] immediately so the sheet can render a spinner without a
      * separate "has a request started" flag. [queued] callers wait their turn in the background
@@ -98,10 +104,11 @@ class StoreMessageReactions @JvmOverloads constructor(
         messageId: Long,
         emoji: MessageReactionEmoji,
         queued: Boolean = false,
+        burst: Boolean = false,
     ): Observable<EmojiResults> {
-        dispatcher.schedule { fetchReactions(channelId, messageId, emoji, queued) }
+        dispatcher.schedule { fetchReactions(channelId, messageId, emoji, queued, burst) }
         return observationDeck.connectRx(this) {
-            reactionsSnapshot[messageId]?.get(emoji.reactionKey) ?: EmojiResults.Loading
+            reactionsSnapshot[messageId]?.get(listKey(emoji, burst)) ?: EmojiResults.Loading
         }.distinctUntilChanged()
     }
 
@@ -114,26 +121,29 @@ class StoreMessageReactions @JvmOverloads constructor(
         }
 
     /** Removes [userId]'s reaction. The store is updated by the resulting gateway event. */
-    fun deleteEmoji(channelId: Long, messageId: Long, emoji: MessageReactionEmoji, userId: Long) {
+    fun deleteEmoji(channelId: Long, messageId: Long, emoji: MessageReactionEmoji, userId: Long, burst: Boolean = false) {
         val restApi = api() ?: return
-        restApi.removeReaction(channelId, messageId, getReactionEmojiRequestParam(emoji), userId)
+        val type = if (burst) MessageReaction.TYPE_BURST else MessageReaction.TYPE_NORMAL
+        restApi.removeReaction(channelId, messageId, getReactionEmojiRequestParam(emoji), userId, type)
             .restSubscribeOn()
             .appSubscribe(errorClass = StoreMessageReactions::class.java) { }
     }
 
     /**
-     * Drops every cached user list on reconnect.
+     * Marks every cached user list stale on reconnect.
      *
-     * Reactions added while the socket was down are not replayed, so a cached list is stale in a
-     * way no incremental event can repair.
+     * Reactions added while the socket was down are not replayed, so each list is fetched again
+     * the next time it is looked at. Until the fresh one arrives the old one stays up: the people
+     * have usually not changed, and blanking every chip's avatars for a moment reads as a flicker.
      */
     @StoreThread
     fun handleConnectionOpen() {
         clearQueue()
-        if (reactions.isNotEmpty()) {
-            reactions.clear()
-            markChanged()
+        reactions.forEach { (messageId, lists) ->
+            lists.entries.removeAll { it.value !is EmojiResults.Users }
+            lists.keys.forEach { stale += "$messageId:$it" }
         }
+        markChanged()
     }
 
     /**
@@ -146,7 +156,7 @@ class StoreMessageReactions @JvmOverloads constructor(
     @StoreThread
     fun handleReactionAdd(update: MessageReactionUpdate) {
         val user = userStore.getUsersInternal()[update.userId] ?: return
-        val results = ensureReactionResults(update.messageId, update.emoji.reactionKey)
+        val results = ensureReactionResults(update.messageId, listKey(update.emoji, update.isBurst))
         if (results is EmojiResults.Users) {
             results.users[update.userId] = user
             markChanged()
@@ -155,7 +165,7 @@ class StoreMessageReactions @JvmOverloads constructor(
 
     @StoreThread
     fun handleReactionRemove(update: MessageReactionUpdate) {
-        val results = ensureReactionResults(update.messageId, update.emoji.reactionKey)
+        val results = ensureReactionResults(update.messageId, listKey(update.emoji, update.isBurst))
         if (results is EmojiResults.Users) {
             results.users.remove(update.userId)
             markChanged()
@@ -179,12 +189,14 @@ class StoreMessageReactions @JvmOverloads constructor(
     fun handleReactionRemoveEmoji(messageId: Long, emoji: MessageReactionEmoji) {
         ensureReactionResults(messageId, emoji.reactionKey)
         reactions[messageId]?.remove(emoji.reactionKey)
+        reactions[messageId]?.remove(listKey(emoji, burst = true))
         markChanged()
     }
 
     @StoreThread
     fun handlePreLogout() {
         clearQueue()
+        stale.clear()
         if (reactions.isNotEmpty()) {
             reactions.clear()
             markChanged()
@@ -201,21 +213,27 @@ class StoreMessageReactions @JvmOverloads constructor(
      * (often a rate limit) is repeated here; the sheet retries through [forceRetryFetchReactions].
      */
     @StoreThread
-    private fun fetchReactions(channelId: Long, messageId: Long, emoji: MessageReactionEmoji, queued: Boolean) {
-        val existing = ensureReactionResults(messageId, emoji.reactionKey)
-        if (existing is EmojiResults.Users && existing.users.isNotEmpty()) return
+    private fun fetchReactions(
+        channelId: Long,
+        messageId: Long,
+        emoji: MessageReactionEmoji,
+        queued: Boolean,
+        burst: Boolean = false,
+    ) {
+        val existing = ensureReactionResults(messageId, listKey(emoji, burst))
+        val requestKey = "$messageId:${listKey(emoji, burst)}"
+        if (existing is EmojiResults.Users && existing.users.isNotEmpty() && requestKey !in stale) return
         if (existing is EmojiResults.Failure) return
-        val requestKey = "$messageId:${emoji.reactionKey}"
         if (requestKey in fetching) return
         if (queued) {
             if (queuedKeys.add(requestKey)) {
-                fetchQueue.addFirst(QueuedFetch(requestKey, channelId, messageId, emoji))
+                fetchQueue.addFirst(QueuedFetch(requestKey, channelId, messageId, emoji, burst))
                 drainQueue()
             }
             return
         }
         queuedKeys -= requestKey
-        startFetch(requestKey, channelId, messageId, emoji) {}
+        startFetch(requestKey, channelId, messageId, emoji, burst) {}
     }
 
     @StoreThread
@@ -225,7 +243,7 @@ class StoreMessageReactions @JvmOverloads constructor(
             val next = fetchQueue.removeFirstOrNull() ?: return
             if (!queuedKeys.remove(next.key)) continue
             queueBusy = true
-            startFetch(next.key, next.channelId, next.messageId, next.emoji) {
+            startFetch(next.key, next.channelId, next.messageId, next.emoji, next.burst) {
                 Observable.timer(QUEUE_GAP_MS, TimeUnit.MILLISECONDS).subscribe {
                     dispatcher.schedule {
                         queueBusy = false
@@ -250,13 +268,23 @@ class StoreMessageReactions @JvmOverloads constructor(
         channelId: Long,
         messageId: Long,
         emoji: MessageReactionEmoji,
+        burst: Boolean,
         onTerminated: () -> Unit,
     ) {
         val restApi = api() ?: return onTerminated()
         fetching += requestKey
-        reactions[messageId]?.put(emoji.reactionKey, EmojiResults.Loading)
+        // A stale list keeps showing while its replacement loads.
+        if (reactions[messageId]?.get(listKey(emoji, burst)) !is EmojiResults.Users) {
+            reactions[messageId]?.put(listKey(emoji, burst), EmojiResults.Loading)
+        }
 
-        restApi.getReactionUsers(channelId, messageId, getReactionEmojiRequestParam(emoji), REACTION_USER_PAGE_SIZE)
+        restApi.getReactionUsers(
+            channelId,
+            messageId,
+            getReactionEmojiRequestParam(emoji),
+            REACTION_USER_PAGE_SIZE,
+            MessageReaction.TYPE_BURST.takeIf { burst },
+        )
             .restSubscribeOn()
             .appSubscribe(
                 errorClass = StoreMessageReactions::class.java,
@@ -264,14 +292,14 @@ class StoreMessageReactions @JvmOverloads constructor(
                 errorHandler = {
                     dispatcher.schedule {
                         fetching -= requestKey
-                        handleLoadReactionUsersFailure(channelId, messageId, emoji)
+                        handleLoadReactionUsersFailure(channelId, messageId, emoji, burst)
                     }
                 },
                 onNext = { apiUsers ->
                     val users = apiUsers.map(::CoreUser)
                     dispatcher.schedule {
                         fetching -= requestKey
-                        handleReactionUsers(channelId, messageId, emoji, users)
+                        handleReactionUsers(channelId, messageId, emoji, users, burst)
                     }
                 },
             )
@@ -282,9 +310,12 @@ class StoreMessageReactions @JvmOverloads constructor(
         channelId: Long,
         messageId: Long,
         emoji: MessageReactionEmoji,
+        burst: Boolean,
     ) {
-        ensureReactionResults(messageId, emoji.reactionKey)
-        reactions[messageId]?.put(emoji.reactionKey, EmojiResults.Failure(channelId, messageId, emoji))
+        val existing = ensureReactionResults(messageId, listKey(emoji, burst))
+        // A refresh that failed leaves the list it was refreshing; it is only stale, not wrong.
+        if (stale.remove("$messageId:${listKey(emoji, burst)}") && existing is EmojiResults.Users) return
+        reactions[messageId]?.put(listKey(emoji, burst), EmojiResults.Failure(channelId, messageId, emoji))
         markChanged()
     }
 
@@ -294,13 +325,19 @@ class StoreMessageReactions @JvmOverloads constructor(
         messageId: Long,
         emoji: MessageReactionEmoji,
         reactionUsers: List<User>,
+        burst: Boolean,
     ) {
-        ensureReactionResults(messageId, emoji.reactionKey)
+        ensureReactionResults(messageId, listKey(emoji, burst))
+        stale -= "$messageId:${listKey(emoji, burst)}"
         val users = LinkedHashMap<Long, User>()
         reactionUsers.forEach { users[it.id] = it }
-        reactions[messageId]?.put(emoji.reactionKey, EmojiResults.Users(users, channelId, messageId, emoji))
+        reactions[messageId]?.put(listKey(emoji, burst), EmojiResults.Users(users, channelId, messageId, emoji))
         markChanged()
     }
+
+    /** Super reactions are listed apart from normal ones, so each has its own entry. */
+    private fun listKey(emoji: MessageReactionEmoji, burst: Boolean): String =
+        if (burst) "${emoji.reactionKey}$BURST_SUFFIX" else emoji.reactionKey
 
     /** Reads the current entry, seeding [EmojiResults.Loading] if the emoji is not tracked yet. */
     @StoreThread
@@ -338,5 +375,7 @@ class StoreMessageReactions @JvmOverloads constructor(
 
         /** Vencord's pause between WhoReacted fetches. */
         const val QUEUE_GAP_MS = 250L
+
+        const val BURST_SUFFIX = "#burst"
     }
 }

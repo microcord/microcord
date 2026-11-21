@@ -412,8 +412,8 @@ class WidgetChatListAdapter @JvmOverloads constructor(
         )
     }
 
-    fun onReactionLongClicked(messageId: Long, reaction: MessageReaction) {
-        eventHandler.onReactionLongClicked(data.guildId, data.channelId, messageId, reaction)
+    fun onReactionLongClicked(messageId: Long, reaction: MessageReaction, burst: Boolean = false) {
+        eventHandler.onReactionLongClicked(data.guildId, data.channelId, messageId, reaction, burst)
     }
 
     fun onBotUiComponentClicked(
@@ -608,7 +608,14 @@ class WidgetChatListAdapter @JvmOverloads constructor(
             burst: Boolean = false,
         ) = Unit
 
-        fun onReactionLongClicked(guildId: Long, channelId: Long, messageId: Long, reaction: MessageReaction) = Unit
+        /** With [burst], the long press was on the emoji's super reaction chip. */
+        fun onReactionLongClicked(
+            guildId: Long,
+            channelId: Long,
+            messageId: Long,
+            reaction: MessageReaction,
+            burst: Boolean = false,
+        ) = Unit
 
         fun onReportIssueWithAutoMod(context: Context, message: Message) = Unit
 

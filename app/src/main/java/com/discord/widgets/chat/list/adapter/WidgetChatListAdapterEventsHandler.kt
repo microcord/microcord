@@ -298,7 +298,8 @@ class WidgetChatListAdapterEventsHandler(
         channelId: Long,
         messageId: Long,
         reaction: MessageReaction,
-    ) = WidgetManageReactions.show(fragmentManager, channelId, messageId, reaction)
+        burst: Boolean,
+    ) = WidgetManageReactions.show(fragmentManager, channelId, messageId, reaction, burst)
 
     override fun onReportIssueWithAutoMod(context: Context, message: Message) =
         WidgetReportIssueWithAutoMod.launch(context, message.channelId, message.id)

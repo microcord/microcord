@@ -115,7 +115,11 @@ class MessageRestContractTest {
 
         enqueueEmpty()
         api.removeReaction(42, 8, reaction, 9).toBlocking().subscribe()
-        assertRequest("DELETE", "/api/v9/channels/42/messages/8/reactions/$reaction/9")
+        assertRequest("DELETE", "/api/v9/channels/42/messages/8/reactions/$reaction/0/9")
+
+        enqueueEmpty()
+        api.removeReaction(42, 8, reaction, 9, type = 1).toBlocking().subscribe()
+        assertRequest("DELETE", "/api/v9/channels/42/messages/8/reactions/$reaction/1/9")
 
         enqueueEmpty()
         api.removeAllReactions(42, 8).toBlocking().subscribe()
@@ -145,6 +149,16 @@ class MessageRestContractTest {
 
         assertEquals(2, updates)
         assertTrue(failure is HttpException)
+    }
+
+    @Test
+    fun superReactionUsersAreAskedForByType() {
+        server.enqueue(MockResponse().setBody("[]"))
+
+        api.getReactionUsers(42, 8, "%F0%9F%91%8D", 25, 1).toBlocking().single()
+
+        val request = server.takeRequest()
+        assertEquals("/api/v9/channels/42/messages/8/reactions/%F0%9F%91%8D?limit=25&type=1", request.path)
     }
 
     @Test

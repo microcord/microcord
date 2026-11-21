@@ -54,6 +54,8 @@ class ManageReactionsResultsAdapter(recycler: RecyclerView) :
         val emoji: MessageReactionEmoji,
         val canDelete: Boolean,
         val guildMember: GuildMember?,
+        /** Listed under the emoji's super reactions, so removing it removes a super reaction. */
+        val burst: Boolean = false,
     ) : MGRecyclerDataPayload {
         override val key = user.id.toString()
         override val type = VIEW_TYPE_USER
@@ -110,6 +112,7 @@ class ManageReactionsResultsAdapter(recycler: RecyclerView) :
                     item.messageId,
                     item.emoji,
                     item.user.id,
+                    item.burst,
                 )
             }
         }

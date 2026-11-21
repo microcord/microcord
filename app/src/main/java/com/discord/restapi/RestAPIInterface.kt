@@ -1062,12 +1062,14 @@ interface RestAPIInterface {
         @Path("type") type: Int = 0,
     ): Observable<Void?>
 
-    @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/{userId}")
+    /** Someone else's reaction; their normal and super reactions are removed separately, by [type]. */
+    @DELETE("channels/{channelId}/messages/{messageId}/reactions/{reaction}/{type}/{userId}")
     fun removeReaction(
         @Path("channelId") channelId: Long,
         @Path("messageId") messageId: Long,
         @Path(value = "reaction", encoded = true) reaction: String,
         @Path("userId") userId: Long,
+        @Path("type") type: Int = 0,
     ): Observable<Void?>
 
     @DELETE("channels/{channelId}/messages/{messageId}/reactions")
@@ -1082,6 +1084,8 @@ interface RestAPIInterface {
         @Path("messageId") messageId: Long,
         @Path(value = "emoji", encoded = true) emoji: String,
         @Query("limit") limit: Int? = null,
+        /** `1` lists who super reacted; absent, the normal reactions. */
+        @Query("type") type: Int? = null,
     ): Observable<List<User>>
 
     // -- Search and followed channels --------------------------------------------------------------

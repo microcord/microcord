@@ -81,12 +81,17 @@ class WidgetManageReactions : AppBottomSheet() {
             channelId: Long,
             messageId: Long,
             targetedReaction: MessageReaction? = null,
+            /** Opens on [targetedReaction]'s super reactions rather than its normal ones. */
+            burst: Boolean = false,
         ) {
             WidgetManageReactions().apply {
                 arguments = Bundle().apply {
                     putLong(EXTRA_CHANNEL_ID, channelId)
                     putLong(EXTRA_MESSAGE_ID, messageId)
-                    putString(EXTRA_EMOJI_KEY, targetedReaction?.emoji?.reactionKey)
+                    putString(
+                        EXTRA_EMOJI_KEY,
+                        targetedReaction?.emoji?.let { ManageReactionsEmojisAdapter.ReactionEmojiItem.keyOf(it, burst) },
+                    )
                 }
             }.show(fragmentManager, WidgetManageReactions::class.java.name)
         }

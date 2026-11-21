@@ -161,7 +161,7 @@ class MessageReactionStoresTest {
         assertTrue(results.all { it is StoreMessageReactions.EmojiResults.Loading })
     }
 
-    /** A reconnect drops cached user lists: reactions added while offline are never replayed. */
+    /** A reconnect marks cached user lists stale: reactions added while offline are never replayed. */
     @Test
     fun connectionOpenClearsCachedUserLists() {
         val fixture = reactionsFixture()

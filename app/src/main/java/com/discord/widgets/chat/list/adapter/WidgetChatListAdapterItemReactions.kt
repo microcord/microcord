@@ -89,10 +89,9 @@ class WidgetChatListAdapterItemReactions(
         chips.forEachIndexed { index, (reaction, burst) ->
             val view = reactionView(index)
             view.setReactors(emptyList()) {}
-            // The user lists are of normal reactions; a super reaction's are not fetched.
-            if (burst) return@forEachIndexed
+            // A super reaction's people are listed apart from the normal reaction's.
             StoreStream.getMessageReactions()
-                .observeMessageReactions(message.channelId, message.id, reaction.emoji, queued = true)
+                .observeMessageReactions(message.channelId, message.id, reaction.emoji, queued = true, burst = burst)
                 .map { (it as? StoreMessageReactions.EmojiResults.Users)?.users?.values?.toList() }
                 .filter { it != null }
                 .distinctUntilChanged()
@@ -136,7 +135,7 @@ class WidgetChatListAdapterItemReactions(
                 adapter.onReactionClicked(messageId, reaction, canAddReactions, burst)
             }
             view.setOnLongClickListenerConsumeClick {
-                adapter.onReactionLongClicked(messageId, reaction)
+                adapter.onReactionLongClicked(messageId, reaction, burst)
             }
             view.configure(reaction, messageId, animateEmojis, burst)
         }
