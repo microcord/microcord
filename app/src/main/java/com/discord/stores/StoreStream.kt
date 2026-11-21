@@ -1,5 +1,9 @@
 package com.discord.stores
 
+import com.discord.api.channel.isPrivate
+import com.discord.app.AppLog
+import com.discord.api.channel.isStageVoiceChannel
+import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rest.ClientBackend
 import com.discord.utilities.feature.ClientPreferenceSnapshot
 import com.discord.utilities.feature.LocalSettingsSnapshot
@@ -1490,6 +1494,7 @@ class StoreStream private constructor(
             spotify.init(context)
             contactSync.init(context)
             mediaSettings.init()
+            observeCanUseVad()
             analytics.init(context)
             notifications.restore()
             applicationInteractions.init(context)
@@ -1812,6 +1817,28 @@ class StoreStream private constructor(
      * driven pagination cannot work at all — the audit's "infinite scroll is inert" finding.
      * Also installs the two seams that widgets left open for stores `StoreStream` did not publish.
      */
+    /**
+     * Whether the voice channel allows voice activity, as the reference's `StoreMediaSettings.init`
+     * works it out. Without it a channel that withholds Use Voice Activity let a voice-activity user
+     * talk anyway, where it is meant to keep them muted until they switch to push to talk. Private
+     * and stage channels always allow it.
+     */
+    private fun observeCanUseVad() {
+        voiceChannelSelected.observeSelectedVoiceChannelId()
+            .switchMap { channelId ->
+                channels.observeChannel(channelId).switchMap { channel ->
+                    if (channel == null || channel.isPrivate() || channel.isStageVoiceChannel()) {
+                        Observable.just(true)
+                    } else {
+                        permissions.observePermissionsForChannel(channelId)
+                            .map { PermissionUtils.can(Permission.USE_VAD, it) }
+                    }
+                }
+            }
+            .distinctUntilChanged()
+            .subscribe({ mediaSettings.handleCanUseVad(it) }, { AppLog.e("StoreStream", "can-use-VAD observation failed", it) })
+    }
+
     private fun installChatStoreWiring() {
         guildSelected.observeSelectedGuildId().distinctUntilChanged().subscribe { guildId ->
             dispatcher.schedule {
