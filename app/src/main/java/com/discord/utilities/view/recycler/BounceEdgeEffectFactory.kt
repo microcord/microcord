@@ -6,6 +6,7 @@ import android.util.Log
 import android.os.Build
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.HorizontalScrollView
 import android.widget.ScrollView
 import android.widget.EdgeEffect
@@ -29,6 +30,20 @@ import androidx.recyclerview.widget.RecyclerView
  */
 class BounceEdgeEffectFactory : RecyclerView.EdgeEffectFactory() {
 
+    /**
+     * The displacement the effects want, by axis. A list under an app bar is measured by
+     * `HeaderScrollingViewBehavior`, which zeroes its translation on every pass, so an update that
+     * relays the screen out mid-stretch snapped the list home for a frame; [restore] puts it back
+     * before the frame is drawn.
+     */
+    private var offsetX = 0f
+    private var offsetY = 0f
+
+    private fun restore(view: View) {
+        if (offsetX != 0f && view.translationX != offsetX) view.translationX = offsetX
+        if (offsetY != 0f && view.translationY != offsetY) view.translationY = offsetY
+    }
+
     override fun createEdgeEffect(view: RecyclerView, direction: Int): EdgeEffect =
         object : EdgeEffect(view.context) {
 
@@ -46,6 +61,17 @@ class BounceEdgeEffectFactory : RecyclerView.EdgeEffectFactory() {
                 spring = SpringForce(0f)
                     .setDampingRatio(DAMPING_RATIO)
                     .setStiffness(STIFFNESS)
+                addUpdateListener { _, value, _ -> remember(value) }
+                addEndListener { _, _, value, _ -> remember(value) }
+            }
+
+            private fun move(offset: Float) {
+                remember(offset)
+                property.setValue(view, offset)
+            }
+
+            private fun remember(offset: Float) {
+                if (horizontal) offsetX = offset else offsetY = offset
             }
 
             /**
@@ -74,7 +100,7 @@ class BounceEdgeEffectFactory : RecyclerView.EdgeEffectFactory() {
                 if (pulled == 0f) pulled = unband(abs(property.getValue(view)), size)
                 // The delta arrives as a fraction of the viewport; the curve works in pixels.
                 pulled = (pulled + deltaDistance * size).coerceAtLeast(0f)
-                property.setValue(view, sign * rubberBand(pulled, size))
+                move(sign * rubberBand(pulled, size))
             }
 
             override fun onRelease() {
@@ -188,8 +214,24 @@ class BounceEdgeEffectFactory : RecyclerView.EdgeEffectFactory() {
          * turn it off in XML to be rid of the platform glow — which silences this with it.
          */
         fun install(recyclerView: RecyclerView) {
+            if (recyclerView.edgeEffectFactory is BounceEdgeEffectFactory) return
             recyclerView.overScrollMode = RecyclerView.OVER_SCROLL_ALWAYS
-            recyclerView.edgeEffectFactory = BounceEdgeEffectFactory()
+            val factory = BounceEdgeEffectFactory()
+            recyclerView.edgeEffectFactory = factory
+            // Restored as soon as the list is laid out, before views anchored to it (the channel
+            // list's unreads bar) are placed from where it sits; and before every frame, since a
+            // re-measure that leaves the list's size alone resets it without laying it out or
+            // redrawing it. The frame hook is held only while the list is on screen.
+            recyclerView.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ -> factory.restore(view) }
+            val beforeFrame = ViewTreeObserver.OnPreDrawListener {
+                factory.restore(recyclerView)
+                true
+            }
+            recyclerView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(view: View) = view.viewTreeObserver.addOnPreDrawListener(beforeFrame)
+                override fun onViewDetachedFromWindow(view: View) = view.viewTreeObserver.removeOnPreDrawListener(beforeFrame)
+            })
+            if (recyclerView.isAttachedToWindow) recyclerView.viewTreeObserver.addOnPreDrawListener(beforeFrame)
         }
 
         /** Whether the platform's own overscroll is the stretch rather than the glow. */

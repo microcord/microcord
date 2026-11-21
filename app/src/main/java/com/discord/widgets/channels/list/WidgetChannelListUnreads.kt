@@ -55,6 +55,9 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
      */
     private var unreadsInitialized = false
 
+    /** The edge the bar is pinned to, or `null` before it has been pinned. */
+    private var pinnedAbove: Boolean? = null
+
     init {
         recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -144,6 +147,14 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
             ColorStateList.valueOf(foreground),
         )
 
+        // The bar duplicates information the rows already expose, so it is skipped by
+        // accessibility services rather than announced on every scroll.
+        binding.root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+
+        // Re-pinning relays the list's screen out, which mid-bounce lands the bar where the list is
+        // about to settle for a frame; it only has to happen when the bar changes edge.
+        if (pinnedAbove == isAbove) return
+        pinnedAbove = isAbove
         when (val params = binding.root.layoutParams) {
             is RelativeLayout.LayoutParams -> {
                 params.removeRuleCompat(if (isAbove) RelativeLayout.ALIGN_BOTTOM else RelativeLayout.ALIGN_TOP)
@@ -160,10 +171,6 @@ class WidgetChannelListUnreads @JvmOverloads constructor(
             }
             else -> error("Unread Layout Params unrecognized: ${params?.javaClass?.name}")
         }
-
-        // The bar duplicates information the rows already expose, so it is skipped by
-        // accessibility services rather than announced on every scroll.
-        binding.root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
     }
 
     private fun getText(indicator: Model.Indicator): Int =
