@@ -28,7 +28,7 @@ class WidgetSettingsBotUiKit : AppFragment(R.layout.widget_settings_bot_ui_kit) 
         setActionBarDisplayHomeAsUpEnabled()
         val binding = WidgetSettingsBotUiKitBinding.bind(view)
         binding.botUiKitTextDisplay.text = AstRenderer.render(
-            DiscordParser.parse("hello world! :eyes: **bold** `code` https://discord.com [google](https://google.com) ||spoiler|| <t:1755730638:t>"),
+            DiscordParser.parse(MARKDOWN_SAMPLE),
             MessageRenderContext(requireContext(), myId = 0L, isAnimationEnabled = false),
         )
         val selectionUpdates = mutableMapOf<String, (List<String>) -> Unit>()
@@ -135,3 +135,23 @@ class WidgetSettingsBotUiKit : AppFragment(R.layout.widget_settings_bot_ui_kit) 
             type,
         )
 }
+
+/**
+ * Every markdown shape the renderer has broken on before, in one place to look over before a
+ * release: headings first, mid-message and last, pills on tall and indented lines, a multi-line
+ * quote, a list, a code block, a spoiler.
+ */
+private const val MARKDOWN_SAMPLE = """# Head <#929470419696758785> and `code`
+hello world! :eyes: **bold** `code` https://discord.com [google](https://google.com) ||spoiler|| <t:1755730638:t>
+plain line with @everyone and <t:1755730638:R> `inline`
+<t:1795176274:t> <t:1795176274:T> <t:1795176274:d> <t:1795176274:D> <t:1795176274:f> <t:1795176274:F> <t:1795176274:s> <t:1795176274:S> <t:1795176274:R> <t:1795176274>
+## Mid heading <@287555395151593473>
+> quoted <#929470419696758785> mention `q code`
+> second quote line
+- list item `x` <@287555395151593473>
+- second item
+```kt
+val a = 1
+```
+||spoiler|| :eyes: **bold** [link](https://google.com)
+### End heading `tail`"""
