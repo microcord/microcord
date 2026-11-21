@@ -3,6 +3,7 @@ package com.discord.widgets.user.usersheet
 import android.content.Context
 import androidx.annotation.StringRes
 import com.discord.R
+import com.discord.widgets.settings.WidgetSettingsVoice
 import com.discord.api.channel.Channel
 import com.discord.api.application.Application
 import com.discord.api.game.Game
@@ -336,7 +337,7 @@ class WidgetUserSheetViewModel(
                 voiceSettingsViewState = UserProfileVoiceSettingsView.ViewState(
                     isMuted = storeState.muted,
                     isDeafened = storeState.selfDeafened.takeIf { isMe },
-                    outputVolume = storeState.outputVolume,
+                    outputVolume = WidgetSettingsVoice.amplitudeToPerceptual(storeState.outputVolume),
                 ),
                 channelVoiceState = channelVoiceState,
                 richPresence = storeState.richPresence,
@@ -711,8 +712,9 @@ class WidgetUserSheetViewModel(
         storeMediaSettings?.setSelfDeafen(isDeafened)
     }
 
+    /** [volume] is the slider's position; the engine is given the amplitude it stands for. */
     fun setUserOutputVolume(volume: Float) {
-        storeMediaSettings?.setUserOutputVolume(userId, volume)
+        storeMediaSettings?.setUserOutputVolume(userId, WidgetSettingsVoice.perceptualToAmplitude(volume))
     }
 
     fun setUserSuppressedInChannel(suppressed: Boolean) {

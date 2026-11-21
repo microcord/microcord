@@ -154,6 +154,11 @@ class VoiceTransport(
                 dispatcher.schedule {
                     storeRtcConnection.handleSelfMuted(configuration.isSelfMuted())
                     storeRtcConnection.handleSelfDeafened(configuration.isSelfDeafened)
+                    // Muting or turning down someone from their profile only takes effect once it
+                    // reaches the call, as the reference's `StoreRtcConnection.init` does.
+                    storeRtcConnection.handleUsersMuted(configuration.mutedUsers)
+                    storeRtcConnection.handleUsersVolume(configuration.userOutputVolumes)
+                    storeRtcConnection.handleUsersOffScreen(configuration.offScreenUsers)
                 }
             },
             { error -> AppLog.e(TAG, "failed to observe voice configuration", error) },
