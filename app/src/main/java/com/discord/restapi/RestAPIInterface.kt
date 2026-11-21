@@ -864,6 +864,13 @@ interface RestAPIInterface {
         @Body message: RestAPIParams.Message,
     ): Observable<Message>
 
+    @PATCH("channels/{channelId}/messages/{messageId}")
+    fun editMessageAttachments(
+        @Path("channelId") channelId: Long,
+        @Path("messageId") messageId: Long,
+        @Body attachments: RestAPIParams.MessageAttachments,
+    ): Observable<Message>
+
     // -- Channels --------------------------------------------------------------------------------
 
     @GET("channels/{channelId}")

@@ -274,6 +274,13 @@ class WidgetChatListActions : AppBottomSheet() {
             requestMediaDownload { UserDownloadManager.enqueueRefreshed(requireContext(), mediaUrl!!, null) }
             dismiss()
         }
+        // Only the author can edit attachments away, and the last thing in a message is removed by
+        // deleting the message instead, as desktop does.
+        val attachment = mediaUrl?.let { url -> message.attachments.orEmpty().firstOrNull { "/${it.id}/" in url } }
+        val keepsSomething = message.attachments.orEmpty().size > 1 || !message.content.isNullOrBlank()
+        bind(binding.dialogChatActionsRemoveAttachment, attachment != null && message.author?.id == model.me.id && keepsSomething) {
+            removeAttachment(message, attachment!!.id)
+        }
         bind(
             binding.dialogChatActionsCopy,
             !model.messageContent.isNullOrEmpty() && !message.isLocalApplicationCommand(),
@@ -476,6 +483,23 @@ class WidgetChatListActions : AppBottomSheet() {
             cancelText = getString(R.string.cancel),
             listenerMap = mapOf(R.id.notice_ok to { view ->
                 RestAPI.api.removeAllReactions(message.channelId, message.id).restSubscribeOn().ui(this)
+                    .appSubscribe(WidgetChatListActions::class.java, view.context) { dismiss() }
+            }),
+        )
+    }
+
+    private fun removeAttachment(message: Message, attachmentId: Long) {
+        val kept = message.attachments.orEmpty().filter { it.id != attachmentId }
+            .map { RestAPIParams.MessageAttachments.Kept(it.id.toString()) }
+        WidgetNoticeDialog.show(
+            fragmentManager = parentFragmentManager,
+            headerText = getString(R.string.remove_attachment_title),
+            bodyText = getString(R.string.remove_attachment_body),
+            okText = getString(R.string.remove_attachment_confirm),
+            cancelText = getString(R.string.cancel),
+            listenerMap = mapOf(R.id.notice_ok to { view ->
+                RestAPI.api.editMessageAttachments(message.channelId, message.id, RestAPIParams.MessageAttachments(kept))
+                    .restSubscribeOn().ui(this)
                     .appSubscribe(WidgetChatListActions::class.java, view.context) { dismiss() }
             }),
         )

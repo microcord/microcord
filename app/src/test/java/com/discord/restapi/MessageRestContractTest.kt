@@ -70,6 +70,19 @@ class MessageRestContractTest {
     }
 
     @Test
+    fun removingAnAttachmentPatchesOnlyTheKeptOnes() {
+        enqueueMessage()
+
+        api.editMessageAttachments(42, 8, RestAPIParams.MessageAttachments(listOf(RestAPIParams.MessageAttachments.Kept("7"))))
+            .toBlocking().single()
+
+        val request = server.takeRequest()
+        assertEquals("PATCH", request.method)
+        assertEquals("/api/v9/channels/42/messages/8", request.path)
+        assertEquals("{\"attachments\":[{\"id\":\"7\"}]}", request.body.readUtf8())
+    }
+
+    @Test
     fun pinsAndReactionsMatchPathsAndMethods() {
         server.enqueue(MockResponse().setBody("""{"items":[],"has_more":false}"""))
         api.getChannelPins(42).toBlocking().single()

@@ -638,6 +638,14 @@ object RestAPIParams {
         val version: String? = null,
     )
 
+    /**
+     * Body for editing which of a message's attachments it keeps: the ones listed stay, the rest are
+     * removed. Their ids are snowflakes, unlike the upload indexes [Message.Attachment] carries.
+     */
+    data class MessageAttachments(val attachments: List<Kept>) {
+        data class Kept(val id: String)
+    }
+
     data class Message(
         val content: String? = null,
         val nonce: String? = null,
