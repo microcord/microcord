@@ -124,8 +124,6 @@ class WidgetCallFullscreenViewModel constructor(
     private var mostRecentStoreState: StoreState? = null
     private var startedAsVideo: Boolean? = null
     private var storeObservableSubscription: Subscription? = null
-    private var wasEverConnected = false
-    private var wasEverMultiParticipant = false
 
     var showStageCallBottomSheet = channelId != selectedVoiceChannelStore.getSelectedVoiceChannelId()
 
@@ -264,8 +262,6 @@ class WidgetCallFullscreenViewModel constructor(
             eventSubject.onNext(Event.ShowNoVadPermissionDialog)
         }
 
-        wasEverMultiParticipant = wasEverMultiParticipant || callModel.numUsersConnected > 1
-        wasEverConnected = wasEverConnected || callModel.isConnected
         val allUsers = allVideoParticipants.filterIsInstance<CallParticipant.UserOrStreamParticipant>()
             .associateBy {
                 val prefix = if (it.participantData.type ==
@@ -388,17 +384,6 @@ class WidgetCallFullscreenViewModel constructor(
         videoPlayerIdleDetectorFooter.onPreventIdle()
         videoPlayerIdleDetectorHeader.onPreventIdle()
         selectedVoiceChannelStore.clear()
-        if (!wasEverConnected || wasEverMultiParticipant) {
-            val state = viewState as? ViewState.Valid ?: return
-            eventSubject.onNext(
-                Event.EnqueueCallFeedbackSheet(
-                    channelId,
-                    state.callModel.rtcConnectionMetadata?.rtcConnectionId,
-                    state.callModel.rtcConnectionMetadata?.mediaSessionId,
-                    state.callModel.getCallDurationMs(clock),
-                ),
-            )
-        }
     }
 
     @MainThread
@@ -1166,12 +1151,6 @@ class WidgetCallFullscreenViewModel constructor(
 
     sealed class Event {
         data class AccessibilityAnnouncement(@StringRes val messageResId: Int) : Event()
-        data class EnqueueCallFeedbackSheet(
-            val channelId: Long,
-            val rtcConnectionId: String?,
-            val mediaSessionId: String?,
-            val callDuration: Long,
-        ) : Event()
         data class EnqueueStreamFeedbackSheet(
             val streamKey: String,
             val mediaSessionId: String?,

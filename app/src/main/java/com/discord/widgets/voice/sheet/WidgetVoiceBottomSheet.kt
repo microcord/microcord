@@ -461,13 +461,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 event.guildScheduledEvent.guildId,
                 event.guildScheduledEvent.id,
             )
-            is WidgetVoiceBottomSheetViewModel.Event.EnqueueCallFeedbackSheet ->
-                Navigation.enqueueCallFeedback(
-                    event.channelId,
-                    event.rtcConnectionId,
-                    event.mediaSessionId,
-                    event.callDurationMs,
-                )
             is WidgetVoiceBottomSheetViewModel.Event.LaunchVideoCall -> {
                 // Stop rendering before handing off, or the sheet keeps reacting to state it is
                 // about to stop owning.
@@ -525,15 +518,6 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         if (dismissRequested || !isAdded || dialog?.isShowing != true) return
         dismissRequested = true
         dismiss()
-    }
-
-    /**
-     * Remaining destinations whose reference classes do not exist in the target yet.
-     */
-    object Navigation {
-        @JvmField
-        var enqueueCallFeedback: (Long, String?, String?, Long?) -> Unit = { _, _, _, _ -> }
-
     }
 
     companion object {

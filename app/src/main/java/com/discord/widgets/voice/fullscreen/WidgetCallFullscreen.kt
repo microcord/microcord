@@ -43,7 +43,6 @@ import com.discord.widgets.stage.sheet.WidgetStageRaisedHandsBottomSheet
 import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
 import com.discord.widgets.user.usersheet.WidgetUserSheet
 import com.discord.widgets.voice.controls.VoiceControlsSheetView
-import com.discord.widgets.voice.feedback.call.CallFeedbackSheetNavigator
 import com.discord.widgets.voice.feedback.stream.StreamFeedbackSheetNavigator
 import com.discord.widgets.voice.fullscreen.grid.VideoCallGridAdapter
 import com.discord.widgets.voice.fullscreen.grid.VideoCallGridLayoutManager
@@ -509,13 +508,6 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         when (event) {
             is WidgetCallFullscreenViewModel.Event.AccessibilityAnnouncement ->
                 root.announceForAccessibility(getString(event.messageResId))
-            is WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet ->
-                CallFeedbackSheetNavigator.enqueueNotice(
-                    event.channelId,
-                    event.rtcConnectionId,
-                    event.mediaSessionId,
-                    event.callDuration,
-                )
             is WidgetCallFullscreenViewModel.Event.EnqueueStreamFeedbackSheet ->
                 StreamFeedbackSheetNavigator.enqueueNotice(
                     event.streamKey,

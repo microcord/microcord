@@ -69,10 +69,6 @@ class WidgetCallFullscreenViewModelTest {
             ),
             WidgetCallFullscreenViewModel.MenuItem.values().map { it.name },
         )
-        assertEquals(
-            WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet(1L, "rtc", "media", 2L),
-            WidgetCallFullscreenViewModel.Event.EnqueueCallFeedbackSheet(1L, "rtc", "media", 2L),
-        )
     }
 
     private fun viewState(

@@ -13,7 +13,6 @@ import com.discord.api.guildscheduledevent.GuildScheduledEventStatus
 import com.discord.api.permission.Permission
 import com.discord.app.AppViewModel
 import com.discord.models.domain.ModelApplicationStream
-import com.discord.rtcconnection.RtcConnection
 import com.discord.stores.StoreApplicationStreamPreviews
 import com.discord.stores.StoreCalls
 import com.discord.stores.StoreMediaSettings
@@ -27,8 +26,6 @@ import com.discord.tooltips.TooltipManager
 import com.discord.utilities.permissions.PermissionUtils
 import com.discord.utilities.rx.computationLatest
 import com.discord.utilities.rx.ui
-import com.discord.utilities.time.Clock
-import com.discord.utilities.time.ClockFactory
 import com.discord.utilities.voice.VoiceChannelJoinability
 import com.discord.widgets.voice.VoiceStoreAccess
 import com.discord.widgets.voice.fullscreen.ParticipantsListItemGenerator
@@ -59,7 +56,6 @@ class WidgetVoiceBottomSheetViewModel(
     private val callsStore: StoreCalls = StoreStream.getCalls(),
     private val storeApplicationStreamPreviews: StoreApplicationStreamPreviews =
         StoreStream.getApplicationStreamPreviews(),
-    private val clock: Clock = ClockFactory.get(),
     private val tooltipManager: TooltipManager =
         TooltipManager.Provider.get(FloatingViewManager.Provider.get()),
     storeStateObservable: Observable<StoreState> = observeStoreState(channelId),
@@ -77,8 +73,6 @@ class WidgetVoiceBottomSheetViewModel(
      * The call-feedback sheet is only worth showing for a call that actually happened, or for a
      * connection attempt that never succeeded.
      */
-    private var wasEverConnected = false
-    private var wasEverMultiParticipant = false
     private var wasConnected: Boolean? = null
 
     init {
@@ -133,13 +127,6 @@ class WidgetVoiceBottomSheetViewModel(
         data class ShowToast(@StringRes val toastResId: Int) : Event()
         data class ShowEventEnd(val guildScheduledEvent: GuildScheduledEvent) : Event()
         data class AccessibilityAnnouncement(@StringRes val announcementResId: Int) : Event()
-
-        data class EnqueueCallFeedbackSheet(
-            val channelId: Long,
-            val rtcConnectionId: String?,
-            val mediaSessionId: String?,
-            val callDurationMs: Long,
-        ) : Event()
     }
 
     fun observeEvents(): Observable<Event> = eventSubject
@@ -182,8 +169,6 @@ class WidgetVoiceBottomSheetViewModel(
         }
 
         val isConnected = callModel.isConnected
-        wasEverConnected = wasEverConnected || isConnected
-        wasEverMultiParticipant = wasEverMultiParticipant || callModel.numUsersConnected > 1
 
         // Only announce suppression on the transition into the call, not on every rebind.
         if (wasConnected == false && isConnected && callModel.isSuppressed) {
@@ -374,19 +359,6 @@ class WidgetVoiceBottomSheetViewModel(
     fun onDisconnect() {
         selectedVoiceChannelStore.clear()
         eventSubject.onNext(Event.Dismiss)
-        val valid = mostRecentStoreState as? StoreState.Valid ?: return
-        // Feedback is worth collecting for a real call, or for one that never connected at all.
-        if (!wasEverConnected || wasEverMultiParticipant) {
-            val metadata: RtcConnection.Metadata? = valid.callModel.rtcConnectionMetadata
-            eventSubject.onNext(
-                Event.EnqueueCallFeedbackSheet(
-                    channelId = channelId,
-                    rtcConnectionId = metadata?.rtcConnectionId,
-                    mediaSessionId = metadata?.mediaSessionId,
-                    callDurationMs = valid.callModel.getCallDurationMs(clock),
-                ),
-            )
-        }
     }
 
     @MainThread
