@@ -43,9 +43,12 @@ class QuoteSpan(
         val spanned = text as? Spanned ?: return
         val spanStart = spanned.getSpanStart(this)
         val spanEnd = spanned.getSpanEnd(this)
-        // Android includes the paragraph newline/touch sentinel in `end`, even when the
-        // quote span ends before it. Draw on the containing line, not an exact-end match.
-        if (spanStart >= 0 && spanEnd > start && spanEnd <= end) {
+        if (spanStart < 0 || spanEnd <= spanStart) return
+        // One stripe down the whole quote, drawn when its last line is. Which line that is comes
+        // from the layout: the line range handed in here may or may not include the quote's own
+        // closing newline, so matching the span's end against it missed the stripe entirely.
+        val lastLine = layout.getLineForOffset(maxOf(spanStart, spanEnd - 1))
+        if (layout.getLineForOffset(start) == lastLine) {
             val edge = x + dir * stripeWidth
             rect.set(
                 minOf(x, edge).toFloat(),

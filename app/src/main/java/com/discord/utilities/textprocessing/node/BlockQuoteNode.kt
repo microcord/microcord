@@ -22,15 +22,26 @@ class BlockQuoteNode<T : BasicRenderContext> : Node<T>() {
         val context = renderContext.context
         val separatorHeight = dpToPixels(context, SEPARATOR_DP)
 
-        builder.append('\n')
-        builder.setSpan(
-            AbsoluteSizeSpan(separatorHeight),
-            builder.length - 1,
-            builder.length,
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-        )
-
-        val start = builder.length
+        // Consecutive `>` lines are one quote, as Discord draws them: the previous line's quote is
+        // reopened (its closing separator dropped) rather than a second one starting after it.
+        val previous = builder.takeIf { it.endsWith('\n') }
+            ?.getSpans(builder.length - 1, builder.length - 1, QuoteSpan::class.java)
+            ?.firstOrNull { builder.getSpanEnd(it) == builder.length - 1 }
+        val start = if (previous != null) {
+            val previousStart = builder.getSpanStart(previous)
+            builder.removeSpan(previous)
+            builder.delete(builder.length - 1, builder.length)
+            previousStart
+        } else {
+            builder.append('\n')
+            builder.setSpan(
+                AbsoluteSizeSpan(separatorHeight),
+                builder.length - 1,
+                builder.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            builder.length
+        }
         getChildren()?.forEach { it.render(builder, renderContext) }
         if (builder.length == start) {
             // An empty quote still needs a character to hang the stripe on.
