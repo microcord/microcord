@@ -13,6 +13,11 @@ data class ChannelListItemStageVoiceChannel(
     val hasSpeakers: Boolean,
     val isGuildRoleSubscriptionLockedChannel: Boolean,
     val isGuildRoleSubscriptionChannel: Boolean,
+    /**
+     * The stage's own chat is open. Not in the reference, whose stages had no chat; [selected] stays
+     * "connected", as a voice row's `voiceSelected` does.
+     */
+    val textSelected: Boolean = false,
 ) : ChannelListItem, ChannelListVocalItem {
     override val type: Int = ChannelListItem.TYPE_CHANNEL_STAGE_VOICE
     override val key: String = "$type${channel.id}"

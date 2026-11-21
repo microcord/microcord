@@ -7,7 +7,6 @@ import com.discord.api.channel.isGuildVocalChannel
 import com.discord.api.channel.isPrivate
 import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.permission.Permission
-import com.discord.api.stageinstance.StageInstancePrivacyLevel
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppComponent
 import com.discord.app.AppFragment
@@ -84,40 +83,27 @@ object VoiceUtils {
                 appComponent = appComponent,
                 fragmentManager = fragmentManager,
             )
-            channel.isStageVoiceChannel() -> handleStageChannel(channel, context, fragmentManager)
+            // A stage, like voice, opens the pre-join sheet first, as on RN, so nobody lands in a
+            // stage without seeing who is there; the sheet's Join button comes back to [joinStage].
             else -> showControls(channel, context, fragmentManager)
         }
     }
 
     /**
-     * A stage channel is not simply joined: what a tap means depends on whether a stage is running
-     * and on whether the user could start one.
+     * Joins a stage, or offers a moderator the start menu when nothing is running yet instead of
+     * dropping them into an empty room.
      *
      * The reference keeps this in `utilities/stage/StageChannelUtils.connectToStageChannel`, which
-     * this project has not reconstructed; the branch structure is the same.
+     * this project has not reconstructed. No screening check here: the sheet that calls this was
+     * opened through [handleCallChannel], which has already interposed the gate.
      */
-    private fun handleStageChannel(
-        channel: Channel,
-        context: Context,
-        fragmentManager: FragmentManager,
-    ) {
-        val stageInstance = StoreStream.getStageInstances().getStageInstanceForChannel(channel.id)
+    fun joinStage(channel: Channel, context: Context, fragmentManager: FragmentManager) {
+        val stageNotStarted = StoreStream.getStageInstances().getStageInstanceForChannel(channel.id) == null
         val myPermissions = StoreStream.getPermissions().getPermissionsByChannel()[channel.id]
-
-        when {
-            // A public stage is open to anyone, so there is nothing to gate on.
-            stageInstance != null && stageInstance.privacyLevel == StageInstancePrivacyLevel.PUBLIC ->
-                StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id)
-
-            // Nothing is running and this user could start it, so offer the start menu instead of
-            // dropping them into an empty room.
-            stageInstance == null &&
-                PermissionUtils.can(Permission.MODERATE_STAGE_CHANNEL, myPermissions) ->
-                WidgetModeratorStartStage.launch(context, channel.id, channel.guildId)
-
-            // No screening check here: the only caller is [handleCallChannel], which has already
-            // interposed the gate for every channel kind.
-            else -> StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id)
+        if (stageNotStarted && PermissionUtils.can(Permission.MODERATE_STAGE_CHANNEL, myPermissions)) {
+            WidgetModeratorStartStage.launch(context, channel.id, channel.guildId)
+        } else {
+            StageChannelJoinHelper.connectToStage(context, fragmentManager, channel.id)
         }
     }
 

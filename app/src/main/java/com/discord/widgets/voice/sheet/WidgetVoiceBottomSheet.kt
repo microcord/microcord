@@ -15,6 +15,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
+import com.discord.api.channel.isStageVoiceChannel
+import com.discord.widgets.voice.VoiceUtils
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
@@ -270,7 +272,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     }
 
     private fun openTextInVoice(channel: Channel) {
-        ChannelSelector.getInstance().selectChannel(
+        ChannelSelector.getInstance().openVocalChannelChat(
             channel,
             analyticsLocation = SelectedChannelAnalyticsLocation.TEXT_IN_VOICE,
         )
@@ -304,6 +306,10 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             }
             is CenterContent.Empty -> {
                 emptyView.visibility = View.VISIBLE
+                emptyView.findViewById<TextView>(R.id.voice_bottom_sheet_empty_body).setText(
+                    if (channel.isStageVoiceChannel()) R.string.stage_channel_empty_body_mobile
+                    else R.string.guild_voice_channel_empty_body_mobile,
+                )
                 // Event and activity cards can still be present with nobody connected.
                 recycler.visibility =
                     if (centerContent.items.isNotEmpty()) View.VISIBLE else View.GONE
@@ -356,13 +362,26 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 controls.hidePtt()
                 connectContainer.visibility = View.VISIBLE
 
+                val isStage = channel.isStageVoiceChannel()
                 connectButton.setText(
-                    if (bottomContent.isConnectEnabled) R.string.join_voice
-                    else R.string.channel_locked_short,
+                    when {
+                        !bottomContent.isConnectEnabled -> R.string.channel_locked_short
+                        isStage -> R.string.stage_channel_join_stage
+                        else -> R.string.join_voice
+                    },
                 )
                 connectButton.isEnabled = bottomContent.isConnectEnabled
                 connectButton.setOnClickListener {
-                    requestMicrophone(null) { viewModel.tryConnectToVoice(false) }
+                    if (isStage) {
+                        // Starting or joining a stage has its own screen, so the sheet goes now.
+                        // Left behind, it resumed when that screen closed (e.g. for the stage
+                        // chat), saw the stage connected and launched the stage screen again.
+                        VoiceUtils.joinStage(channel, requireContext(), parentFragmentManager)
+                        viewModelEventSubscription?.unsubscribe()
+                        dismissSheet()
+                    } else {
+                        requestMicrophone(null) { viewModel.tryConnectToVoice(false) }
+                    }
                 }
 
                 root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))

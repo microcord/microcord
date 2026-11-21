@@ -5,6 +5,7 @@ import com.discord.api.channel.Channel
 import com.discord.api.channel.getSortByNameAndType
 import com.discord.api.channel.isGuildTextyChannel
 import com.discord.api.channel.isTextOrVoiceChannel
+import com.discord.api.channel.isStageVoiceChannel
 import com.discord.api.channel.isVoiceChannel
 import com.discord.models.domain.ModelPayload
 import com.discord.stores.updates.ObservationDeck
@@ -450,7 +451,8 @@ class StoreChannelsSelected(
      */
     private fun isValidResolution(channel: Channel, guildId: Long, permissions: Map<Long, Long>): Boolean =
         channel.guildId == guildId &&
-            channel.isTextOrVoiceChannel() &&
+            // A stage has a chat of its own, read without being on stage.
+            (channel.isTextOrVoiceChannel() || channel.isStageVoiceChannel()) &&
             PermissionUtils.hasAccess(channel, permissions)
 
     /** The channel a guild falls back to: the first visible message-bearing channel in sidebar order. */

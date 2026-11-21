@@ -24,7 +24,6 @@ import com.discord.views.NumericBadgingView
 import com.discord.views.calls.VolumeSliderView
 import com.discord.widgets.stage.StageRoles
 import com.discord.widgets.voice.model.CallModel
-import com.google.android.material.textview.MaterialTextView
 import kotlin.math.roundToInt
 
 class VoiceControlsSheetView @JvmOverloads constructor(
@@ -39,8 +38,9 @@ class VoiceControlsSheetView @JvmOverloads constructor(
     private val moveToAudienceButton: ImageView
     private val raiseHandBadge: NumericBadgingView
     private val raiseHandButton: ImageView
+    private val requestToSpeakButton: ImageView
+    private val stageChatButton: ImageView
     private val muteButton: ImageView
-    private val stageDisconnectButton: MaterialTextView
     private val stopWatchingButton: ImageView
     private val disconnectButton: ImageView
     private val pushToTalkButton: Button
@@ -69,8 +69,9 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         moveToAudienceButton = requireNotNull(findViewById(R.id.move_to_audience_button))
         raiseHandBadge = requireNotNull(findViewById(R.id.raise_hand_badge))
         raiseHandButton = requireNotNull(findViewById(R.id.raise_hand_button))
+        requestToSpeakButton = requireNotNull(findViewById(R.id.request_to_speak_button))
+        stageChatButton = requireNotNull(findViewById(R.id.stage_chat_button))
         muteButton = requireNotNull(findViewById(R.id.mute_button))
-        stageDisconnectButton = requireNotNull(findViewById(R.id.stage_disconnect_button_large))
         stopWatchingButton = requireNotNull(findViewById(R.id.stop_watching_button))
         disconnectButton = requireNotNull(findViewById(R.id.disconnect_button))
         pushToTalkButton = requireNotNull(findViewById(R.id.push_to_talk_button))
@@ -114,7 +115,9 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         onStreamVolumeChange: (Float, Boolean) -> Unit,
         onDeafenPressed: () -> Unit,
         requestingToSpeakCount: Int,
+        /** Opens a moderator's list of raised hands. */
         onRaiseHandClick: () -> Unit,
+        onRequestToSpeakClick: () -> Unit,
         onMoveToAudienceClick: () -> Unit,
         isUpdatingRequestToSpeak: Boolean,
         stageRoles: StageRoles?,
@@ -128,24 +131,28 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         stopWatchingButton.showCircle(isStreamFocused)
         stopWatchingButton.setOnClickListener { onStopWatchingClick() }
 
-        // Two different notions of "stage" and the reference uses each deliberately.
-        // The disconnect chrome keys off whether the user *has* stage roles, because an audience
-        // member leaves through a different affordance than a speaker. Everything else keys off
-        // the channel type, so the control set stays correct even while roles are still resolving.
+        // The disconnect icon keys off whether the user *has* stage roles; everything else keys
+        // off the channel type, so the control set stays correct while roles are still resolving.
         val hasStageRoles = stageRoles != null
         val isStage = model.channel.isStageVoiceChannel()
-        val audience = hasStageRoles && stageRoles?.isSpeaker == false
-        disconnectButton.showCircle(showDisconnect && !audience)
-        stageDisconnectButton.show(showDisconnect && audience)
+        // The audience leaves through the same round button as everyone else. The reference's wide
+        // pill (stage_disconnect_button_large, left gone) sat outside the row's even split and
+        // pushed the raise-hand button off centre.
+        disconnectButton.showCircle(showDisconnect)
         disconnectButton.setImageResource(
             if (hasStageRoles) R.drawable.ic_stage_leave_20dp else R.drawable.ic_call_disconnect_24dp,
         )
         disconnectButton.setOnClickListener { onDisconnectClick() }
-        stageDisconnectButton.setOnClickListener { onDisconnectClick() }
         pushToTalkButton.show(isPushToTalk && (!hasStageRoles || stageRoles?.isSpeaker == true))
 
+        // RN's stage bar groups its buttons in the middle and carries the chat.
+        groupControls(isStage)
+        stageChatButton.showCircle(isStage)
+        stageChatButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(false))
+        stageChatButton.setOnClickListener { onChatClick() }
+
         configureMoveToAudience(stageRoles, onMoveToAudienceClick)
-        configureRaiseHand(model, stageRoles, requestingToSpeakCount, isUpdatingRequestToSpeak, onRaiseHandClick)
+        configureRaiseHand(model, stageRoles, requestingToSpeakCount, isUpdatingRequestToSpeak, onRaiseHandClick, onRequestToSpeakClick)
         configureMute(model, stageRoles, onMuteClick)
         configureVideo(model, onVideoClick, showVideoButton)
         configureScreenShare(model, onScreenshareClick, isStage)
@@ -317,29 +324,53 @@ class VoiceControlsSheetView @JvmOverloads constructor(
         count: Int,
         updating: Boolean,
         callback: () -> Unit,
+        onRequestToSpeakClick: () -> Unit,
     ) {
-        val shown = roles?.isModerator == true || roles?.isAudience == true
-        raiseHandBadge.showCircle(shown)
-        if (!shown) return
-        raiseHandBadge.setBadgeNumber(if (roles?.isModerator == true) count else 0)
+        // As on RN, anyone in the audience gets the hand and a moderator also gets the request
+        // list, so a moderator in the audience sees both.
         val moderator = roles?.isModerator == true
-        val active = !moderator && model.isMyHandRaised
-        raiseHandButton.setImageResource(
-            if (moderator) R.drawable.ic_stage_raised_hand_list else R.drawable.ic_stage_raised_hand,
-        )
-        raiseHandButton.isEnabled = moderator || (!updating && model.canRequestToSpeak())
-        raiseHandButton.alpha = if (raiseHandButton.isEnabled) 1f else 0.2f
-        raiseHandButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(active))
-        ImageViewCompat.setImageTintList(raiseHandButton, ColorStateList.valueOf(buttonIcon(active)))
-        raiseHandButton.contentDescription = context.getString(
+        raiseHandBadge.showCircle(moderator)
+        raiseHandBadge.setBadgeNumber(count)
+        raiseHandButton.setImageResource(R.drawable.ic_stage_raised_hand_list)
+        raiseHandButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(false))
+        raiseHandButton.contentDescription = context.getString(R.string.request_to_speak_area_title)
+        raiseHandButton.setOnClickListener { callback() }
+
+        val inAudience = roles != null && !roles.isSpeaker
+        requestToSpeakButton.showCircle(inAudience)
+        if (!inAudience) return
+        val active = model.isMyHandRaised
+        requestToSpeakButton.isEnabled = !updating && model.canRequestToSpeak()
+        requestToSpeakButton.alpha = if (requestToSpeakButton.isEnabled) 1f else 0.2f
+        requestToSpeakButton.backgroundTintList = ColorStateList.valueOf(buttonBackground(active))
+        ImageViewCompat.setImageTintList(requestToSpeakButton, ColorStateList.valueOf(buttonIcon(active)))
+        requestToSpeakButton.contentDescription = context.getString(
             when {
-                moderator -> R.string.request_to_speak_area_title
                 !model.canRequestToSpeak() -> R.string.audience_raise_hand_no_permission
-                model.isMyHandRaised -> R.string.audience_lower_hand
+                active -> R.string.audience_lower_hand
                 else -> R.string.audience_raise_hand_cta
             },
         )
-        raiseHandButton.setOnClickListener { if (raiseHandButton.isEnabled) callback() }
+        requestToSpeakButton.setOnClickListener { onRequestToSpeakClick() }
+    }
+
+    /**
+     * A call shares the row's width out between its controls; a stage clusters them in the middle
+     * with a fixed gap, as RN's action bar does.
+     */
+    private fun groupControls(grouped: Boolean) {
+        val gap = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f, resources.displayMetrics).toInt()
+        val row = muteButton.parent.parent as LinearLayout
+        for (i in 0 until row.childCount) {
+            val params = row.getChildAt(i).layoutParams as LinearLayout.LayoutParams
+            params.width = if (grouped) LayoutParams.WRAP_CONTENT else 0
+            params.weight = if (grouped) 0f else 1f
+            // Left/right, not start/end: a start margin set after the first layout is never
+            // resolved again, so the gap vanished whenever the screen was rebound.
+            params.leftMargin = if (grouped) gap else 0
+            params.rightMargin = if (grouped) gap else 0
+        }
+        row.requestLayout()
     }
 
     private fun buttonBackground(active: Boolean) = ContextCompat.getColor(

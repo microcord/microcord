@@ -222,9 +222,8 @@ class ChannelSelector(
      * pending selection until the channel appears from cache restore or READY — waiting here
      * instead made a notification tap race that restore and silently drop on timeout.
      *
-     * A **stage** channel is also a vocal selection: its text selection is invalid by
-     * [com.discord.stores.StoreChannelsSelected.isValidResolution], so it resolves to the guild's
-     * first available channel while the stage itself is joined as voice once the channel is known.
+     * A **stage** channel is a vocal selection: it is joined as voice and the chat stays where it
+     * was. Its own chat is opened with [openVocalChannelChat].
      *
      * A zero guild or channel id skips the channel entirely and goes straight through, which is how
      * "close the current channel" (`0, 0`) and DM selection (`guildId == 0`) are expressed.
@@ -239,6 +238,12 @@ class ChannelSelector(
         IdleTracker.markUsed()
         StoreStream.getNavigation().setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
 
+        // Picking a stage joins it and leaves the chat where it was; its own chat is opened with
+        // [openVocalChannelChat].
+        if (guildId != 0L && StoreStream.getChannels().getChannel(channelId)?.isStageVoiceChannel() == true) {
+            StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId)
+            return
+        }
         gotoChannel(guildId, channelId, peekParent, analyticsLocation)
 
         if (guildId == 0L || channelId == 0L) return
@@ -255,10 +260,9 @@ class ChannelSelector(
     /**
      * Opens a vocal channel's chat without joining the call.
      *
-     * [selectChannel] cannot do this for a stage: it treats selecting one as "join the stage" and
-     * deliberately leaves the text area on the guild's default channel, which is what a stage meant
-     * before it had a chat of its own. Reading the chat is now a separate intent from being on
-     * stage, so this selects the channel itself and connects nothing.
+     * [selectChannel] cannot do this for a stage: selecting one means joining it. Reading its chat
+     * is a separate intent from being on stage, so this selects the channel itself and connects
+     * nothing.
      */
     fun openVocalChannelChat(
         channel: Channel,

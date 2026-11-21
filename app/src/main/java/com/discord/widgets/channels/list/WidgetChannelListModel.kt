@@ -1075,6 +1075,7 @@ data class WidgetChannelListModel(
                             hasSpeakers = stageChannels[channel.id]?.speakerIds?.isNotEmpty() == true,
                             isGuildRoleSubscriptionLockedChannel = data.isGuildRoleSubscriptionLockedChannel,
                             isGuildRoleSubscriptionChannel = data.isGuildRoleSubscriptionChannel,
+                            textSelected = data.textChannelSelected,
                         )
                     }
 

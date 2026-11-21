@@ -212,8 +212,7 @@ class WidgetVoiceBottomSheetViewModel(
                 title = channel.getDisplayName(),
                 subtitle = callModel.guild?.name,
                 channel = channel,
-                // A stage channel invites through its own surface, not through this row.
-                showInviteOption = callModel.canInvite() && !channel.isStageVoiceChannel(),
+                showInviteOption = callModel.canInvite(),
                 showActivitiesOption = callModel.isConnected && callModel.canUseActivities(),
                 isSelfMuted = callModel.voiceSettings.isSelfMuted(),
                 isNoiseCancellationActive = storeState.noiseCancellation,

@@ -54,6 +54,7 @@ import com.discord.models.guild.UserGuildMember
 import com.discord.models.member.GuildMember
 import com.discord.models.user.User
 import com.discord.stores.StoreStream
+import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.textprocessing.AstRenderer
 import com.discord.utilities.textprocessing.DiscordParser
 import com.discord.utilities.textprocessing.MessageParseState
@@ -958,17 +959,21 @@ class WidgetChannelsListAdapter(
             boundItem = item
             val canConnect = PermissionUtils.can(Permission.CONNECT, item.permission)
 
-            root.isSelected = item.selected
-            // Stage channels have no text chat, so being connected never fills the row.
-            root.setChannelBackground(false)
+            root.isSelected = item.selected || item.textSelected
+            // Like a voice row: an open chat fills the row, being connected only lights the text.
+            root.setChannelBackground(item.textSelected)
 
             val color = ThemedColor.resolve(
                 root.context,
-                if (item.selected) R.attr.colorInteractiveActive else R.attr.colorChannelDefault,
+                if (item.selected || item.textSelected) R.attr.colorInteractiveActive else R.attr.colorChannelDefault,
             )
             name.text = item.channel.getDisplayName()
             name.setTextColor(color)
             topic.setTextAndVisibilityBy(item.stageInstance?.topic)
+            // The topic's second line already makes the row taller than its neighbours, so a live
+            // stage halves the layout's 8dp vertical padding to stay close to a one-line row.
+            val verticalPadding = dpToPixels(if (topic.visibility == View.VISIBLE) 4 else 8)
+            root.setPadding(root.paddingLeft, verticalPadding, root.paddingRight, verticalPadding)
 
             roleSubscriptionIcon.visibility =
                 if (item.isGuildRoleSubscriptionChannel) View.VISIBLE else View.GONE

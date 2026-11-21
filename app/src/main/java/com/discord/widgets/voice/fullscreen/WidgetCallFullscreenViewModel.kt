@@ -560,11 +560,11 @@ class WidgetCallFullscreenViewModel constructor(
     @MainThread
     fun onTextInVoiceTapped() {
         val state = viewState as? ViewState.Valid ?: return
-        ChannelSelector.getInstance().selectChannel(
+        // Opens the chat without (re)joining: selecting a stage would put the user on it.
+        ChannelSelector.getInstance().openVocalChannelChat(
             state.callModel.channel,
             analyticsLocation = SelectedChannelAnalyticsLocation.TEXT_IN_VOICE,
         )
-        storeNavigation.setNavigationPanelAction(StoreNavigation.PanelAction.CLOSE)
     }
 
     fun onVisitCommunityButtonClicked(guildId: Long) {
@@ -767,7 +767,7 @@ class WidgetCallFullscreenViewModel constructor(
                         connectivityState = a.connectivity,
                         myStageRoles = a.stageRoles,
                         stopOffscreenVideo = b.stopOffscreenVideo,
-                        isTextInVoiceChannelSelected = b.selectedChannel?.isVoiceChannel() == true,
+                        isTextInVoiceChannelSelected = b.selectedChannel?.let { it.isVoiceChannel() || it.isStageVoiceChannel() } == true,
                         channelMentionsCount = b.mentionCounts[channelId] ?: 0,
                         unreadsCount = c.unreadCount,
                         embeddedAppBackgrounds = c.backgrounds,
@@ -1022,12 +1022,13 @@ class WidgetCallFullscreenViewModel constructor(
         requestToSpeakTimestamp: UtcDateTime?,
         finished: () -> Unit,
     ) {
-        val api = RestAPI.apiOrNull
-        if (api == null || channel.guildId <= 0L) {
+        if (RestAPI.apiOrNull == null || channel.guildId <= 0L) {
             finished()
             return
         }
-        api.updateMyVoiceStates(
+        // Lowering a hand is an explicit `request_to_speak_timestamp: null`, which the plain client
+        // drops; the reference sends its own voice state through the null-serializing one.
+        RestAPI.apiSerializeNulls.updateMyVoiceStates(
             channel.guildId,
             RestAPIParams.ChannelVoiceStateUpdate(channel.id, suppress, requestToSpeakTimestamp),
         ).restSubscribeOn(false)
@@ -1262,6 +1263,7 @@ class WidgetCallFullscreenViewModel constructor(
                     }
                     if (callModel.isConnected && overlayStatus == OverlayStatus.ENABLED) add(MenuItem.LAUNCH_OVERLAY)
                     if (callModel.selectedVideoDevice != null && callModel.videoDevices.size > 1) add(MenuItem.SWITCH_CAMERA)
+                    // A stage keeps its chat in the action bar, as on RN.
                     if (!callModel.channel.isStageVoiceChannel()) add(MenuItem.TEXT_IN_VOICE)
                     if (!callModel.channel.isStageVoiceChannel()) add(MenuItem.SHOW_PARTICIPANT_LIST)
                     if (callModel.canUseActivities()) add(MenuItem.ACTIVITIES)

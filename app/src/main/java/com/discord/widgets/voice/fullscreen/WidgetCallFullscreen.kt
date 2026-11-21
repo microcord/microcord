@@ -311,7 +311,11 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         requireActivity().window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         configureControls(state)
         configureMenu(state)
-        setActionBarTitle(state.titleText.orEmpty(), trailingDrawableRes = R.drawable.ic_arrow_right)
+        // A stage has no title, so it must not get the title's arrow either.
+        setActionBarTitle(
+            state.titleText.orEmpty(),
+            trailingDrawableRes = if (state.titleText != null) R.drawable.ic_arrow_right else null,
+        )
         setActionBarTitleColor(android.graphics.Color.WHITE)
         setActionBarTitleClick { WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId) }
         root.setBackgroundResource(R.color.primary_dark_900)
@@ -368,11 +372,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             onStreamVolumeChange = viewModel::onStreamPerceptualVolumeChanged,
             onDeafenPressed = viewModel::onDeafenPressed,
             requestingToSpeakCount = state.requestingToSpeakCount,
-            onRaiseHandClick = {
-                if (state.stageRoles?.isModerator == true) {
-                    WidgetStageRaisedHandsBottomSheet.show(parentFragmentManager, channelId)
-                } else viewModel.toggleRequestToSpeak()
-            },
+            onRaiseHandClick = { WidgetStageRaisedHandsBottomSheet.show(parentFragmentManager, channelId) },
+            onRequestToSpeakClick = viewModel::toggleRequestToSpeak,
             onMoveToAudienceClick = viewModel::moveMeToAudience,
             isUpdatingRequestToSpeak = state.isUpdatingRequestToSpeak,
             stageRoles = state.stageRoles,
