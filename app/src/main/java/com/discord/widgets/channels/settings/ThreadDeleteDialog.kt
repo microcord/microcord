@@ -7,11 +7,22 @@ import androidx.fragment.app.FragmentManager
 import com.discord.R
 import com.discord.api.channel.isThreadOnlyChannel
 import com.discord.app.AppDialog
+import com.discord.app.AppToast
+import com.discord.api.channel.getDeletedMessage
+import com.discord.utilities.rest.RestAPI
+import com.discord.utilities.rx.appSubscribe
+import com.discord.utilities.rx.restSubscribeOn
+import com.discord.utilities.rx.ui
 import com.discord.stores.StoreStream
 import com.google.android.material.button.MaterialButton
 import com.discord.i18n.i18nRender
 
 internal class ThreadDeleteDialog : AppDialog(R.layout.widget_channel_settings_delete) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        useDialogTheme()
+    }
+
     override fun onViewBound(view: View) {
         super.onViewBound(view)
         val isForumPost = StoreStream.getChannels()
@@ -26,13 +37,33 @@ internal class ThreadDeleteDialog : AppDialog(R.layout.widget_channel_settings_d
             )
         view.findViewById<MaterialButton>(R.id.channel_settings_delete_cancel)
             .setOnClickListener { dismiss() }
-        view.findViewById<MaterialButton>(R.id.channel_settings_delete_confirm)
-            .setOnClickListener {
-                parentFragmentManager.setFragmentResult(
-                    REQUEST_KEY,
-                    Bundle().apply { putLong(RESULT_CHANNEL_ID, argumentsOrDefault.getLong(ARG_CHANNEL_ID)) },
-                )
-                dismiss()
+        val confirm = view.findViewById<MaterialButton>(R.id.channel_settings_delete_confirm)
+        confirm.setOnClickListener { delete(confirm) }
+    }
+
+    /**
+     * Deletes here rather than leaving it to whoever opened this: the thread actions sheet that
+     * offers it has already closed by the time this is confirmed, so nothing else is left to.
+     */
+    private fun delete(confirm: MaterialButton) {
+        val channelId = argumentsOrDefault.getLong(ARG_CHANNEL_ID)
+        val context = requireContext().applicationContext
+        confirm.isEnabled = false
+        isCancelable = false
+        RestAPI.api.deleteChannel(channelId)
+            .restSubscribeOn()
+            .ui(this)
+            .appSubscribe(
+                errorClass = ThreadDeleteDialog::class.java,
+                errorHandler = {
+                    AppToast.show(context, R.string.default_failure_to_perform_action_message)
+                    confirm.isEnabled = true
+                    isCancelable = true
+                },
+            ) { channel ->
+                channel.getDeletedMessage()?.let { AppToast.show(context, it) }
+                parentFragmentManager.setFragmentResult(REQUEST_KEY, Bundle().apply { putLong(RESULT_CHANNEL_ID, channelId) })
+                dismissAllowingStateLoss()
             }
     }
 

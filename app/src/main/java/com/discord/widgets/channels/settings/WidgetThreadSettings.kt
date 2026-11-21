@@ -51,8 +51,9 @@ class WidgetThreadSettings : AppFragment(R.layout.widget_thread_settings) {
         invitable = view.findViewById(R.id.thread_settings_invitable)
         spoiler = view.findViewById(R.id.thread_settings_spoiler)
         save = view.findViewById(R.id.thread_settings_save)
-        parentFragmentManager.setFragmentResultListener(ThreadDeleteDialog.REQUEST_KEY, this) { _, result ->
-            viewModel.onThreadDeleted(result.getLong(ThreadDeleteDialog.RESULT_CHANNEL_ID))
+        // The dialog deletes the thread itself; all that is left here is to leave its settings.
+        parentFragmentManager.setFragmentResultListener(ThreadDeleteDialog.REQUEST_KEY, this) { _, _ ->
+            requireActivity().finish()
         }
 
         name.addBindedTextWatcher(this) {

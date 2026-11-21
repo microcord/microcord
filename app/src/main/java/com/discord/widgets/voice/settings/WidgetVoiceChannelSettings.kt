@@ -310,6 +310,11 @@ class WidgetVoiceChannelSettings : AppFragment(R.layout.widget_voice_channel_set
 }
 
 internal class VoiceChannelDeleteDialog : AppDialog(R.layout.widget_channel_settings_delete) {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        useDialogTheme()
+    }
+
     var onDeleted: (() -> Unit)? = null
 
     override fun onViewBound(view: View) {

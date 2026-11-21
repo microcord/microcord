@@ -4,7 +4,6 @@ import androidx.annotation.MainThread
 import androidx.annotation.StringRes
 import com.discord.R
 import com.discord.api.channel.Channel
-import com.discord.api.channel.getDeletedMessage
 import com.discord.api.channel.isSpoilerChannel
 import com.discord.api.channel.isThread
 import com.discord.app.AppViewModel
@@ -126,23 +125,6 @@ class WidgetThreadSettingsViewModel(
     fun onSlowModeInputChanged(cooldown: Int) {
         val current = viewState as? ViewState.Valid ?: return
         updateViewState(current.copy(slowModeCooldownDraft = cooldown, hasUnsavedChanges = true))
-    }
-
-    fun onThreadDeleted(channelId: Long) {
-        restApi.deleteChannel(channelId)
-            .restSubscribeOn()
-            .ui(this)
-            .appSubscribe(
-                errorClass = WidgetThreadSettingsViewModel::class.java,
-                errorHandler = {
-                    eventSubject.onNext(Event.ShowToast(R.string.default_failure_to_perform_action_message))
-                },
-                onNext = { channel ->
-                    // The confirmation string depends on what kind of channel was deleted.
-                    channel.getDeletedMessage()?.let { eventSubject.onNext(Event.ShowToast(it)) }
-                    eventSubject.onNext(Event.Close)
-                },
-            )
     }
 
     fun saveThread() {
