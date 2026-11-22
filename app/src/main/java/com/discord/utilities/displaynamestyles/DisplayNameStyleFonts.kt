@@ -12,7 +12,9 @@ import com.discord.api.user.DisplayNameStyles
  *
  * Discord names these differently in the picker than the type foundries do — Cherry Bomb One is
  * "Sakura", Zilla Slab is "Tempo" — and the resource names follow the picker, because that is what
- * a reader of this code will have seen on screen.
+ * a reader of this code will have seen on screen. The files are React Native's own
+ * (`assets/fonts`, 352.6), not the foundries' releases: Discord ships its own cuts, and the public
+ * ones draw visibly differently.
  *
  * Four ids the API defines are deliberately unmapped: Bangers, BioRhyme, Compagnon and Ribes are
  * not shipped on mobile by the reference either, so a name using one draws in the normal face.
@@ -44,6 +46,7 @@ object DisplayNameStyleFonts {
         DisplayNameStyles.FONT_ORBITRON -> R.font.mainframe
         DisplayNameStyles.FONT_NEW_ROCKER -> R.font.headbang
         DisplayNameStyles.FONT_KALAM -> R.font.journal
+        DisplayNameStyles.FONT_PRICEDOWN -> R.font.pricedown
         else -> null
     }
 

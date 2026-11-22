@@ -57,6 +57,7 @@ object DisplayNameStyleRenderer {
     /**
      * @param overrideSettings draws the style even when the accessibility toggle is off, which is
      *   what the style picker and its previews need — otherwise choosing a style would show nothing.
+     * @return whether the style coloured the name, so a role gradient knows to stay out of its way.
      */
     @JvmStatic
     @JvmOverloads
@@ -66,18 +67,19 @@ object DisplayNameStyleRenderer {
         mode: Mode = Mode.FULL,
         @ColorInt defaultColor: Int = view.currentTextColor,
         overrideSettings: Boolean = false,
-    ) {
+    ): Boolean {
         reset(view, defaultColor)
-        if (styles == null) return
-        if (!overrideSettings && !StoreStream.getAccessibility().isDisplayNameStylesEnabled()) return
+        if (styles == null) return false
+        if (!overrideSettings && !StoreStream.getAccessibility().isDisplayNameStylesEnabled()) return false
 
         DisplayNameStyleFonts.typefaceFor(view.context, styles.fontId)?.let { view.typeface = it }
-        if (mode == Mode.FONT) return
+        if (mode == Mode.FONT) return false
 
         val colors = styles.colors
+            .ifEmpty { DisplayNameStylePresets.defaultColorsFor(styles.effectId).orEmpty() }
             .take(DisplayNameStyles.colorCountFor(styles.effectId))
             .map(DisplayNameStyleColors::opaque)
-        if (colors.isEmpty()) return
+        if (colors.isEmpty()) return false
 
         val background = ColorCompat.getThemedColor(view, R.attr.colorBackgroundPrimary)
         val accessible = DisplayNameStyleColors.accessible(colors, styles.effectId, background)
@@ -131,6 +133,7 @@ object DisplayNameStyleRenderer {
             // SOLID, and anything a newer client adds.
             else -> view.setTextColor(accessible.first())
         }
+        return true
     }
 
     /** Whether [fontId] would change how [view] draws, for callers that only offer the font. */

@@ -38,6 +38,8 @@ data class DisplayNameStyles(
         const val FONT_ORBITRON = 14
         const val FONT_NEW_ROCKER = 15
         const val FONT_KALAM = 16
+        /** Newer than RN 340; RN 352 ships it as its only new face, Pricedown-Bold. */
+        const val FONT_PRICEDOWN = 17
 
         const val EFFECT_SOLID = 1
         const val EFFECT_GRADIENT = 2

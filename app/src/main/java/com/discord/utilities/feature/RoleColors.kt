@@ -64,15 +64,13 @@ object RoleColors {
 
     /**
      * Draws [name] in its role's gradient (Enhanced Role Styles), left to right and back to the
-     * primary colour as desktop does, when names are drawn in role colours. Call it after anything
-     * that resets the view's paint, such as [com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer].
+     * primary colour as desktop does, when names are drawn in role colours. Call it after
+     * [com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer], which resets the paint,
+     * and only when that did not colour the name: a member's own style wins over their role's.
      */
     fun applyGradient(name: TextView, colors: GuildRoleColors?) {
         val secondary = colors?.secondaryColor
-        if (secondary == null || mode() != RoleColorMode.NAMES) {
-            name.paint.shader = null
-            return
-        }
+        if (secondary == null || mode() != RoleColorMode.NAMES) return
         val stops = listOfNotNull(colors.primaryColor, secondary, colors.tertiaryColor, colors.primaryColor)
             .map { forName(it or 0xFF000000.toInt()) }
         val width = name.paint.measureText(name.text?.toString().orEmpty()).coerceAtLeast(1f)

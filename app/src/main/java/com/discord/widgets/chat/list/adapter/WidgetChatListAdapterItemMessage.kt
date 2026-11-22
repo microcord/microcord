@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.ContextCompat
 import com.discord.api.message.MessageFlags
 import com.discord.utilities.dimen.dpToPixels
+import android.graphics.Color
 import android.graphics.Typeface
 import android.text.Spannable
 import android.text.SpannableString
@@ -369,15 +370,16 @@ class WidgetChatListAdapterItemMessage(
         val guildIdentityEnabled = !FeatureFlags.disableServerProfilesEnabled()
         itemName.text = entry.authorDisplayName(guildIdentityEnabled)
         itemName.setTextColor(authorTextColor(entry.author))
-        // Font only: the reference leaves author names uncoloured, since a long channel would be
-        // re-shading a name on every row.
-        DisplayNameStyleRenderer.apply(
+        // A role colour (or gradient) wins over the style's colours, as in React Native, which keeps
+        // only the style's font for it; a name with no role colour gets the whole style.
+        val hasRoleColor = GuildMember.getColor(entry.author, Color.BLACK) != Color.BLACK
+        val styled = DisplayNameStyleRenderer.apply(
             itemName,
             DisplayNameStyleUtils.resolve(message.author, entry.author.takeIf { guildIdentityEnabled }),
-            DisplayNameStyleRenderer.Mode.FONT,
+            if (hasRoleColor) DisplayNameStyleRenderer.Mode.FONT else DisplayNameStyleRenderer.Mode.FULL,
         )
-        // After the style, which resets the paint; the dot is centred on the final font's capitals.
-        RoleColors.applyGradient(itemName, entry.author?.roleColors)
+        if (!styled) RoleColors.applyGradient(itemName, entry.author?.roleColors)
+        // After the style: the dot is centred on the final font's capitals.
         RoleColors.applyDot(itemName, entry.author?.roleColor)
         itemName.setOnClickListener {
             adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId)

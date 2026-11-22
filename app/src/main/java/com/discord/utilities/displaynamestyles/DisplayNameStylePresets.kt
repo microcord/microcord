@@ -54,6 +54,21 @@ object DisplayNameStylePresets {
     }
 
     /**
+     * What a style saved with no colours draws in, from React Native's
+     * `useDisplayNameStylesEffectDefaultColors`: the effect's first preset, a fixed colour for the
+     * outlined effects, and null (the text's own colour) for Solid.
+     */
+    fun defaultColorsFor(effectId: Int): List<Int>? = when (effectId) {
+        DisplayNameStyles.EFFECT_GRADIENT, DisplayNameStyles.EFFECT_GLOW,
+        DisplayNameStyles.EFFECT_GUMMY, DisplayNameStyles.EFFECT_PRISM,
+        -> presetsFor(effectId).first()
+        DisplayNameStyles.EFFECT_TOON -> listOf(0xf42098)
+        DisplayNameStyles.EFFECT_NEON -> listOf(0x691ded)
+        DisplayNameStyles.EFFECT_POP -> listOf(0x0fcf86)
+        else -> null
+    }
+
+    /**
      * [colors] adjusted to what [effectId] reads.
      *
      * Switching effect keeps the colour the user already chose where it still fits, and falls back
