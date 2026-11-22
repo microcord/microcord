@@ -16,6 +16,7 @@ data class GuildRole(
     val icon: String?,
     val tags: GuildRoleTags?,
     val unicodeEmoji: String?,
+    val colors: GuildRoleColors? = null,
 ) : Serializable {
     @Transient var version: Long = 0
 }

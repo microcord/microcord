@@ -1,10 +1,13 @@
 package com.discord.utilities.feature
 
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Rect
+import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
 import android.widget.TextView
 import androidx.annotation.ColorInt
+import com.discord.api.role.GuildRoleColors
 import com.discord.utilities.cache.SharedPreferencesProvider
 import com.discord.utilities.dimen.dpToPixels
 
@@ -57,6 +60,26 @@ object RoleColors {
         if (!FeatureFlags.readableRoleColorsEnabled()) return roleColor
         val background = nameBackground?.takeIf { Color.alpha(it) == 0xFF } ?: return roleColor
         return readableNameColor(roleColor, background)
+    }
+
+    /**
+     * Draws [name] in its role's gradient (Enhanced Role Styles), left to right and back to the
+     * primary colour as desktop does, when names are drawn in role colours. Call it after anything
+     * that resets the view's paint, such as [com.discord.utilities.displaynamestyles.DisplayNameStyleRenderer].
+     */
+    fun applyGradient(name: TextView, colors: GuildRoleColors?) {
+        val secondary = colors?.secondaryColor
+        if (secondary == null || mode() != RoleColorMode.NAMES) {
+            name.paint.shader = null
+            return
+        }
+        val stops = listOfNotNull(colors.primaryColor, secondary, colors.tertiaryColor, colors.primaryColor)
+            .map { forName(it or 0xFF000000.toInt()) }
+        val width = name.paint.measureText(name.text?.toString().orEmpty()).coerceAtLeast(1f)
+        name.paint.shader = LinearGradient(0f, 0f, width, 0f, stops.toIntArray(), null, Shader.TileMode.CLAMP)
+        // A shader multiplies with the paint's alpha, so the text colour must be opaque.
+        name.setTextColor(Color.BLACK)
+        name.invalidate()
     }
 
     fun mode(): RoleColorMode =

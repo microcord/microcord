@@ -89,6 +89,7 @@ class ChannelMembersListViewHolderMember(private val binding: WidgetChannelMembe
             // Font only: a member's role colour is what a moderator reads this list for, so the
             // reference leaves it in place rather than overpainting it with the name style.
             setDisplayNameStyles(data.displayNameStyles, DisplayNameStyleRenderer.Mode.FONT)
+            setRoleGradient(data.roleColors)
             setRoleDot(roleColor)
         }
         binding.channelMembersListItemPresence.apply {

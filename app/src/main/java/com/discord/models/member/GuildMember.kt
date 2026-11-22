@@ -11,6 +11,7 @@ import com.discord.api.utcdatetime.UtcDateTime
 import com.discord.models.user.User
 import com.discord.utilities.user.UserUtils.getDisplayName
 import com.discord.utilities.feature.FeatureFlags
+import com.discord.api.role.GuildRoleColors
 import com.discord.utilities.feature.RoleColorMode
 import com.discord.utilities.feature.RoleColors
 
@@ -33,6 +34,8 @@ data class GuildMember(
     val displayNameStyles: DisplayNameStyles? = null,
     val avatarDecoration: AvatarDecorationData? = null,
     val flags: Int = 0,
+    /** The colour role's gradient, when it has one; see [RoleColors.applyGradient]. */
+    val roleColors: GuildRoleColors? = null,
 ) {
     constructor() : this(0, 0, null, null, null, false, null, 0, 0)
 
@@ -88,6 +91,7 @@ data class GuildMember(
                 displayNameStyles = apiGuildMember.displayNameStyles,
                 avatarDecoration = apiGuildMember.avatarDecorationData,
                 flags = apiGuildMember.flags,
+                roleColors = colorRole?.colors?.takeIf { it.secondaryColor != null },
             )
         }
 

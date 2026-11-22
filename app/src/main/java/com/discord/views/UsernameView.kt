@@ -10,6 +10,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.TextViewCompat
 import com.discord.R
+import com.discord.api.role.GuildRoleColors
 import com.discord.api.user.DisplayNameStyles
 import com.discord.api.user.PrimaryGuild
 import com.discord.databinding.ViewUsernameBinding
@@ -99,6 +100,9 @@ class UsernameView @JvmOverloads constructor(
 
     /** The dot after the name for the "next to names" role colour mode; see [RoleColors.applyDot]. */
     fun setRoleDot(roleColor: Int?) = RoleColors.applyDot(binding.usernameText, roleColor)
+
+    /** After [setDisplayNameStyles], which resets the paint; see [RoleColors.applyGradient]. */
+    fun setRoleGradient(colors: GuildRoleColors?) = RoleColors.applyGradient(binding.usernameText, colors)
 
     /**
      * Draws the name in its owner's chosen font, colour and effect.

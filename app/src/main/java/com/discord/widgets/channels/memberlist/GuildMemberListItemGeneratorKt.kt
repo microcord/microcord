@@ -93,6 +93,7 @@ internal fun ChannelMemberListRow.toAdapterItem(guildId: Long? = null): ChannelM
         avatarDecoration,
         user.primaryGuild,
         displayNameStyles,
+        guildMember?.roleColors,
     )
     is ChannelMemberListRow.PlaceholderHeader -> ChannelMembersListAdapter.Item.PlaceholderHeader(key)
     is ChannelMemberListRow.PlaceholderMember -> PLACEHOLDER_INSTANCES[(key.hashCode() and Int.MAX_VALUE) % PLACEHOLDER_INSTANCES.size]

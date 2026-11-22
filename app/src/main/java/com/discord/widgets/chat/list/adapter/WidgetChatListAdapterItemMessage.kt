@@ -376,7 +376,8 @@ class WidgetChatListAdapterItemMessage(
             DisplayNameStyleUtils.resolve(message.author, entry.author.takeIf { guildIdentityEnabled }),
             DisplayNameStyleRenderer.Mode.FONT,
         )
-        // After the style: the dot is centred on the final font's capitals.
+        // After the style, which resets the paint; the dot is centred on the final font's capitals.
+        RoleColors.applyGradient(itemName, entry.author?.roleColors)
         RoleColors.applyDot(itemName, entry.author?.roleColor)
         itemName.setOnClickListener {
             adapter.eventHandler.onMessageAuthorNameClicked(message, adapter.data.guildId)
