@@ -105,23 +105,30 @@ class WidgetChatInputEditText(
         }
     }
 
-    private fun setHardwareKeyboardSendBehavior() {
-        editText.setOnKeyListener { _, keyCode, event ->
-            val fromSoftKeyboard = (event.flags and KeyEvent.FLAG_SOFT_KEYBOARD) == KeyEvent.FLAG_SOFT_KEYBOARD
-            if (keyCode != KeyEvent.KEYCODE_ENTER || fromSoftKeyboard) return@setOnKeyListener false
-
-            val shiftHeld = event.hasModifiers(KeyEvent.META_SHIFT_ON)
-            val shiftEnterToSend = StoreStream.getUserSettings().getIsShiftEnterToSendEnabled()
-            val shouldSend = if (shiftEnterToSend) shiftHeld else !shiftHeld
-            if (!shouldSend) return@setOnKeyListener false
-
-            // Consume both down and up, but only act on up, so the key does not fire twice.
-            if (event.action == KeyEvent.ACTION_UP) onSendListener?.invoke()
-            true
-        }
-    }
+    private fun setHardwareKeyboardSendBehavior() = sendOnHardwareEnter(editText) { onSendListener?.invoke() }
 
     companion object {
+        /**
+         * A hardware keyboard's Enter sends (Shift+Enter, or the reverse when "Shift+Enter to send"
+         * is on, inserts a newline). A soft keyboard's Enter always inserts a newline.
+         */
+        @JvmStatic
+        fun sendOnHardwareEnter(editText: TextView, onSend: () -> Unit) {
+            editText.setOnKeyListener { _, keyCode, event ->
+                val fromSoftKeyboard = (event.flags and KeyEvent.FLAG_SOFT_KEYBOARD) == KeyEvent.FLAG_SOFT_KEYBOARD
+                if (keyCode != KeyEvent.KEYCODE_ENTER || fromSoftKeyboard) return@setOnKeyListener false
+
+                val shiftHeld = event.hasModifiers(KeyEvent.META_SHIFT_ON)
+                val shiftEnterToSend = StoreStream.getUserSettings().getIsShiftEnterToSendEnabled()
+                val shouldSend = if (shiftEnterToSend) shiftHeld else !shiftHeld
+                if (!shouldSend) return@setOnKeyListener false
+
+                // Consume both down and up, but only act on up, so the key does not fire twice.
+                if (event.action == KeyEvent.ACTION_UP) onSend()
+                true
+            }
+        }
+
         /** Discord's typing indicator lasts ten seconds; re-announcing sooner is wasted traffic. */
         private const val TYPING_EMISSION_INTERVAL_MS = 10_000L
 

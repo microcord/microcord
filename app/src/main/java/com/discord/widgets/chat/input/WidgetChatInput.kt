@@ -608,6 +608,7 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
                 true
             } else false
         }
+        WidgetChatInputEditText.sendOnHardwareEnter(editText) { flex.onSend() }
         flex.setInputListener(object : InputListener {
             override fun onSend(data: Editable, attachments: List<Attachment<*>>): Boolean =
                 submit(attachments)
@@ -1589,7 +1590,10 @@ class WidgetChatInput : AppFragment(R.layout.widget_chat_input), WidgetEmojiPick
             return true
         }
         val result = (submission as MessageSendCoordinator.Submission.Rejected).result
-        Toast.makeText(requireContext(), validationMessage(result), Toast.LENGTH_SHORT).show()
+        // Nothing to send (Enter in an empty composer) is not an error worth a toast.
+        if (result != MessageResult.NoValidContent) {
+            Toast.makeText(requireContext(), validationMessage(result), Toast.LENGTH_SHORT).show()
+        }
         return false
     }
 
