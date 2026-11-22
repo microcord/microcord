@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Manticord: the docked (tablet) layout's user area, in place of the bottom tab bar. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/colorBackgroundSecondaryAlt"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <LinearLayout
+        android:id="@+id/user_panel_profile"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:background="?attr/bg_pressed_highlight"
+        android:contentDescription="@string/set_status"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <com.discord.views.user.UserAvatarPresenceView
+            android:id="@+id/user_panel_avatar"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            app:user_avatar_background_color="?attr/colorBackgroundSecondaryAlt" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/user_panel_name"
+                style="@style/UiKit.TextView.Semibold"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/colorHeaderPrimary"
+                android:textSize="@dimen/uikit_textsize_medium" />
+
+            <TextView
+                android:id="@+id/user_panel_status"
+                style="@style/UiKit.TextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="?attr/colorTextMuted"
+                android:textSize="@dimen/uikit_textsize_small" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/user_panel_friends"
+        style="@style/TabsHostBottomNavIcon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/bg_pressed_highlight"
+        android:contentDescription="@string/tabs_friends_accessibility_label"
+        android:padding="8dp"
+        android:src="@drawable/ic_tab_friends" />
+
+    <ImageView
+        android:id="@+id/user_panel_mentions"
+        style="@style/TabsHostBottomNavIcon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/bg_pressed_highlight"
+        android:contentDescription="@string/tabs_mentions_accessibility_label"
+        android:padding="8dp"
+        android:src="@drawable/ic_tab_mentions" />
+
+    <ImageView
+        android:id="@+id/user_panel_settings"
+        style="@style/TabsHostBottomNavIcon"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/bg_pressed_highlight"
+        android:contentDescription="@string/user_settings"
+        android:padding="8dp"
+        android:src="@drawable/ic_settings_white_a60_24dp" />
+</LinearLayout>

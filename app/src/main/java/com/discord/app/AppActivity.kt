@@ -34,6 +34,7 @@ import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.theme.ThemeWallpaper
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.discord.R
+import com.discord.panels.OverlappingPanelsLayout
 import com.discord.databinding.ActivityAppBinding
 import com.discord.models.domain.ModelUserSettings
 import com.discord.i18n.I18nHooks
@@ -235,6 +236,8 @@ open class AppActivity : AppTransitionActivity(), AppComponent, AuthUiActions {
         try {
             binding = ActivityAppBinding.inflate(layoutInflater)
             setContentView(binding.root)
+            // Pushed screens (settings pages, profile editing) do not stretch across a wide window.
+            if (this::class == AppActivity::class) OverlappingPanelsLayout.applyDockedContentWidth(binding.appRoot)
             ThemeWallpaper.decorate(this, binding.root)
             configureDeveloperShortcut()
             onBackPressedDispatcher.addCallback(backPressedCallback)

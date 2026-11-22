@@ -14,7 +14,9 @@ import androidx.fragment.app.commit
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.lifecycle.Lifecycle
 import com.discord.api.channel.isStageVoiceChannel
+import androidx.core.view.updateLayoutParams
 import com.discord.R
+import com.discord.panels.OverlappingPanelsLayout
 import com.discord.app.AppLog
 import com.discord.app.AppFragment
 import com.discord.app.AppScreenRouter
@@ -83,6 +85,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private val container get() = binding.widgetTabsHostContainer
     private val navHost get() = binding.widgetTabsHostNavHost
     private val nonFullscreenNavHost get() = binding.widgetTabsHostNonFullscreenNavHost
+    private val docked by lazy { OverlappingPanelsLayout.isDocked(resources) }
     private val homeContainer get() = binding.widgetTabsHostHome
     private val bottomNavigation get() = binding.widgetTabsHostBottomNavigationView
 
@@ -102,6 +105,17 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
         // it would sit empty on top of whichever tab is actually selected.
         binding.widgetTabsHostSearch.visibility = View.GONE
         bottomNavigation.addHeightChangedListener(BottomNavViewObserver.INSTANCE)
+        // Docked, the channel list stays on screen with a user panel (HomeUserPanel) in place of
+        // the bar, and the other tabs open beside it, like the desktop client.
+        if (docked) {
+            bottomNavigation.visibility = View.GONE
+            val panelWidth = resources.getDimensionPixelSize(R.dimen.nav_panel_width)
+            nonFullscreenNavHost.updateLayoutParams<ViewGroup.MarginLayoutParams> { marginStart = panelWidth }
+            nonFullscreenNavHost.setBackgroundColor(ColorCompat.getThemedColor(this, R.attr.colorBackgroundTertiary))
+            val besideListWidthDp = resources.configuration.screenWidthDp - (panelWidth / resources.displayMetrics.density).toInt()
+            OverlappingPanelsLayout.applyDockedContentWidth(binding.widgetTabsHostMentions, besideListWidthDp)
+            OverlappingPanelsLayout.applyDockedContentWidth(binding.widgetTabsHostUserSettings, besideListWidthDp)
+        }
         pluginBottomTabsRegistration = PluginUiRegistry.addBottomTabListener {
             view.post { viewState?.let(::updateViews) }
         }
@@ -169,6 +183,7 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
             // Long-pressing mentions opens the quick switcher, same as tapping search.
             ::onSearchClick,
         )
+        if (docked) return
         updateNavHostMargins(viewState)
         animateBottomNav(viewState)
     }
@@ -220,8 +235,10 @@ class WidgetTabsHost : AppFragment(R.layout.widget_tabs_host) {
     private fun navigateToTab(navigationTab: NavigationTab) {
         installTabFragment(navigationTab)
         tabContainers().forEach { (tab, view) ->
-            view.visibility = if (navigationTab == tab) View.VISIBLE else View.GONE
+            view.visibility = if (navigationTab == tab || (docked && tab == NavigationTab.HOME)) View.VISIBLE else View.GONE
         }
+        // Docked, home stays drawn behind this host, which therefore needs its own backdrop.
+        if (docked) nonFullscreenNavHost.visibility = if (navigationTab == NavigationTab.HOME) View.GONE else View.VISIBLE
         tabToTabSelectionListenerMap[navigationTab]?.onTabSelected()
     }
 

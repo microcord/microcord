@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentTransaction
 import com.discord.R
+import com.discord.panels.OverlappingPanelsLayout
 import com.discord.utilities.theme.ThemeRuntime
 import com.discord.utilities.theme.ThemeWallpaper
 import com.discord.utilities.view.recycler.BounceEdgeEffectFactory
@@ -84,6 +85,11 @@ abstract class AppBottomSheet(
         ThemeRuntime.applyOverlay(dialog.context.theme)
         dialog.setCanceledOnTouchOutside(true)
         dialog.applyReducedMotionAnimations()
+        // A wide (docked) window keeps sheets phone-width and centred instead of edge to edge.
+        if (OverlappingPanelsLayout.isDocked(resources)) {
+            (dialog as? BottomSheetDialog)?.behavior?.maxWidth =
+                (DOCKED_SHEET_MAX_WIDTH_DP * resources.displayMetrics.density).toInt()
+        }
         if (shouldAvoidKeyboard) {
             dialog.setOnShowListener {
                 (dialog as? BottomSheetDialog)?.behavior?.state = BottomSheetBehavior.STATE_EXPANDED
@@ -352,4 +358,8 @@ abstract class AppBottomSheet(
         requireAppActivity().appPermissions.requestNotifications(onFailure, onSuccess)
 
     // endregion
+
+    private companion object {
+        const val DOCKED_SHEET_MAX_WIDTH_DP = 600
+    }
 }

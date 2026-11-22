@@ -14,6 +14,7 @@ import com.discord.panels.OverlappingPanelsLayout
 import com.discord.panels.PanelState
 import com.discord.stores.StoreChannelsSelected
 import com.discord.stores.StoreNavigation
+import com.discord.widgets.tabs.NavigationTab
 import com.discord.stores.StoreNotices
 import com.discord.stores.StoreStream
 import com.discord.dialogs.WidgetUrgentMessageDialog
@@ -110,6 +111,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     private var startPanelState: PanelState = PanelState.Closed
     private var endPanelState: PanelState = PanelState.Closed
     private var pluginHeaderRegistration: PluginRegistration? = null
+    private var userPanel: HomeUserPanel? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _binding = WidgetHomeBinding.bind(view)
@@ -123,6 +125,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             view.post { if (_binding?.root === view) refreshChatToolbar() }
         }
         applyPanelInsets()
+        if (panels.isDocked) userPanel = HomeUserPanel(binding.panelLeft.widgetProfileStrip, childFragmentManager)
         WidgetHomePanelLoading(binding.root).configure(this)
         startPanelState = PanelState.Closed
         endPanelState = PanelState.Closed
@@ -211,8 +214,15 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         val navigation = StoreStream.getNavigation()
         // Keep main-thread delivery in the subscription so onStop also cancels queued UI work.
         navigationSubscription = navigation.getNavigationPanelAction().ui().subscribe { action ->
+            // Docked, the channel list stays on screen over the other tabs, so picking a channel
+            // there (which closes the panels on a phone) returns to the chat.
+            val tabs = StoreStream.getTabsNavigation()
+            if (panels.isDocked && action == StoreNavigation.PanelAction.CLOSE && tabs.getSelectedTab() != NavigationTab.HOME) {
+                tabs.selectHomeTab(StoreNavigation.PanelAction.NOOP)
+            }
             navigation.setNavigationPanelAction(action, panels)
         }
+        userPanel?.bind()
         selectedChannelSubscription = StoreStream.getChannelsSelected().observeResolvedSelectedChannel().ui().subscribe { selected ->
             // A cold start emits `Uninitialized` before the persisted selection resolves. It has
             // no channel, so deciding the surface from it pins the DM list open at full width and
@@ -302,6 +312,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
     }
 
     override fun onStop() {
+        userPanel?.unbind()
         navigationSubscription?.unsubscribe()
         navigationSubscription = null
         selectedChannelSubscription?.unsubscribe()
@@ -329,6 +340,7 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         WidgetChannelSidebarActions.onSearch = null
         WidgetUserSheet.onCall = null
         chatBinding = null
+        userPanel = null
         _binding = null
         super.onDestroyView()
     }
@@ -394,7 +406,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
             StoreStream.selectChannel(selectedChannel.guildId, selectedChannel.parentId)
             return
         }
-        panels.openStartPanel()
+        // Docked, the channel list is already beside the chat: there is nowhere further back.
+        if (panels.isDocked) requireActivity().moveTaskToBack(true) else panels.openStartPanel()
     }
 
     fun getPanelLayout(): PanelLayout = panels
@@ -494,6 +507,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         )
         val isBack = isForumPost || threadDraft != null || isMessageRequest || WidgetSearch.canReopenFrom(channel.id)
         setActionBarDisplayHomeAsUpEnabled(
+            // Docked, the drawer it would toggle is always open.
+            showHomeAsUp = isBack || !panels.isDocked,
             iconRes = if (isBack) null else R.drawable.ic_menu_24dp,
             iconAccessibilityLabel = if (isBack) {
                 R.string.back
@@ -631,7 +646,8 @@ class WidgetHome : AppFragment(R.layout.widget_home), WidgetChatList.Host {
         chatBinding?.let { chat ->
             chat.unread.homeToolbarUnreadCount.apply {
                 text = unreadCount.takeIf { it > 0 }?.toString()
-                visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+                // It badges the drawer button, which a docked layout does not show.
+                visibility = if (unreadCount > 0 && !panels.isDocked) View.VISIBLE else View.GONE
                 setOnClickListener { WidgetQuickMentionsDialog.show(parentFragmentManager) }
                 chat.homeToolbar.positionUnreadCountView(this)
             }

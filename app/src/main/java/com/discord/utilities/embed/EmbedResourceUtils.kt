@@ -16,7 +16,6 @@ import com.discord.embed.RenderableEmbedMedia
 import com.discord.utilities.dimen.dpToPixels
 import com.discord.utilities.string.STATIC_IMAGE_EXTENSION
 import java.util.Locale
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -177,13 +176,20 @@ object EmbedResourceUtils {
      * The reference measures the column with `DisplayUtils.getScreenSize`, which this project does
      * not have; the display metrics of the passed context are equivalent for a full-width activity
      * and differ only in multi-window, where the metrics are the more accurate of the two.
+     *
+     * Manticord divergence: also capped at [MAX_MEDIA_WIDTH_DP], the desktop client's limit, so a
+     * tablet or a wide window does not blow media up to the whole width. A portrait phone is
+     * narrower than that and is unaffected.
      */
     fun computeMaximumImageWidthPx(context: Context): Int {
         val resources = context.resources
         val gutters = resources.getDimensionPixelSize(R.dimen.uikit_guideline_chat) +
             resources.getDimensionPixelSize(R.dimen.chat_cell_horizontal_spacing_total)
-        return min(MAX_IMAGE_SIZE, resources.displayMetrics.widthPixels - gutters)
+        val desktopCap = (MAX_MEDIA_WIDTH_DP * resources.displayMetrics.density).toInt()
+        return minOf(MAX_IMAGE_SIZE, resources.displayMetrics.widthPixels - gutters, desktopCap)
     }
+
+    private const val MAX_MEDIA_WIDTH_DP = 550
 
     /**
      * Fits an image of [actualWidth] x [actualHeight] into the [maxWidth] x [maxHeight] box while

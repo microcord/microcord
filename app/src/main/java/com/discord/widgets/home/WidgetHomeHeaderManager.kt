@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.view.Menu
 import android.view.MenuItem
+import com.discord.panels.OverlappingPanelsLayout
 import android.view.View
 import android.widget.TextView
 import androidx.annotation.DrawableRes
@@ -87,7 +88,7 @@ object WidgetHomeHeaderManager {
         if (context != null) {
             val header = model.getHeaderData(context)
             widgetHome.setActionBarDisplayHomeAsUpEnabled(
-                showHomeAsUp = true,
+                showHomeAsUp = header.leftButtonIsBack || !OverlappingPanelsLayout.isDocked(context.resources),
                 iconRes = if (header.leftButtonIsBack) null else R.drawable.ic_menu_24dp,
                 iconAccessibilityLabel = if (header.leftButtonIsBack) R.string.back else R.string.toggle_drawer,
             )

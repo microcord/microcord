@@ -2,10 +2,12 @@ package com.discord.panels
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.res.Resources
 import android.os.Build
 import android.os.Parcel
 import android.os.Parcelable
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
@@ -94,6 +96,15 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
         resources.getDimension(R.dimen.overlapping_panels_min_fling_dp_per_second)
     private var nonFullScreenSidePanelWidth: Int
 
+    /**
+     * Manticord divergence: a wide window (a tablet, or a resizable WSA/desktop window) docks the
+     * side panels beside the chat, like the desktop client, instead of sliding them over it. The
+     * start panel is always shown, the end panel (members) is toggled by [openEndPanel], and
+     * there is nothing to swipe. Read once: the main activity is recreated when its size changes.
+     */
+    val isDocked = isDocked(resources)
+    private var dockedEndPanelShown = resources.configuration.screenWidthDp >= DOCKED_END_PANEL_MIN_WIDTH_DP
+
     private enum class SwipeDirection { LEFT, RIGHT }
 
     init {
@@ -134,6 +145,13 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
         startPanel!!.elevation = 0f
         centerPanel!!.elevation = 0f
         endPanel!!.elevation = 0f
+        if (isDocked) {
+            pendingUpdate = null
+            startPanelState = PanelState.Open
+            startPanelStateListeners.forEach { it.onPanelStateChange(PanelState.Open) }
+            layoutDocked()
+            return
+        }
         resetStartPanelWidth()
         resetEndPanelWidth()
         updatePanelWidths()
@@ -147,7 +165,31 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
         }
     }
 
+    private fun layoutDocked() {
+        val start = startPanel ?: return
+        val center = centerPanel!!
+        val end = endPanel!!
+        val showEnd = dockedEndPanelShown && endPanelLockState != LockState.CLOSE
+        val startWidth = resources.getDimensionPixelSize(R.dimen.nav_panel_width)
+        val endWidth = if (showEnd) resources.getDimensionPixelSize(R.dimen.right_panel_width) else 0
+        start.layoutParams = start.layoutParams.apply { width = startWidth }
+        end.layoutParams = end.layoutParams.apply { width = resources.getDimensionPixelSize(R.dimen.right_panel_width) }
+        // Not marginStart/End: a relative margin set after the first layout is never re-resolved.
+        center.layoutParams = (center.layoutParams as LayoutParams).apply {
+            leftMargin = if (isLeftToRight) startWidth else endWidth
+            rightMargin = if (isLeftToRight) endWidth else startWidth
+        }
+        start.visibility = View.VISIBLE
+        end.visibility = if (showEnd) View.VISIBLE else View.GONE
+        val endState = if (showEnd) PanelState.Open else PanelState.Closed
+        if (endState != endPanelState) {
+            endPanelState = endState
+            endPanelStateListeners.forEach { it.onPanelStateChange(endState) }
+        }
+    }
+
     private fun resetStartPanelWidth() {
+        if (isDocked) return
         startPanel?.layoutParams = startPanel?.layoutParams?.apply {
             width = if (useFullWidthForStartPanel) LayoutParams.MATCH_PARENT else nonFullScreenSidePanelWidth
         }
@@ -174,6 +216,7 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     fun closePanels() = closePanels(false)
 
     fun closePanelsImmediately() {
+        if (isDocked) return
         if (centerPanel == null) {
             pendingUpdate = ::closePanelsImmediately
             return
@@ -184,6 +227,7 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     }
 
     private fun openStartPanel(fromGesture: Boolean) {
+        if (isDocked) return
         if (centerPanel == null) {
             pendingUpdate = { openStartPanel(fromGesture) }
         } else if (startPanelLockState == LockState.OPEN) {
@@ -194,11 +238,19 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     }
 
     private fun openEndPanel(fromGesture: Boolean) {
+        if (isDocked) {
+            // Docked, the members button toggles the list like the desktop client's.
+            dockedEndPanelShown = !dockedEndPanelShown
+            if (centerPanel != null) layoutDocked()
+            return
+        }
         if (centerPanel == null) pendingUpdate = { openEndPanel(fromGesture) }
         else animateCenterPanel(endPanelOpenedCenterPanelX, fromGesture, 250L)
     }
 
     private fun closePanels(fromGesture: Boolean) {
+        // Docked panels never cover the chat, so there is nothing to close to reveal it.
+        if (isDocked) return
         if (centerPanel == null) pendingUpdate = { closePanels(fromGesture) }
         else animateCenterPanel(0f, fromGesture, 200L)
     }
@@ -278,6 +330,10 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
 
     fun setEndPanelLockState(lockState: LockState) {
         endPanelLockState = lockState
+        if (isDocked) {
+            if (centerPanel != null) layoutDocked()
+            return
+        }
         if (lockState == LockState.OPEN) openEndPanel()
     }
 
@@ -298,6 +354,7 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     fun registerEndPanelStateListeners(vararg listeners: PanelStateListener) { endPanelStateListeners += listeners }
 
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        if (isDocked) return false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 isScrollingHorizontally = false
@@ -334,7 +391,7 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (isHomeSystemGesture) return false
+        if (isDocked || isHomeSystemGesture) return false
         when (event.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
                 if (touchingChildGestureRegion(event)) return false
@@ -434,6 +491,7 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
         startPanelLockState = LockState.entries[state.startLockState]
         endPanelLockState = LockState.entries[state.endLockState]
         useFullWidthForStartPanel = state.fullWidthStartPanel
+        if (isDocked) return
         // Restore the resting panel before layout runs, not only once the pending update applies
         // the matching x offset. Back press is answered from these three fields, and a back press
         // can land between the restore and the first layout pass.
@@ -479,6 +537,27 @@ open class OverlappingPanelsLayout @JvmOverloads constructor(
         companion object CREATOR : Parcelable.Creator<SavedState> {
             override fun createFromParcel(source: Parcel) = SavedState(source)
             override fun newArray(size: Int) = arrayOfNulls<SavedState>(size)
+        }
+    }
+
+    companion object {
+        private const val DOCKED_MIN_WIDTH_DP = 720
+        private const val DOCKED_END_PANEL_MIN_WIDTH_DP = 1100
+
+        private const val DOCKED_CONTENT_MAX_WIDTH_DP = 840
+
+        fun isDocked(resources: Resources) = resources.configuration.screenWidthDp >= DOCKED_MIN_WIDTH_DP
+
+        /**
+         * Docked, a screen that is not the chat (settings, friends, mentions) keeps a readable width,
+         * centred in the [availableWidthDp] it is given, like the desktop client's settings.
+         */
+        fun applyDockedContentWidth(view: View, availableWidthDp: Int = view.resources.configuration.screenWidthDp) {
+            if (!isDocked(view.resources) || availableWidthDp <= DOCKED_CONTENT_MAX_WIDTH_DP) return
+            view.layoutParams = (view.layoutParams as LayoutParams).apply {
+                width = (DOCKED_CONTENT_MAX_WIDTH_DP * view.resources.displayMetrics.density).toInt()
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
         }
     }
 }
