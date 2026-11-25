@@ -14,6 +14,7 @@ import com.discord.utilities.rx.appSubscribe
 import com.discord.utilities.rx.restSubscribeOn
 import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
+import com.discord.widgets.voice.VoiceUtils
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.notice.WidgetNoticeNuxOverlay
 import rx.Observable
@@ -47,7 +48,7 @@ fun callAndLaunch(
     if (isVideo) {
         appPermissionsRequests.requestVideoCallPermissions { onPermissionsGranted() }
     } else {
-        appPermissionsRequests.requestMicrophone(onFailure = null) { onPermissionsGranted() }
+        VoiceUtils.requestMicrophoneForVoiceJoin(appPermissionsRequests) { onPermissionsGranted() }
     }
 }
 

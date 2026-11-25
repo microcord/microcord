@@ -5,13 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.MotionEvent
 import android.view.View
-import android.widget.ImageView
-import android.widget.RelativeLayout
-import android.widget.TextView
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
-import androidx.recyclerview.widget.RecyclerView
 import com.discord.R
 import com.discord.activities.EmbeddedActivityLauncher
 import com.discord.api.channel.Channel
@@ -20,6 +15,7 @@ import com.discord.widgets.voice.VoiceUtils
 import com.discord.app.AppBottomSheet
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetVoiceBottomSheetBinding
 import com.discord.dialogs.CameraCapacityDialog
 import com.discord.dialogs.GuildVideoAtCapacityDialog
 import com.discord.dialogs.audio.AudioOutputSelectionDialog
@@ -51,7 +47,6 @@ import com.discord.widgets.voice.model.CameraState
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.voice.stream.StreamNavigator
 import com.google.android.material.bottomsheet.BottomSheetBehavior
-import com.google.android.material.button.MaterialButton
 import rx.Subscription
 
 /**
@@ -133,27 +128,16 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     private var viewModelEventSubscription: Subscription? = null
     private var dismissRequested = false
 
-    private lateinit var root: CoordinatorLayout
-    private lateinit var headerTitle: TextView
-    private lateinit var headerAudioOutput: ImageView
-    private lateinit var headerChat: ImageView
-    private lateinit var prejoinMute: ImageView
-    private lateinit var prejoinChat: ImageView
-    private lateinit var optionsHandle: View
-    private lateinit var headerInvite: ImageView
-    private lateinit var recycler: RecyclerView
-    private lateinit var emptyView: View
-    private lateinit var controls: AnchoredVoiceControlsView
-    private lateinit var connectContainer: View
-    private lateinit var connectButton: MaterialButton
+    private var _binding: WidgetVoiceBottomSheetBinding? = null
+    private val binding get() = requireNotNull(_binding)
 
     override fun getContentViewResId(): Int = R.layout.widget_voice_bottom_sheet
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        bindViews(view)
+        _binding = WidgetVoiceBottomSheetBinding.bind(view)
         setBottomSheetState(BottomSheetBehavior.STATE_EXPANDED)
-        controls.setOnPttPressedListener(viewModel::onPttPressed)
+        binding.voiceBottomSheetControls.setOnPttPressedListener(viewModel::onPttPressed)
         WidgetEndGuildScheduledEventBottomSheet.registerForResult(
             this,
             END_EVENT_REQUEST_KEY,
@@ -165,7 +149,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         super.onResume()
         dismissRequested = false
         participantsAdapter = MGRecyclerAdapter.configure(
-            CallParticipantsAdapter(recycler, isCallPreview = false, quantizeUserAvatars = true),
+            CallParticipantsAdapter(binding.voiceBottomSheetRecycler, isCallPreview = false, quantizeUserAvatars = true),
         )
         participantsAdapter.onEventClicked = { event ->
             WidgetGuildScheduledEventDetailsBottomSheet.showForGuild(parentFragmentManager, event.id)
@@ -182,7 +166,7 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
         }
         // Rows carry a stream preview that appears and disappears, so the recycler must be allowed
         // to resize with its content.
-        recycler.setHasFixedSize(false)
+        binding.voiceBottomSheetRecycler.setHasFixedSize(false)
 
         viewModel.observeViewState()
             .bindToComponentLifecycle(this)
@@ -193,45 +177,35 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
             .subscribe(::handleEvent)
     }
 
-    private fun bindViews(view: View) {
-        root = view.findViewById(R.id.voice_bottom_sheet_root)
-        headerTitle = view.findViewById(R.id.voice_bottom_sheet_header_title)
-        headerInvite = view.findViewById(R.id.voice_bottom_sheet_header_invite)
-        headerAudioOutput = view.findViewById(R.id.voice_bottom_sheet_header_audio_output)
-        headerChat = view.findViewById(R.id.voice_bottom_sheet_header_chat)
-        prejoinMute = view.findViewById(R.id.voice_bottom_sheet_prejoin_mute)
-        prejoinChat = view.findViewById(R.id.voice_bottom_sheet_prejoin_chat)
-        optionsHandle = view.findViewById(R.id.voice_bottom_sheet_options_handle)
-        recycler = view.findViewById(R.id.voice_bottom_sheet_recycler)
-        emptyView = view.findViewById(R.id.empty)
-        controls = view.findViewById(R.id.voice_bottom_sheet_controls)
-        connectContainer = view.findViewById(R.id.voice_bottom_sheet_connect_container)
-        connectButton = view.findViewById(R.id.voice_bottom_sheet_connect)
+    override fun onDestroyView() {
+        viewModelEventSubscription?.unsubscribe()
+        _binding = null
+        super.onDestroyView()
     }
 
     // ---- rendering -----------------------------------------------------------------------------
 
     private fun configureUI(viewState: ViewState) {
-        headerTitle.text = viewState.title
+        binding.header.voiceBottomSheetHeaderTitle.text = viewState.title
 
-        headerInvite.visibility = if (viewState.showInviteOption) View.VISIBLE else View.GONE
-        headerInvite.setOnClickListener {
+        binding.header.voiceBottomSheetHeaderInvite.visibility = if (viewState.showInviteOption) View.VISIBLE else View.GONE
+        binding.header.voiceBottomSheetHeaderInvite.setOnClickListener {
             launchChannelInvite(this, viewState.channel, INVITE_ANALYTICS_SOURCE)
         }
 
-        optionsHandle.setOnTouchListener(OptionsDragListener(viewState.channel.id))
-        headerTitle.setOnClickListener { showVoiceSettings(viewState.channel.id) }
+        binding.voiceBottomSheetOptionsHandle.setOnTouchListener(OptionsDragListener(viewState.channel.id))
+        binding.header.voiceBottomSheetHeaderTitle.setOnClickListener { showVoiceSettings(viewState.channel.id) }
 
-        headerAudioOutput.setOnClickListener { AudioOutputSelectionDialog.show(parentFragmentManager) }
-        listOf(headerChat, prejoinChat).forEach { chat ->
+        binding.header.voiceBottomSheetHeaderAudioOutput.setOnClickListener { AudioOutputSelectionDialog.show(parentFragmentManager) }
+        listOf(binding.header.voiceBottomSheetHeaderChat, binding.voiceBottomSheetPrejoinChat).forEach { chat ->
             chat.setOnClickListener { openTextInVoice(viewState.channel) }
         }
 
-        prejoinMute.setImageResource(
+        binding.voiceBottomSheetPrejoinMute.setImageResource(
             if (viewState.isSelfMuted) R.drawable.ic_mic_muted_grey_24dp else R.drawable.ic_mic_white_24dp,
         )
-        prejoinMute.contentDescription = getString(if (viewState.isSelfMuted) R.string.unmute else R.string.mute)
-        prejoinMute.setOnClickListener { viewModel.onMutePressed() }
+        binding.voiceBottomSheetPrejoinMute.contentDescription = getString(if (viewState.isSelfMuted) R.string.unmute else R.string.mute)
+        binding.voiceBottomSheetPrejoinMute.setOnClickListener { viewModel.onMutePressed() }
 
         configureCenterContent(viewState.centerContent, viewState.channel)
         configureBottomContent(viewState.bottomContent, viewState.channel)
@@ -282,8 +256,8 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     private fun configureCenterContent(centerContent: CenterContent, channel: Channel) {
         when (centerContent) {
             is CenterContent.ListItems -> {
-                emptyView.visibility = View.INVISIBLE
-                recycler.visibility = View.VISIBLE
+                binding.empty.root.visibility = View.INVISIBLE
+                binding.voiceBottomSheetRecycler.visibility = View.VISIBLE
                 participantsAdapter.setData(centerContent.items)
                 participantsAdapter.onStreamPreviewClicked = ::onStreamPreviewClicked
                 participantsAdapter.onVoiceUserClicked = { voiceUser ->
@@ -305,13 +279,13 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                 }
             }
             is CenterContent.Empty -> {
-                emptyView.visibility = View.VISIBLE
-                emptyView.findViewById<TextView>(R.id.voice_bottom_sheet_empty_body).setText(
+                binding.empty.root.visibility = View.VISIBLE
+                binding.empty.voiceBottomSheetEmptyBody.setText(
                     if (channel.isStageVoiceChannel()) R.string.stage_channel_empty_body_mobile
                     else R.string.guild_voice_channel_empty_body_mobile,
                 )
                 // Event and activity cards can still be present with nobody connected.
-                recycler.visibility =
+                binding.voiceBottomSheetRecycler.visibility =
                     if (centerContent.items.isNotEmpty()) View.VISIBLE else View.GONE
                 participantsAdapter.setData(centerContent.items)
             }
@@ -321,14 +295,14 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
     private fun configureBottomContent(bottomContent: BottomContent?, channel: Channel) {
         when (bottomContent) {
             null -> {
-                controls.visibility = View.GONE
-                connectContainer.visibility = View.GONE
-                root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
+                binding.voiceBottomSheetControls.visibility = View.GONE
+                binding.voiceBottomSheetConnectContainer.visibility = View.GONE
+                binding.root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
             }
             is BottomContent.Controls -> {
-                controls.visibility = View.VISIBLE
-                connectContainer.visibility = View.GONE
-                controls.configureUI(
+                binding.voiceBottomSheetControls.visibility = View.VISIBLE
+                binding.voiceBottomSheetConnectContainer.visibility = View.GONE
+                binding.voiceBottomSheetControls.configureUI(
                     inputMode = bottomContent.inputMode,
                     audioManagerState = bottomContent.audioManagerState,
                     isMuted = bottomContent.isMuted,
@@ -353,25 +327,25 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                     forwardToFullscreenIfVideoActivated = forwardToFullscreenIfVideoActivated,
                     featureContext = featureContext,
                 )
-                root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary))
+                binding.root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundSecondary))
             }
             is BottomContent.Connect -> {
                 // INVISIBLE, not GONE: the controls row reserves the height the connect row
                 // occupies, so the sheet does not jump when the call connects.
-                controls.visibility = View.INVISIBLE
-                controls.hidePtt()
-                connectContainer.visibility = View.VISIBLE
+                binding.voiceBottomSheetControls.visibility = View.INVISIBLE
+                binding.voiceBottomSheetControls.hidePtt()
+                binding.voiceBottomSheetConnectContainer.visibility = View.VISIBLE
 
                 val isStage = channel.isStageVoiceChannel()
-                connectButton.setText(
+                binding.voiceBottomSheetConnect.setText(
                     when {
                         !bottomContent.isConnectEnabled -> R.string.channel_locked_short
                         isStage -> R.string.stage_channel_join_stage
                         else -> R.string.join_voice
                     },
                 )
-                connectButton.isEnabled = bottomContent.isConnectEnabled
-                connectButton.setOnClickListener {
+                binding.voiceBottomSheetConnect.isEnabled = bottomContent.isConnectEnabled
+                binding.voiceBottomSheetConnect.setOnClickListener {
                     if (isStage) {
                         // Starting or joining a stage has its own screen, so the sheet goes now.
                         // Left behind, it resumed when that screen closed (e.g. for the stage
@@ -380,11 +354,11 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
                         viewModelEventSubscription?.unsubscribe()
                         dismissSheet()
                     } else {
-                        requestMicrophone(null) { viewModel.tryConnectToVoice(false) }
+                        VoiceUtils.requestMicrophoneForVoiceJoin(this) { viewModel.tryConnectToVoice(false) }
                     }
                 }
 
-                root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
+                binding.root.setBackgroundColor(ColorCompat.getThemedColor(requireContext(), R.attr.colorBackgroundPrimary))
             }
         }
     }
@@ -406,9 +380,8 @@ class WidgetVoiceBottomSheet : AppBottomSheet() {
 
     private fun onStreamPreviewClicked(streamContext: StreamContext) {
         when (featureContext) {
-            // From home the preview opens the fullscreen call, but only once we hold the
-            // microphone permission the call itself needs.
-            FeatureContext.HOME -> requestMicrophone(null) {
+            // Watching a stream can join the call receive-only too.
+            FeatureContext.HOME -> VoiceUtils.requestMicrophoneForVoiceJoin(this) {
                 viewModel.onStreamPreviewClicked(streamContext.stream.encodedStreamKey)
             }
             // From the fullscreen call the owner retargets its own renderer instead.

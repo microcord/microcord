@@ -481,14 +481,18 @@ class WidgetCallFullscreenViewModel constructor(
         when {
             state?.callModel?.isSuppressed == true -> eventSubject.onNext(Event.ShowSuppressedDialog)
             state?.callModel?.isMuted == true -> eventSubject.onNext(Event.ShowServerMutedDialog)
-            mediaSettingsStore.toggleSelfMuted() == StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD ->
-                eventSubject.onNext(Event.ShowNoVadPermissionDialog)
-            state != null -> eventSubject.onNext(
-                Event.AccessibilityAnnouncement(
-                    if (state.callModel.isMeMutedByAnySource) R.string.voice_channel_unmuted
-                    else R.string.voice_channel_muted,
-                ),
-            )
+            else -> when (mediaSettingsStore.toggleSelfMuted()) {
+                StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD ->
+                    eventSubject.onNext(Event.ShowNoVadPermissionDialog)
+                StoreMediaSettings.SelfMuteFailure.MICROPHONE_PERMISSION_DENIED ->
+                    eventSubject.onNext(Event.ShowMicrophonePermissionDeniedToast)
+                null -> if (state != null) eventSubject.onNext(
+                    Event.AccessibilityAnnouncement(
+                        if (state.callModel.isMeMutedByAnySource) R.string.voice_channel_unmuted
+                        else R.string.voice_channel_muted,
+                    ),
+                )
+            }
         }
     }
 
@@ -1163,6 +1167,7 @@ class WidgetCallFullscreenViewModel constructor(
         object ShowGuildVideoAtCapacityDialog : Event()
         object ShowNoScreenSharePermissionDialog : Event()
         object ShowNoVadPermissionDialog : Event()
+        object ShowMicrophonePermissionDeniedToast : Event()
         object ShowNoVideoPermissionDialog : Event()
         object ShowRequestCameraPermissionsDialog : Event()
         object ShowServerDeafenedDialog : Event()

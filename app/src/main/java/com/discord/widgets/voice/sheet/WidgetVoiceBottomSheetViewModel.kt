@@ -237,6 +237,8 @@ class WidgetVoiceBottomSheetViewModel(
             }
             StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD ->
                 eventSubject.onNext(Event.ShowToast(R.string.vad_permission_small))
+            StoreMediaSettings.SelfMuteFailure.MICROPHONE_PERMISSION_DENIED ->
+                eventSubject.onNext(Event.ShowToast(R.string.permission_microphone_denied))
         }
     }
 

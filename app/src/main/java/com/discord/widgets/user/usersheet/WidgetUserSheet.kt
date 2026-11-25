@@ -39,6 +39,7 @@ import com.discord.i18n.i18nFormat
 import com.discord.i18n.i18nPlural
 import com.discord.i18n.i18nRender
 import com.discord.widgets.user.presence.ViewHolderStreamRichPresence
+import com.discord.widgets.voice.VoiceUtils
 import com.discord.widgets.voice.fullscreen.WidgetCallFullscreen
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.stores.StoreNavigation
@@ -1329,7 +1330,7 @@ class WidgetUserSheet : AppBottomSheet() {
             is WidgetUserSheetViewModel.Event.DismissSheet -> dismiss()
 
             is WidgetUserSheetViewModel.Event.RequestPermissionsForSpectateStream ->
-                requestMicrophone(null) { viewModel.onSpectatePermissionsGranted(event.stream) }
+                VoiceUtils.requestMicrophoneForVoiceJoin(this) { viewModel.onSpectatePermissionsGranted(event.stream) }
 
             is WidgetUserSheetViewModel.Event.LaunchSpectate -> {
                 WidgetCallFullscreen.launch(

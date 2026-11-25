@@ -34,6 +34,7 @@ class StoreMediaSettings(
      * silent until it does.
      */
     private val playSound: (VoiceSound) -> Unit = {},
+    private val hasMicrophonePermission: () -> Boolean = { true },
 ) : Store() {
 
     /** Which local mute/deafen feedback sound a toggle should play. */
@@ -46,7 +47,7 @@ class StoreMediaSettings(
         CancellationTemporarilyDisabled,
     }
 
-    enum class SelfMuteFailure { CANNOT_USE_VAD }
+    enum class SelfMuteFailure { CANNOT_USE_VAD, MICROPHONE_PERMISSION_DENIED }
 
     enum class VadUseKrisp {
         Disabled,
@@ -180,6 +181,11 @@ class StoreMediaSettings(
      */
     @Synchronized
     fun setSelfMuted(isMuted: Boolean): SelfMuteFailure? {
+        if (!hasMicrophonePermission()) {
+            // Latch the raw mute even while deafened, so undeafening can never open the mic.
+            voiceConfiguration = voiceConfiguration.copy(isSelfMuted = true)
+            return if (isMuted) null else SelfMuteFailure.MICROPHONE_PERMISSION_DENIED
+        }
         // The comparison is against the *implied* mute value (`isSelfMuted()`, i.e. muted-or-
         // deafened), not the raw toggle: a deafened user reads as muted, so asking to unmute is a
         // real change and must fall through to the undeafen below. Verified at bytecode level —

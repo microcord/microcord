@@ -130,6 +130,11 @@ coverage and passing builds do not establish complete behavioral parity.
 - Device observations have confirmed concurrent incoming/outgoing voice, camera,
   screen sharing and remote playback. The broader lifecycle/device matrix remains
   open, so Phase 11 remains in progress.
+- Receive-only voice entry after denied microphone permission passed 11 focused
+  JVM tests (join/unmute, service controller and call preview), `assembleDebug`,
+  `:app:lintDebug` and `:plugin-api:lintDebug`. Listening, permission-grant/unmute,
+  backgrounding and reconnecting remain unverified on Android hardware; no device
+  was connected for this check.
 - The September 13 updater changes passed 21 focused JVM tests and 32 worker tests.
   The user confirmed an automatic update banner after an explicitly approved
   in-place downgrade to build 191 and resetting only `next_check`.
@@ -165,6 +170,7 @@ coverage and passing builds do not establish complete behavioral parity.
 | Version identity | Source SHA and commit timestamp identify builds; versionCode is commit timestamp minus the 2020 epoch, not the CI build number |
 | Bookmarks | Synced viewing, jumping and removal are retained; local bookmark creation was withdrawn by user request |
 | Nearby friends | Removed by user request; the retired Google Nearby Messages backend has no supported transport |
+| Microphone permission | By user request (2026-11-25): denied `RECORD_AUDIO` no longer blocks voice entry or disconnects the call. Join muted without changing deafen; native microphone input stays disabled and unmute is refused until permission is granted. Recording, video-call and stage-speaking permission requirements are unchanged |
 | Diagnostics | Redact tokens, cookies, passwords, MFA/captcha values and message content, including exception text |
 | Resource compatibility | Restore first-party attributes; let dependencies own their attributes. Retain decoded-layout compatibility repairs and the inherited lint baseline |
 | Observer errors | Preserve the DEX-proven `ObservationDeck` exception/log-level behavior; do not remove it based on incomplete JADX output |
@@ -219,7 +225,8 @@ Endpoint contracts, deployment instructions and cache limits live in
 2. **Messaging reliability:** exercise offline sends, reconnects, upload retries,
    optimistic replies, pagination and recycled media under poor connectivity.
 3. **Voice and notifications:** complete background/cold-process, device-switch,
-   reconnect and teardown checks on dedicated test hardware.
+   reconnect and teardown checks on dedicated test hardware, including audible
+   receive-only playback with denied microphone permission.
 4. **Integrations:** project-owned OAuth/App Links and billing products remain
    separate from reconstructing the UI and transport. New Spotify account linking
    and unsupported captcha providers require their own confirmed integration work.
@@ -229,6 +236,9 @@ Endpoint contracts, deployment instructions and cache limits live in
    and sounds still need a device pass, and Android 11-13 is unverified.
 6. **Release checks:** reconcile the known channel-list MFA-row test expectation
    with the existing events separator before declaring that entire suite green.
+   The broader voice batch also has eight `VoiceStoresTest` failures (store/cache
+   initialization and ringing) and a fullscreen-menu expectation omitting the
+   existing `ACTIVITIES` item; these checks are not green.
 7. **Minimum Android version:** resolve the historical API 21 contract against the
    current API 23 build; do not silently claim support for devices the APK excludes.
 8. **Backend drift:** use sanitized runtime traffic to resolve uncertain HTTP and

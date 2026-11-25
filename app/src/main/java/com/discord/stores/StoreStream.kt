@@ -948,6 +948,13 @@ class StoreStream private constructor(
     private val mediaSettings = StoreMediaSettings(
         findChannel = channels::findChannelByIdInternal,
         voiceConfigurationCache = VoiceConfigurationCache(preferences),
+        hasMicrophonePermission = {
+            !::applicationContext.isInitialized ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    applicationContext,
+                    android.Manifest.permission.RECORD_AUDIO,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        },
         playSound = { sound ->
             playAppSound(
                 when (sound) {

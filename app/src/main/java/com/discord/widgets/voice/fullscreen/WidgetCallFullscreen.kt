@@ -9,8 +9,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
-import android.widget.RelativeLayout
-import android.widget.TextView
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -28,6 +26,7 @@ import com.discord.app.AppActivity
 import com.discord.app.AppFragment
 import com.discord.app.AppToast
 import com.discord.app.appViewModels
+import com.discord.databinding.WidgetCallFullscreenBinding
 import com.discord.dialogs.CameraCapacityDialog
 import com.discord.dialogs.GuildVideoAtCapacityDialog
 import com.discord.dialogs.audio.AudioOutputSelectionDialog
@@ -42,6 +41,7 @@ import com.discord.widgets.stage.model.StageCallModel
 import com.discord.widgets.stage.sheet.WidgetStageRaisedHandsBottomSheet
 import com.discord.widgets.status.WidgetGlobalStatusIndicatorState
 import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.widgets.voice.VoiceUtils
 import com.discord.widgets.voice.controls.VoiceControlsSheetView
 import com.discord.widgets.voice.feedback.stream.StreamFeedbackSheetNavigator
 import com.discord.widgets.voice.fullscreen.grid.VideoCallGridAdapter
@@ -64,22 +64,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         WidgetCallFullscreenViewModel(channelId, streamKey = mostRecentIntent.getStringExtra(EXTRA_STREAM_KEY))
     }
 
-    private lateinit var root: ViewGroup
-    private lateinit var videoRecycler: RecyclerView
-    private lateinit var stageRecycler: RecyclerView
-    private lateinit var participantsHidden: View
-    private lateinit var privateCallContainer: RelativeLayout
-    private lateinit var privateCallStatusPrimary: TextView
-    private lateinit var privateCallStatusSecondary: TextView
-    private lateinit var privateCallStatusDuration: TextView
-    private lateinit var privateCallConnectivity: TextView
-    private lateinit var privateCallGrid: com.discord.widgets.voice.fullscreen.grid.PrivateCallGridView
-    private lateinit var privateCallBlurredGrid: com.discord.widgets.voice.fullscreen.grid.PrivateCallBlurredGridView
-    private lateinit var streamingActive: View
-    private lateinit var audioShareWarning: View
-    private lateinit var pip: VideoCallParticipantView
-    private lateinit var floatingPtt: View
-    private lateinit var controls: VoiceControlsSheetView
+    private var _binding: WidgetCallFullscreenBinding? = null
+    private val binding get() = requireNotNull(_binding)
     private lateinit var controlsBehavior: BottomSheetBehavior<VoiceControlsSheetView>
 
     private lateinit var gridAdapter: VideoCallGridAdapter
@@ -107,45 +93,28 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
 
     override fun onViewBound(view: View) {
         super.onViewBound(view)
-        root = view as ViewGroup
-        videoRecycler = view.findViewById(R.id.call_video_recycler)
-        stageRecycler = view.findViewById(R.id.call_stage_recycler)
-        participantsHidden = view.findViewById(R.id.call_participants_hidden)
-        privateCallContainer = view.findViewById(R.id.private_call)
-        privateCallStatusPrimary = view.findViewById(R.id.private_call_status_primary)
-        privateCallStatusSecondary = view.findViewById(R.id.private_call_status_secondary)
-        privateCallStatusDuration = view.findViewById(R.id.private_call_status_duration)
-        privateCallConnectivity = view.findViewById(R.id.private_call_connectivity_status_bar)
-        privateCallGrid = view.findViewById(R.id.private_call_grid_view)
-        privateCallBlurredGrid = view.findViewById(R.id.private_call_blurred_grid_view)
-        streamingActive = view.findViewById(R.id.call_streaming_active)
-        // The <include> carries its own id, which replaces the included root's, and the streaming
-        // barrier constrains against that one.
-        audioShareWarning = view.findViewById(R.id.audio_share)
+        val binding = WidgetCallFullscreenBinding.bind(view).also { _binding = it }
         // Capturing another app's audio needs `AudioPlaybackCaptureConfiguration`, which arrived in
         // Android 10. The warning is part of the streaming layout, so without this it greeted every
         // viewer regardless of what they are running.
-        audioShareWarning.isVisible = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-        pip = view.findViewById(R.id.call_pip)
-        floatingPtt = view.findViewById(R.id.call_floating_push_to_talk)
-        controls = view.findViewById(R.id.voice_controls_sheet_view)
+        binding.audioShare.root.isVisible = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
 
         setUpVideoGrid()
-        trackCallUiOverlap(view.findViewById(R.id.action_bar_toolbar_layout))
+        trackCallUiOverlap(binding.actionBarToolbarLayout)
         setUpStageList()
-        controlsBehavior = BottomSheetBehavior.from(controls).apply {
+        controlsBehavior = BottomSheetBehavior.from(binding.voiceControlsSheetView).apply {
             isGestureInsetBottomIgnored = true
             addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
                 override fun onSlide(bottomSheet: View, slideOffset: Float) = viewModel.stopIdle()
                 override fun onStateChanged(bottomSheet: View, newState: Int) {
-                    controls.handleSheetState(newState)
+                    binding.voiceControlsSheetView.handleSheetState(newState)
                     viewModel.handleBottomSheetState(newState)
                     if (newState == BottomSheetBehavior.STATE_EXPANDED) viewModel.stopIdle()
                     else if (newState == BottomSheetBehavior.STATE_COLLAPSED) viewModel.startIdle()
                 }
             })
         }
-        controls.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateControlsPeekHeight() }
+        binding.voiceControlsSheetView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateControlsPeekHeight() }
 
         val ptt = View.OnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -155,17 +124,17 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             }
             true
         }
-        floatingPtt.setOnTouchListener(ptt)
-        controls.setOnPTTListener(ptt)
-        participantsHidden.setOnClickListener { viewModel.onEmptyStateTapped() }
-        view.findViewById<View>(R.id.call_participants_show_button).setOnClickListener {
+        binding.callFloatingPushToTalk.setOnTouchListener(ptt)
+        binding.voiceControlsSheetView.setOnPTTListener(ptt)
+        binding.callParticipantsHidden.setOnClickListener { viewModel.onEmptyStateTapped() }
+        binding.callParticipantsShowButton.setOnClickListener {
             viewModel.onShowParticipantsPressed()
         }
-        view.findViewById<View>(R.id.call_stop_streaming_button).setOnClickListener {
+        binding.callStopStreamingButton.setOnClickListener {
             viewModel.stopScreenShare()
         }
 
-        ViewCompat.setAccessibilityDelegate(root, object : androidx.core.view.AccessibilityDelegateCompat() {
+        ViewCompat.setAccessibilityDelegate(binding.root, object : androidx.core.view.AccessibilityDelegateCompat() {
             override fun onRequestSendAccessibilityEvent(
                 host: ViewGroup,
                 child: View,
@@ -177,7 +146,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                 return super.onRequestSendAccessibilityEvent(host, child, event)
             }
         })
-        ViewCompat.setOnApplyWindowInsetsListener(controls) { controlView, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.voiceControlsSheetView) { controlView, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             controlView.setPadding(
                 controlView.paddingLeft,
@@ -204,10 +173,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             if (channel?.type == com.discord.api.channel.Channel.GUILD_STAGE_VOICE) {
                 viewModel.tryConnectToVoice()
             } else {
-                requestMicrophone(
-                    onFailure = { finishActivity(disconnect = false) },
-                    onSuccess = { viewModel.tryConnectToVoice() },
-                )
+                VoiceUtils.requestMicrophoneForVoiceJoin(this) { viewModel.tryConnectToVoice() }
             }
         }
     }
@@ -225,13 +191,14 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
     }
 
     override fun onDestroyView() {
-        durationTicker?.let(privateCallStatusDuration::removeCallbacks)
+        durationTicker?.let(binding.privateCall.privateCallStatusDuration::removeCallbacks)
         durationTicker = null
-        pip.configure(null)
-        for (index in 0 until videoRecycler.childCount) {
-            (videoRecycler.getChildAt(index) as? VideoCallParticipantView)?.configure(null)
+        binding.callPip.configure(null)
+        for (index in 0 until binding.callVideoRecycler.childCount) {
+            (binding.callVideoRecycler.getChildAt(index) as? VideoCallParticipantView)?.configure(null)
         }
         requireActivity().window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        _binding = null
         super.onDestroyView()
     }
 
@@ -251,7 +218,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             VIDEO_GRID_SPAN_COUNT,
         ).apply { setHasStableIds(true) }
         gridLayoutManager = VideoCallGridLayoutManager(
-            recyclerviewSizeProvider = { if (landscape) videoRecycler.width else videoRecycler.height },
+            recyclerviewSizeProvider = { if (landscape) binding.callVideoRecycler.width else binding.callVideoRecycler.height },
             spanCount = VIDEO_GRID_SPAN_COUNT,
             onLayoutCompletedEvent = { manager, _ ->
                 viewModel.updateOffScreenParticipantsFromScroll(visibleParticipants(manager))
@@ -259,10 +226,10 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
             orientation = if (landscape) RecyclerView.HORIZONTAL else RecyclerView.VERTICAL,
             context = requireContext(),
         ).apply { spanSizeLookup = gridAdapter.spanSizeLookup }
-        videoRecycler.layoutManager = gridLayoutManager
-        videoRecycler.adapter = gridAdapter
-        videoRecycler.itemAnimator = null
-        videoRecycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+        binding.callVideoRecycler.layoutManager = gridLayoutManager
+        binding.callVideoRecycler.adapter = gridAdapter
+        binding.callVideoRecycler.itemAnimator = null
+        binding.callVideoRecycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     viewModel.updateOffScreenParticipantsFromScroll(visibleParticipants(gridLayoutManager))
@@ -273,7 +240,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
 
     private fun setUpStageList() {
         stageAdapter = StageCallAdapter(
-            stageRecycler,
+            binding.callStageRecycler,
             parentFragmentManager,
             viewModel::onGridParticipantTapped,
             viewModel::onGridParticipantLongPressed,
@@ -284,9 +251,9 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         stageLayoutManager = GridLayoutManager(requireContext(), StageCallAdapter.SPAN_COUNT).apply {
             spanSizeLookup = stageAdapter.spanSizeLookup
         }
-        stageRecycler.layoutManager = stageLayoutManager
-        stageRecycler.adapter = stageAdapter
-        stageRecycler.addItemDecoration(stageAdapter.itemDecoration)
+        binding.callStageRecycler.layoutManager = stageLayoutManager
+        binding.callStageRecycler.adapter = stageAdapter
+        binding.callStageRecycler.addItemDecoration(stageAdapter.itemDecoration)
     }
 
     private fun visibleParticipants(manager: VideoCallGridLayoutManager): List<VideoCallParticipantView.ParticipantData> {
@@ -317,7 +284,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         )
         setActionBarTitleColor(android.graphics.Color.WHITE)
         setActionBarTitleClick { WidgetVoiceSettingsBottomSheet.show(parentFragmentManager, channelId) }
-        root.setBackgroundResource(R.color.primary_dark_900)
+        binding.root.setBackgroundResource(R.color.primary_dark_900)
         when (state.displayMode) {
             WidgetCallFullscreenViewModel.DisplayMode.GRID -> configureGrid(state)
             WidgetCallFullscreenViewModel.DisplayMode.STAGE -> configureStage(state)
@@ -326,8 +293,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
     }
 
     private fun configureControls(state: WidgetCallFullscreenViewModel.ViewState.Valid) {
-        controls.isVisible = true
-        controls.configureUI(
+        binding.voiceControlsSheetView.isVisible = true
+        binding.voiceControlsSheetView.configureUI(
             model = state.callModel,
             outputSelectorState = state.outputSelectorState,
             showVideoButton = state.cameraState != com.discord.widgets.voice.model.CameraState.CAMERA_DISABLED,
@@ -379,47 +346,47 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
         )
         if (state.isVideoCallGridVisible && !state.showFooter) hideControls() else showControls()
         setHeaderVisible(state.showHeader)
-        floatingPtt.isVisible = state.isPushToTalk && !controls.isVisible
+        binding.callFloatingPushToTalk.isVisible = state.isPushToTalk && !binding.voiceControlsSheetView.isVisible
     }
 
     private fun configureGrid(state: WidgetCallFullscreenViewModel.ViewState.Valid) {
-        privateCallContainer.isVisible = false
-        stageRecycler.isVisible = false
-        participantsHidden.isVisible = state.showParticipantsHiddenView
-        streamingActive.isVisible = state.callModel.isStreaming
-        videoRecycler.isVisible = state.isVideoCallGridVisible
-        pip.isVisible = state.pipParticipant != null
-        pip.configure(state.pipParticipant?.participantData)
+        binding.privateCall.root.isVisible = false
+        binding.callStageRecycler.isVisible = false
+        binding.callParticipantsHidden.isVisible = state.showParticipantsHiddenView
+        binding.callStreamingActive.isVisible = state.callModel.isStreaming
+        binding.callVideoRecycler.isVisible = state.isVideoCallGridVisible
+        binding.callPip.isVisible = state.pipParticipant != null
+        binding.callPip.configure(state.pipParticipant?.participantData)
         gridAdapter.setData(state.visibleVideoParticipants)
     }
 
     private fun configurePrivateCall(state: WidgetCallFullscreenViewModel.ViewState.Valid) {
-        videoRecycler.isVisible = false
-        stageRecycler.isVisible = false
-        streamingActive.isVisible = false
-        pip.isVisible = false
-        participantsHidden.isVisible = state.showParticipantsHiddenView
-        privateCallContainer.isVisible = true
-        privateCallGrid.configure(state.privateCallUserListItems)
-        privateCallBlurredGrid.configure(state.privateCallUserListItems)
-        privateCallConnectivity.isVisible = state.showLowConnectivityBar
-        privateCallStatusPrimary.text = if (state.callModel.channel.isPrivate()) {
+        binding.callVideoRecycler.isVisible = false
+        binding.callStageRecycler.isVisible = false
+        binding.callStreamingActive.isVisible = false
+        binding.callPip.isVisible = false
+        binding.callParticipantsHidden.isVisible = state.showParticipantsHiddenView
+        binding.privateCall.root.isVisible = true
+        binding.privateCall.privateCallGridView.configure(state.privateCallUserListItems)
+        binding.privateCall.privateCallBlurredGridView.configure(state.privateCallUserListItems)
+        binding.privateCall.privateCallConnectivityStatusBar.isVisible = state.showLowConnectivityBar
+        binding.privateCall.privateCallStatusPrimary.text = if (state.callModel.channel.isPrivate()) {
             state.callModel.dmRecipient
                 ?.let { NicknameUtils.getName(null, state.callModel.channel.id, it.user) }
                 ?: state.callModel.channel.getDisplayName()
         } else state.callModel.channel.getDisplayName()
-        privateCallStatusSecondary.setText(if (state.callModel.isConnected) R.string.ongoing_call else R.string.voice_status_not_connected)
+        binding.privateCall.privateCallStatusSecondary.setText(if (state.callModel.isConnected) R.string.ongoing_call else R.string.voice_status_not_connected)
         startDurationTicker(state.callModel)
     }
 
     private fun configureStage(state: WidgetCallFullscreenViewModel.ViewState.Valid) {
         val stage = state.stageCallModel ?: return
-        videoRecycler.isVisible = false
-        privateCallContainer.isVisible = false
-        streamingActive.isVisible = false
-        pip.isVisible = false
-        participantsHidden.isVisible = state.showParticipantsHiddenView
-        stageRecycler.isVisible = true
+        binding.callVideoRecycler.isVisible = false
+        binding.privateCall.root.isVisible = false
+        binding.callStreamingActive.isVisible = false
+        binding.callPip.isVisible = false
+        binding.callParticipantsHidden.isVisible = state.showParticipantsHiddenView
+        binding.callStageRecycler.isVisible = true
         if (stageBottomSheetPending) {
             stageBottomSheetPending = !stageBottomSheetManager.configureBottomSheet(
                 parentFragmentManager,
@@ -507,7 +474,7 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
     private fun handleEvent(event: WidgetCallFullscreenViewModel.Event) {
         when (event) {
             is WidgetCallFullscreenViewModel.Event.AccessibilityAnnouncement ->
-                root.announceForAccessibility(getString(event.messageResId))
+                binding.root.announceForAccessibility(getString(event.messageResId))
             is WidgetCallFullscreenViewModel.Event.EnqueueStreamFeedbackSheet ->
                 StreamFeedbackSheetNavigator.enqueueNotice(
                     event.streamKey,
@@ -539,6 +506,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
                 R.string.vad_permission_title,
                 R.string.vad_permission_body,
             )
+            WidgetCallFullscreenViewModel.Event.ShowMicrophonePermissionDeniedToast ->
+                AppToast.show(this, R.string.permission_microphone_denied)
             WidgetCallFullscreenViewModel.Event.ShowNoVideoPermissionDialog -> showNotice(
                 R.string.no_video_permission_dialog_title,
                 R.string.no_video_permission_dialog_body,
@@ -577,24 +546,27 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
     }
 
     private fun startDurationTicker(model: CallModel) {
-        durationTicker?.let(privateCallStatusDuration::removeCallbacks)
+        durationTicker?.let(binding.privateCall.privateCallStatusDuration::removeCallbacks)
         durationTicker = object : Runnable {
             override fun run() {
-                privateCallStatusDuration.text = TimeUtils.toFriendlyString(model.timeConnectedMs)
-                privateCallStatusDuration.postDelayed(this, 1_000L)
+                binding.privateCall.privateCallStatusDuration.text = TimeUtils.toFriendlyString(model.timeConnectedMs)
+                binding.privateCall.privateCallStatusDuration.postDelayed(this, 1_000L)
             }
-        }.also { privateCallStatusDuration.post(it) }
+        }.also { binding.privateCall.privateCallStatusDuration.post(it) }
     }
 
     private fun updateControlsPeekHeight(bottomInset: Int = 0) {
         if (!::controlsBehavior.isInitialized) return
-        controlsBehavior.peekHeight = controls.getPeekHeight() + bottomInset
+        val binding = _binding ?: return
+        controlsBehavior.peekHeight = binding.voiceControlsSheetView.getPeekHeight() + bottomInset
     }
 
     private fun hideControls() {
-        controls.animate().alpha(0f).setDuration(CONTROLS_FADE_DURATION).withEndAction {
-            controls.visibility = View.INVISIBLE
-        }.start()
+        binding.voiceControlsSheetView.apply {
+            animate().alpha(0f).setDuration(CONTROLS_FADE_DURATION).withEndAction {
+                visibility = View.INVISIBLE
+            }.start()
+        }
         gridAdapter.notifyCallControlsVisibilityChanged(false)
         setSystemBarsVisible(false)
     }
@@ -605,9 +577,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
      * which leaves both over the video.
      */
     private fun setHeaderVisible(visible: Boolean) {
-        val root = view ?: return
-        for (id in intArrayOf(R.id.action_bar_toolbar_layout, R.id.action_bar_underlay)) {
-            val header = root.findViewById<View>(id) ?: continue
+        val binding = _binding ?: return
+        for (header in listOf(binding.actionBarToolbarLayout, binding.actionBarUnderlay)) {
             if (visible == (header.visibility == View.VISIBLE && header.alpha == 1f)) continue
             header.animate().cancel()
             if (visible) {
@@ -637,8 +608,8 @@ class WidgetCallFullscreen : AppFragment(R.layout.widget_call_fullscreen) {
     }
 
     private fun showControls() {
-        controls.visibility = View.VISIBLE
-        controls.animate().alpha(1f).setDuration(CONTROLS_FADE_DURATION).start()
+        binding.voiceControlsSheetView.visibility = View.VISIBLE
+        binding.voiceControlsSheetView.animate().alpha(1f).setDuration(CONTROLS_FADE_DURATION).start()
         gridAdapter.notifyCallControlsVisibilityChanged(true)
         setSystemBarsVisible(true)
     }
