@@ -11,6 +11,7 @@ import com.discord.app.AppBottomSheet
 import com.discord.app.AppComponent
 import com.discord.app.AppFragment
 import com.discord.app.AppPermissionsRequests
+import com.discord.stores.StoreMediaSettings
 import com.discord.stores.StoreStream
 import com.discord.utilities.guilds.MemberVerificationUtils
 import com.discord.utilities.permissions.PermissionUtils
@@ -34,6 +35,21 @@ import com.discord.widgets.voice.sheet.WidgetVoiceBottomSheet
  * * a **regular voice channel** opens the voice bottom sheet; its Join button connects later.
  */
 object VoiceUtils {
+
+    /** Microphone access is optional for joining; a denied request joins muted, not deafened. */
+    fun requestMicrophoneForVoiceJoin(
+        appPermissionsRequests: AppPermissionsRequests,
+        mediaSettings: StoreMediaSettings = StoreStream.getMediaSettings(),
+        onJoin: () -> Unit,
+    ) {
+        appPermissionsRequests.requestMicrophone(
+            onFailure = {
+                mediaSettings.setSelfMuted(true)
+                onJoin()
+            },
+            onSuccess = onJoin,
+        )
+    }
 
     @JvmStatic
     fun handleCallChannel(channel: Channel, appFragment: AppFragment) = handleCallChannel(
@@ -174,7 +190,7 @@ object VoiceUtils {
             }
             return
         }
-        appPermissionsRequests.requestMicrophone(onFailure = null) {
+        requestMicrophoneForVoiceJoin(appPermissionsRequests) {
             connectAndShowControls(channel, context, fragmentManager)
             onEventStarted()
         }

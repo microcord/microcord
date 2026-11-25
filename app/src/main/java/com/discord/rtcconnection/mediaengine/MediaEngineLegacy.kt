@@ -1,7 +1,10 @@
 package com.discord.rtcconnection.mediaengine
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.annotation.AnyThread
+import androidx.core.content.ContextCompat
 import co.discord.media_engine.RtcRegion
 import co.discord.media_engine.VideoInputDeviceDescription
 import com.discord.app.AppLog
@@ -108,6 +111,9 @@ class MediaEngineLegacy(
         AppLog.d(TAG, "updateVoiceConfig: $voiceConfig")
         val engine = nativeEngine
 
+        // Refresh permission on settings changes, including unmuting after a receive-only join.
+        engine?.setAudioInputEnabled((audioInputEnabled || localVoiceTesting) && hasMicrophonePermission())
+
         // The engine takes 0..1; settings expose 0..300 so a quiet speaker can be boosted.
         engine?.setSpeakerVolume(voiceConfig.outputVolume.coerceIn(0f, MAX_OUTPUT_VOLUME) / MAX_VOLUME_PERCENT)
 
@@ -187,9 +193,15 @@ class MediaEngineLegacy(
         nativeEngine?.getVideoInputDevices { devices -> devicesCallback(devices) }
     }
 
+    private fun hasMicrophonePermission(): Boolean = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.RECORD_AUDIO,
+    ) == PackageManager.PERMISSION_GRANTED
+
     override fun setAudioInputEnabled(enabled: Boolean) {
+        // Keep the requested state, but never ask WebRTC to open an unpermitted microphone.
         audioInputEnabled = enabled
-        nativeEngine?.setAudioInputEnabled(enabled)
+        nativeEngine?.setAudioInputEnabled((enabled || localVoiceTesting) && hasMicrophonePermission())
     }
 
     @Volatile
@@ -200,7 +212,7 @@ class MediaEngineLegacy(
         localVoiceTesting = enabled
         if (enabled) ensureNativeEngine()
         val engine = nativeEngine ?: return
-        engine.setAudioInputEnabled(enabled || audioInputEnabled)
+        engine.setAudioInputEnabled((enabled || audioInputEnabled) && hasMicrophonePermission())
         if (enabled) {
             engine.applyLocalVoiceStatusListener()
         } else if (connections.isEmpty()) {
@@ -333,7 +345,7 @@ class MediaEngineLegacy(
                     }
                 }
             }
-            engine.setAudioInputEnabled(audioInputEnabled)
+            engine.setAudioInputEnabled((audioInputEnabled || localVoiceTesting) && hasMicrophonePermission())
             engine.applyLocalVoiceStatusListener()
             nativeEngine = engine
         } catch (e: ExceptionInInitializerError) {

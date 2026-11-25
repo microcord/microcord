@@ -102,35 +102,33 @@ class VoiceEngineServiceController(
         VoiceEngineForegroundService.onDisconnect = ::onDisconnect
         VoiceEngineForegroundService.onToggleSelfDeafen = ::onToggleSelfDeafen
         VoiceEngineForegroundService.onToggleSelfMute = {
-            if (onToggleSelfMute() == StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD) {
-                ToastManager().show(appContext, R.string.vad_permission_small)
+            when (onToggleSelfMute()) {
+                StoreMediaSettings.SelfMuteFailure.CANNOT_USE_VAD ->
+                    ToastManager().show(appContext, R.string.vad_permission_small)
+                StoreMediaSettings.SelfMuteFailure.MICROPHONE_PERMISSION_DENIED ->
+                    ToastManager().show(appContext, R.string.permission_microphone_denied)
+                null -> Unit
             }
         }
         val binding = VoiceEngineForegroundService.Connection(appContext)
         serviceBinding = binding
         serviceSubscription?.unsubscribe()
-        var permissionDisconnectRequested = false
         notificationDataObservable.appSubscribe(
             errorClass = VoiceEngineServiceController::class.java,
             subscriptionHandler = { serviceSubscription = it },
         ) { data ->
             if (endsService(data)) {
-                permissionDisconnectRequested = false
                 DiscordOverlayService.resetDismissal()
                 DiscordOverlayService.launchForClose(appContext)
                 VoiceEngineForegroundService.stopForegroundAndUnbind(binding)
-            } else if (!canRecordAudio()) {
-                if (!permissionDisconnectRequested) {
-                    permissionDisconnectRequested = true
-                    voiceChannelSelectedStore.clear()
-                }
             } else {
-                permissionDisconnectRequested = false
+                val canRecord = canRecordAudio()
+                if (!canRecord) mediaSettingsStore.setSelfMuted(true)
                 VoiceEngineForegroundService.startForegroundAndBind(
                     connection = binding,
                     title = appContext.getString(data.stateString),
                     subtitle = data.channelName,
-                    selfMute = data.isSelfMuted,
+                    selfMute = data.isSelfMuted || !canRecord,
                     selfDeafen = data.isSelfDeafened,
                     selfStream = data.isSelfStreaming,
                     channelId = data.channelId,

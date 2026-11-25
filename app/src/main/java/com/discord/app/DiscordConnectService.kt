@@ -56,8 +56,7 @@ class DiscordConnectService : Service() {
             return START_NOT_STICKY
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            finish(startId, "Missing microphone permission")
-            return START_NOT_STICKY
+            StoreStream.getMediaSettings().setSelfMuted(true)
         }
 
         StoreStream.getVoiceChannelSelected().selectVoiceChannel(channelId)

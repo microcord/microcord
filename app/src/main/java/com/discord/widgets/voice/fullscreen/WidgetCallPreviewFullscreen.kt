@@ -34,6 +34,7 @@ import com.discord.widgets.home.WidgetHomePanelNsfw
 import com.discord.widgets.notice.WidgetNoticeDialog
 import com.discord.widgets.notice.WidgetNoticeNuxOverlay
 import com.discord.widgets.user.usersheet.WidgetUserSheet
+import com.discord.widgets.voice.VoiceUtils
 import com.discord.widgets.voice.sheet.CallParticipantsAdapter
 import com.discord.widgets.voice.sheet.launchChannelInvite
 import rx.Subscription
@@ -207,12 +208,16 @@ class WidgetCallPreviewFullscreen : AppFragment(R.layout.widget_call_preview_ful
         binding.callPreviewJoinVoice.apply {
             setText(if (state.isConnectEnabled) R.string.join_voice else R.string.channel_locked_short)
             isEnabled = state.isConnectEnabled
-            setOnClickListener { requestMicrophone(null) { viewModel.tryConnectToVoice() } }
+            setOnClickListener {
+                VoiceUtils.requestMicrophoneForVoiceJoin(this@WidgetCallPreviewFullscreen) { viewModel.tryConnectToVoice() }
+            }
         }
         binding.callPreviewJoinMuted.apply {
             setText(if (state.isConnectEnabled) R.string.join_muted else R.string.channel_locked_short)
             isEnabled = state.isConnectEnabled
-            setOnClickListener { requestMicrophone(null) { viewModel.tryConnectToVoice(true) } }
+            setOnClickListener {
+                VoiceUtils.requestMicrophoneForVoiceJoin(this@WidgetCallPreviewFullscreen) { viewModel.tryConnectToVoice(true) }
+            }
         }
         panelNsfw.configureUI(
             state.voiceChannel.guildId,
@@ -292,7 +297,7 @@ class WidgetCallPreviewFullscreen : AppFragment(R.layout.widget_call_preview_ful
     private fun onDenyNsfw() = finishActivity(selectTextChannel = true, transition = false)
 
     private fun onStreamPreviewClicked(streamContext: StreamContext) {
-        requestMicrophone(null) {
+        VoiceUtils.requestMicrophoneForVoiceJoin(this) {
             viewModel.onStreamPreviewClicked(streamContext.stream.encodedStreamKey)
         }
     }

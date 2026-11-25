@@ -19,6 +19,7 @@ import com.discord.utilities.rx.takeSingleUntilTimeout
 import com.discord.utilities.rx.ui
 import com.discord.widgets.servers.member_verification.WidgetMemberVerification
 import com.discord.widgets.guilds.onboarding.WidgetGuildOnboarding
+import com.discord.widgets.voice.VoiceUtils
 import rx.Observable
 
 /**
@@ -35,7 +36,7 @@ import rx.Observable
  * The reference checks the membership gate before ordinary navigation and abandons that navigation
  * when the gate owns the flow. This target must wait for the invite POST's gateway result first, so
  * it races channel hydration against `GUILD_JOIN_REQUEST_CREATE`; whichever arrives first owns the
- * route. Microphone permission remains the final gate before entering a vocal channel.
+ * route. Microphone permission is requested before entering a vocal channel; denial joins muted.
  *
  * The *ordering* of those two relative to the navigation calls is inference from the field order in
  * the state machine, not a read fact.
@@ -207,7 +208,7 @@ object InviteJoinHelper {
         val channel = invite.channel ?: return onInviteFlowFinished(invite)
         navigateToGuild(invite)
         if (channel.isVoiceChannel() || channel.isStageVoiceChannel()) {
-            fragment.requestMicrophone(onFailure = { onInviteFlowFinished(invite) }) {
+            VoiceUtils.requestMicrophoneForVoiceJoin(fragment) {
                 navigateToChannel(invite)
                 onInviteFlowFinished(invite)
             }
